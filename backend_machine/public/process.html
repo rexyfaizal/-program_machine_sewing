@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Detail Proses Mesin Sewing</title>
+  <style>
+    :root {
+      --bg:#f3f6fb; --card:#fff; --text:#172033; --muted:#657285; --border:#dbe5f3;
+      --blue:#2563eb; --blue2:#dbeafe; --green:#16a34a; --green2:#dcfce7;
+      --red:#dc2626; --red2:#fee2e2; --amber:#d97706; --amber2:#fef3c7;
+      --purple:#7c3aed; --shadow:0 14px 30px rgba(15,23,42,.08); --radius:18px;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      background:radial-gradient(circle at top left,#eaf1ff 0,#f7f9fc 38%,#eef3f9 100%);
+      font-family:Inter, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--text);
+    }
+    .app {
+      display:grid;
+      grid-template-columns:390px 1fr;
+      min-height:100vh;
+    }
+    .side {
+      background:#fff;
+      border-right:1px solid var(--border);
+      padding:18px 14px;
+      height:100vh;
+      position:sticky;
+      top:0;
+      overflow:auto;
+    }
+    .brand {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .brand h2 {
+      margin:0;
+      font-size:17px;
+      letter-spacing:-.02em;
+    }
+    .menu {
+      display:flex;
+      gap:8px;
+      margin:10px 0 14px;
+    }
+    .menu a {
+      flex:1;
+      text-decoration:none;
+      color:#0f172a;
+      border:1px solid var(--border);
+      background:#f8fafc;
+      padding:10px 11px;
+      border-radius:12px;
+      font-size:12px;
+      font-weight:800;
+      text-align:center;
+    }
+    .menu a.active {
+      color:white;
+      background:#0f172a;
+      border-color:#0f172a;
+    }
+    .filter {
+      display:grid;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    input, button {
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:13px;
+      padding:11px 12px;
+      background:white;
+      color:var(--text);
+      outline:none;
+      font-size:13px;
+    }
+    button {
+      background:#0f172a;
+      color:#fff;
+      font-weight:900;
+      cursor:pointer;
+      box-shadow:0 8px 20px rgba(15,23,42,.14);
+    }
+    .group-caption {
+      display:flex;
+      justify-content:space-between;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      margin:14px 4px 8px;
+    }
+    .machine-list { display:grid; gap:8px; }
+    .machine {
+      display:grid;
+      grid-template-columns:42px 1fr auto;
+      gap:12px;
+      align-items:center;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      cursor:pointer;
+      background:#fff;
+      transition:.15s;
+    }
+    .machine:hover { transform:translateY(-1px); box-shadow:0 8px 22px rgba(15,23,42,.07); }
+    .machine.active { background:#dff0ff; border-color:#93c5fd; }
+    .dot-big {
+      width:32px; height:32px; border-radius:99px;
+      background:linear-gradient(135deg,#38bdf8,#0284c7);
+      box-shadow:inset 0 -7px 10px rgba(0,0,0,.15);
+    }
+    .dot-big.working { background:linear-gradient(135deg,#86efac,#16a34a); }
+    .dot-big.offline { background:linear-gradient(135deg,#f1f5f9,#8b8b8b); }
+    .machine b {
+      display:block;
+      font-size:13px;
+      line-height:1.25;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .machine span {
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin-top:3px;
+    }
+    .check {
+      width:24px; height:24px; border-radius:99px;
+      border:2px solid #94a3b8;
+      display:grid;
+      place-items:center;
+      color:#0f766e;
+      font-size:15px;
+      font-weight:900;
+    }
+    .machine.active .check { border-color:#0f766e; background:#ccfbf1; }
+    .main {
+      padding:22px;
+      overflow:auto;
+    }
+    .topbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .title {
+      text-align:center;
+      font-size:42px;
+      font-family:Georgia, 'Times New Roman', serif;
+      letter-spacing:-.03em;
+      margin:0;
+      flex:1;
+    }
+    .date-actions {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      min-width:450px;
+      justify-content:flex-end;
+    }
+    .date-actions button { width:auto; padding:10px 14px; border-radius:10px; }
+    .date-actions input { max-width:160px; border-radius:10px; }
+    .kpis {
+      display:grid;
+      grid-template-columns:repeat(7, minmax(0, 1fr));
+      gap:10px;
+      margin-bottom:18px;
+    }
+    .kpi {
+      background:transparent;
+      text-align:center;
+      min-height:72px;
+      display:grid;
+      align-content:center;
+    }
+    .kpi .label {
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:7px;
+    }
+    .kpi .value {
+      font-size:30px;
+      font-weight:900;
+      letter-spacing:-.04em;
+    }
+    .kpi.green .value { color:#00d618; }
+    .kpi.amber .value { color:#f4b400; }
+    .kpi.blue .value { color:#5b6fc7; }
+    .kpi.purple .value { color:#8b5cf6; }
+    .grid {
+      display:grid;
+      grid-template-columns:1.05fr .95fr;
+      gap:16px;
+      margin-bottom:16px;
+    }
+    .panel {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+      min-height:245px;
+    }
+    .panel-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .panel h3 {
+      margin:0;
+      font-size:16px;
+      letter-spacing:-.02em;
+    }
+    .small { color:var(--muted); font-size:12px; }
+    .runtime-chart {
+      display:flex;
+      align-items:flex-end;
+      gap:16px;
+      height:180px;
+      border-bottom:1px solid var(--border);
+      padding:0 12px 12px;
+    }
+    .hour {
+      flex:1;
+      min-width:58px;
+      text-align:center;
+      display:grid;
+      align-items:end;
+      gap:6px;
+    }
+    .hour .bar {
+      width:100%;
+      min-height:4px;
+      border-radius:9px 9px 0 0;
+      background:linear-gradient(180deg,#7ca0ff,#4264c9);
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      color:#fff;
+      font-size:11px;
+      font-weight:900;
+      padding-top:5px;
+    }
+    .hour b { font-size:12px; }
+    .hour span { color:var(--muted); font-size:11px; }
+    .process-bars {
+      display:grid;
+      gap:9px;
+      max-height:215px;
+      overflow:auto;
+      padding-right:4px;
+    }
+    .process-row {
+      display:grid;
+      grid-template-columns:1fr 90px 80px;
+      gap:10px;
+      align-items:center;
+      font-size:12px;
+    }
+    .process-row b {
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .track {
+      height:17px;
+      background:#eef2f7;
+      border-radius:99px;
+      overflow:hidden;
+    }
+    .fill {
+      height:100%;
+      background:linear-gradient(90deg,#60a5fa,#2563eb);
+      border-radius:99px;
+    }
+    .alarm-list {
+      display:grid;
+      gap:8px;
+      max-height:180px;
+      overflow:auto;
+    }
+    .alarm {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px dashed var(--border);
+      padding-bottom:7px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .alarm strong { color:var(--red); }
+    .status {
+      display:inline-flex; align-items:center; gap:6px;
+      border-radius:99px; padding:6px 10px; font-size:11px; font-weight:900;
+    }
+    .status.ok { background:var(--green2); color:#166534; }
+    .status.bad { background:var(--red2); color:#991b1b; }
+    .timeline {
+      display:flex;
+      overflow:auto;
+      gap:14px;
+      padding:18px 4px 8px;
+      border-top:1px solid var(--border);
+    }
+    .step {
+      min-width:170px;
+      background:#f8fafc;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      position:relative;
+    }
+    .step:before {
+      content:"";
+      position:absolute;
+      left:-15px; top:28px;
+      width:14px; height:3px;
+      background:#fbbf24;
+    }
+    .step:first-child:before { display:none; }
+    .step .no { color:#1e40af; font-weight:900; }
+    .step b {
+      display:block;
+      margin:5px 0;
+      font-size:12px;
+      line-height:1.25;
+    }
+    .step .time { font-size:12px; color:#111827; font-weight:900; }
+    .step.bad { border-color:#fecaca; background:#fff7f7; }
+    .step.bad .no { color:#dc2626; }
+    .table-wrap {
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:16px;
+      max-height:420px;
+    }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      min-width:1050px;
+      background:#fff;
+    }
+    th {
+      position:sticky; top:0; z-index:1;
+      background:#f8fafc;
+      color:#475569;
+      text-align:left;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      padding:11px;
+      border-bottom:1px solid var(--border);
+    }
+    td {
+      padding:11px;
+      border-bottom:1px solid var(--border);
+      font-size:12px;
+      vertical-align:middle;
+    }
+    .right { text-align:right; }
+    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .pagination {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-top:12px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .pagination .btns { display:flex; gap:8px; }
+    .pagination button { width:auto; padding:9px 13px; border-radius:10px; }
+    @media(max-width:1180px) {
+      .app { grid-template-columns:1fr; }
+      .side { position:relative; height:auto; }
+      .title { text-align:left; font-size:34px; }
+      .topbar, .date-actions { flex-wrap:wrap; min-width:0; justify-content:flex-start; }
+      .kpis { grid-template-columns:repeat(2,1fr); }
+      .grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <h2>Functionality</h2>
+      </div>
+      <div class="menu">
+        <a href="/">Dashboard Utama</a>
+        <a class="active" href="/process.html">Detail Proses</a>
+      </div>
+      <div class="filter">
+        <input type="date" id="dateInput" />
+        <input id="searchInput" placeholder="Cari mesin / IP / UUID..." />
+        <button onclick="loadMachines()">Refresh</button>
+      </div>
+      <div class="group-caption">
+        <span>Default Group</span>
+        <span id="machineCount">0/0</span>
+      </div>
+      <div class="machine-list" id="machineList"></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 class="title" id="machineTitle">Pilih Mesin</h1>
+        <div class="date-actions">
+          <button onclick="moveDay(-1)">Last Day</button>
+          <input type="date" id="dateInputTop" />
+          <button onclick="moveDay(1)">Next Day</button>
+          <button onclick="setToday()">Today</button>
+        </div>
+      </div>
+
+      <section class="kpis">
+        <div class="kpi green"><div class="label">Total Workcount</div><div class="value" id="kWork">0</div></div>
+        <div class="kpi amber"><div class="label">Plan Rate</div><div class="value" id="kPlan">0%</div></div>
+        <div class="kpi"><div class="label">Runtime</div><div class="value" id="kRuntime">00:00:00</div></div>
+        <div class="kpi"><div class="label">Process Time</div><div class="value" id="kProc">00:00:00</div></div>
+        <div class="kpi blue"><div class="label">Asix Speed</div><div class="value" id="kSpeed">0</div></div>
+        <div class="kpi purple"><div class="label">Total Process</div><div class="value" id="kCycles">0</div></div>
+        <div class="kpi purple"><div class="label">Abnormal</div><div class="value" id="kAbnormal">0</div></div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Runtime / Process Time per Jam</h3>
+            <span class="small" id="runtimeCaption"></span>
+          </div>
+          <div class="runtime-chart" id="runtimeChart"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Process Count / Process Time / Abnormal</h3>
+            <span class="small">per program jahit</span>
+          </div>
+          <div class="process-bars" id="processBars"></div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Process Detail</h3>
+            <span class="small">urutan proses mesin</span>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Alarm Summary</h3>
+            <span class="small">top alarm</span>
+          </div>
+          <div class="alarm-list" id="alarmList"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Detail Proses Harian</h3>
+          <span class="small" id="detailInfo"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Program</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Proc Time</th>
+                <th>Count</th>
+                <th>Stitch</th>
+                <th>Node Distance</th>
+                <th>SPM</th>
+                <th>Status</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="detailBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <span id="pageInfo">-</span>
+          <div class="btns">
+            <button onclick="prevPage()">Prev</button>
+            <button onclick="nextPage()">Next</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+let machines = [];
+let selectedUUID = "";
+let detail = null;
+let currentPage = 1;
+const pageSize = 20;
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+function fmtSec(sec) {
+  sec = Math.max(0, Number(sec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+function setDates(v) {
+  document.getElementById("dateInput").value = v;
+  document.getElementById("dateInputTop").value = v;
+}
+function getDate() {
+  return document.getElementById("dateInputTop").value || document.getElementById("dateInput").value || today();
+}
+function setToday() {
+  setDates(today());
+  loadMachines();
+}
+function moveDay(delta) {
+  const d = new Date(getDate() + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  setDates(d.toISOString().slice(0,10));
+  loadMachines();
+}
+document.getElementById("dateInput").addEventListener("change", e => {
+  document.getElementById("dateInputTop").value = e.target.value;
+  loadMachines();
+});
+document.getElementById("dateInputTop").addEventListener("change", e => {
+  document.getElementById("dateInput").value = e.target.value;
+  loadMachines();
+});
+document.getElementById("searchInput").addEventListener("input", renderMachineList);
+
+function machineStatus(m) {
+  if ((m.procSec || 0) > 0 && (m.runtimeSec || 0) > 0) return "working";
+  if ((m.runtimeSec || 0) > 0) return "online";
+  return "offline";
+}
+
+async function loadMachines() {
+  const date = getDate();
+  setDates(date);
+  document.getElementById("machineList").innerHTML = `<div class="small">Loading mesin...</div>`;
+
+  const res = await fetch(`/api/productivity?date=${encodeURIComponent(date)}`);
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+
+  machines = (data.rows || []).sort((a,b) => (b.output || 0) - (a.output || 0));
+  renderMachineList();
+
+  if (!selectedUUID || !machines.some(m => m.uuid === selectedUUID)) {
+    const firstActive = machines.find(m => (m.output || 0) > 0) || machines[0];
+    selectedUUID = firstActive ? firstActive.uuid : "";
+  }
+
+  if (selectedUUID) loadDetail(selectedUUID);
+}
+
+function renderMachineList() {
+  const q = (document.getElementById("searchInput").value || "").toLowerCase();
+  const filtered = machines.filter(m => {
+    const hay = `${m.nickName || ""} ${m.uuid || ""} ${m.ip || ""} ${m.status || ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  document.getElementById("machineCount").innerText = `${filtered.length}/${machines.length}`;
+  const el = document.getElementById("machineList");
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="small">Tidak ada mesin sesuai filter.</div>`;
+    return;
+  }
+
+  el.innerHTML = filtered.map((m, i) => {
+    const st = machineStatus(m);
+    const label = st === "working" ? "working" : st === "online" ? "Online" : "Offline";
+    return `
+      <div class="machine ${m.uuid === selectedUUID ? "active" : ""}" onclick="selectMachine('${m.uuid}')">
+        <div style="text-align:center;">
+          <div class="dot-big ${st}"></div>
+        </div>
+        <div>
+          <b>${m.nickName || m.uuid}</b>
+          <span>[${label}] IP: ${m.ip || "-"}</span>
+        </div>
+        <div class="check">${m.uuid === selectedUUID ? "✓" : ""}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function selectMachine(uuid) {
+  selectedUUID = uuid;
+  renderMachineList();
+  loadDetail(uuid);
+}
+
+async function loadDetail(uuid) {
+  const date = getDate();
+  document.getElementById("machineTitle").innerText = "Loading...";
+  const res = await fetch(`/api/process/detail?date=${encodeURIComponent(date)}&uuid=${encodeURIComponent(uuid)}`);
+  if (!res.ok) {
+    document.getElementById("machineTitle").innerText = "Gagal load";
+    document.getElementById("detailBody").innerHTML = `<tr><td colspan="11">${await res.text()}</td></tr>`;
+    return;
+  }
+
+  detail = await res.json();
+  currentPage = 1;
+  renderDetail();
+}
+
+function renderDetail() {
+  if (!detail) return;
+  const m = detail.machine || {};
+  const events = detail.events || [];
+  const groups = detail.groups || [];
+  const hours = detail.hours || [];
+  const alarms = detail.alarms || [];
+
+  document.getElementById("machineTitle").innerText = m.nickName || m.uuid || "Mesin";
+  document.getElementById("kWork").innerText = m.output || 0;
+  document.getElementById("kPlan").innerText = `${m.productivityPct || 0}%`;
+  document.getElementById("kRuntime").innerText = fmtSec(m.runtimeSec || 0);
+  document.getElementById("kProc").innerText = fmtSec(m.procSec || 0);
+  document.getElementById("kCycles").innerText = m.cycles || 0;
+  document.getElementById("kAbnormal").innerText = m.incomplete || 0;
+  document.getElementById("runtimeCaption").innerText = detail.date || "";
+
+  const avgNode = events.length ? Math.round(events.reduce((a,e)=>a+(Number(e.nodeDistance)||0),0)/events.length) : 0;
+  document.getElementById("kSpeed").innerText = avgNode || "-";
+
+  const maxHour = Math.max(1, ...hours.map(h => h.procSec || 0));
+  const runtimeChart = document.getElementById("runtimeChart");
+  runtimeChart.innerHTML = hours.length ? hours.map(h => {
+    const height = Math.max(6, Math.round((h.procSec || 0) / maxHour * 150));
+    return `
+      <div class="hour">
+        <div class="bar" style="height:${height}px">${h.procTime}</div>
+        <b>${h.hour}</b>
+        <span>${h.output} pcs</span>
+      </div>
+    `;
+  }).join("") : `<div class="small">Belum ada proses di tanggal ini.</div>`;
+
+  const maxGroup = Math.max(1, ...groups.map(g => g.procSec || 0));
+  document.getElementById("processBars").innerHTML = groups.length ? groups.slice(0, 12).map(g => `
+    <div class="process-row">
+      <b title="${g.fileName}">${g.fileName}</b>
+      <div class="track"><div class="fill" style="width:${Math.max(2, (g.procSec / maxGroup) * 100)}%"></div></div>
+      <div class="right">
+        <b>${g.output}</b><br/>
+        <span class="small">${g.procTime}</span><br/>
+        <span style="color:${g.incomplete > 0 ? 'var(--red)' : 'var(--muted)'}">${g.incomplete} abnormal</span>
+      </div>
+    </div>
+  `).join("") : `<div class="small">Tidak ada program.</div>`;
+
+  document.getElementById("alarmList").innerHTML = alarms.length ? alarms.map(a => `
+    <div class="alarm"><span>${a.content}</span><strong>${a.total}</strong></div>
+  `).join("") : `<div class="small">Tidak ada alarm.</div>`;
+
+  document.getElementById("timeline").innerHTML = events.length ? events.slice(-30).map(e => `
+    <div class="step ${e.status === 'ABNORMAL' ? 'bad' : ''}">
+      <div class="no">${e.no}</div>
+      <b title="${e.fileName}">${e.fileName}</b>
+      <div class="time">${e.procTime}</div>
+      <div class="small">${e.startTime.slice(11,16)} - ${e.endTime.slice(11,16)}</div>
+      <div style="margin-top:8px;"><span class="status ${e.status === 'OK' ? 'ok' : 'bad'}">${e.status}</span></div>
+    </div>
+  `).join("") : `<div class="small">Belum ada process detail.</div>`;
+
+  renderEventTable();
+}
+
+function renderEventTable() {
+  const events = (detail && detail.events) ? detail.events : [];
+  const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * pageSize;
+  const pageRows = events.slice(start, start + pageSize);
+
+  document.getElementById("detailInfo").innerText = `${events.length} proses`;
+  document.getElementById("pageInfo").innerText = events.length
+    ? `Menampilkan ${start + 1}-${Math.min(start + pageSize, events.length)} dari ${events.length} proses | Page ${currentPage}/${totalPages}`
+    : "Tidak ada data";
+
+  document.getElementById("detailBody").innerHTML = pageRows.length ? pageRows.map(e => `
+    <tr>
+      <td class="right">${e.no}</td>
+      <td><b>${e.fileName}</b></td>
+      <td class="mono">${e.startTime}</td>
+      <td class="mono">${e.endTime}</td>
+      <td class="right"><b>${e.procTime}</b><br/><span class="small">${e.procSec}s</span></td>
+      <td class="right">${e.procCounts}</td>
+      <td class="right">${e.endStitch}/${e.fileStitches}</td>
+      <td class="right">${e.nodeDistance}</td>
+      <td class="right">${e.spm}</td>
+      <td><span class="status ${e.status === 'OK' ? 'ok' : 'bad'}">${e.status}</span></td>
+      <td>${e.abnormalReason || "-"}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="11" class="small">Tidak ada proses pada mesin/tanggal ini.</td></tr>`;
+}
+
+function prevPage() {
+  if (currentPage > 1) {
+    currentPage--;
+    renderEventTable();
+  }
+}
+function nextPage() {
+  const events = (detail && detail.events) ? detail.events : [];
+  const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderEventTable();
+  }
+}
+
+setDates(today());
+loadMachines().catch(err => {
+  document.getElementById("machineList").innerHTML = `<div class="small">Gagal load: ${err.message}</div>`;
+});
+</script>
+</body>
+</html>

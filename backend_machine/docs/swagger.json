@@ -1,0 +1,599 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/employees/search": {
+            "get": {
+                "description": "Cari data karyawan berdasarkan NIK atau nama",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Employees"
+                ],
+                "summary": "Search employee",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "NIK atau nama karyawan",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Employee"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/machine-operator/active": {
+            "get": {
+                "description": "Mengambil session operator aktif berdasarkan UUID mesin",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Machine Operator"
+                ],
+                "summary": "Cek operator aktif di mesin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID mesin",
+                        "name": "uuid",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MachineOperatorSession"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/machine-operator/login": {
+            "post": {
+                "description": "Login operator berdasarkan UUID mesin dan NIK operator",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Machine Operator"
+                ],
+                "summary": "Login operator ke mesin",
+                "parameters": [
+                    {
+                        "description": "Body login operator",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.MachineOperatorLoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MachineOperatorLoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/machine-operator/note": {
+            "post": {
+                "description": "Menyimpan aktivitas/keterangan operator pada session aktif",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Machine Operator"
+                ],
+                "summary": "Simpan catatan aktivitas operator",
+                "parameters": [
+                    {
+                        "description": "Body note operator",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.MachineOperatorNoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MachineOperatorNoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/machine-operator/report": {
+            "get": {
+                "description": "Mengambil session operator dan note berdasarkan tanggal",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Machine Operator"
+                ],
+                "summary": "Report operator mesin harian",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tanggal format YYYY-MM-DD",
+                        "name": "date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.MachineOperatorReportItem"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/process-style/processes": {
+            "get": {
+                "description": "Mengambil daftar proses berdasarkan style dari tabel dt_proses_style",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Process Style"
+                ],
+                "summary": "Cari proses berdasarkan style",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Style",
+                        "name": "style",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keyword proses",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ProcessStyleProcess"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/process-style/styles": {
+            "get": {
+                "description": "Mengambil daftar style dari tabel dt_proses_style",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Process Style"
+                ],
+                "summary": "Cari daftar style",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Keyword style",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ProcessStyleItem"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "models.Employee": {
+            "type": "object",
+            "properties": {
+                "branchdetail": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nik": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorLoginRequest": {
+            "type": "object",
+            "properties": {
+                "branchdetail": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "machineName": {
+                    "type": "string"
+                },
+                "operatorName": {
+                    "type": "string"
+                },
+                "operatorNik": {
+                    "type": "string"
+                },
+                "processName": {
+                    "type": "string"
+                },
+                "styleName": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorLoginResponse": {
+            "type": "object",
+            "properties": {
+                "isExisting": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "session": {
+                    "$ref": "#/definitions/models.MachineOperatorSession"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorNote": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "operatorName": {
+                    "type": "string"
+                },
+                "operatorNik": {
+                    "type": "string"
+                },
+                "reasonCode": {
+                    "type": "string"
+                },
+                "reasonName": {
+                    "type": "string"
+                },
+                "sessionDate": {
+                    "type": "string"
+                },
+                "sessionId": {
+                    "type": "integer"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorNoteRequest": {
+            "type": "object",
+            "properties": {
+                "note": {
+                    "type": "string"
+                },
+                "operatorNik": {
+                    "type": "string"
+                },
+                "reasonCode": {
+                    "type": "string"
+                },
+                "reasonName": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorNoteResponse": {
+            "type": "object",
+            "properties": {
+                "closed": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "noteId": {
+                    "type": "integer"
+                },
+                "sessionId": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorReportItem": {
+            "type": "object",
+            "properties": {
+                "branchdetail": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "loginTime": {
+                    "type": "string"
+                },
+                "logoutTime": {
+                    "type": "string"
+                },
+                "machineName": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MachineOperatorNote"
+                    }
+                },
+                "operatorName": {
+                    "type": "string"
+                },
+                "operatorNik": {
+                    "type": "string"
+                },
+                "processName": {
+                    "type": "string"
+                },
+                "sessionDate": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "styleName": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MachineOperatorSession": {
+            "type": "object",
+            "properties": {
+                "branchdetail": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "loginTime": {
+                    "type": "string"
+                },
+                "logoutTime": {
+                    "type": "string"
+                },
+                "machineName": {
+                    "type": "string"
+                },
+                "operatorName": {
+                    "type": "string"
+                },
+                "operatorNik": {
+                    "type": "string"
+                },
+                "processName": {
+                    "type": "string"
+                },
+                "sessionDate": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "styleName": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProcessStyleItem": {
+            "type": "object",
+            "properties": {
+                "styleName": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProcessStyleProcess": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "processName": {
+                    "type": "string"
+                },
+                "styleName": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

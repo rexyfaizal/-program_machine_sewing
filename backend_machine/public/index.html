@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Produktivitas Mesin Jahit - Xinghuo</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #18212f;
+      --muted: #657285;
+      --border: #e3e9f3;
+      --blue: #2563eb;
+      --blue2: #dbeafe;
+      --green: #16a34a;
+      --green2: #dcfce7;
+      --amber: #d97706;
+      --amber2: #fef3c7;
+      --red: #dc2626;
+      --red2: #fee2e2;
+      --slate: #334155;
+      --shadow: 0 14px 30px rgba(15, 23, 42, .08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #eaf1ff 0, #f7f9fc 38%, #eef3f9 100%);
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 22px;
+    }
+
+    .title-block {
+      background: #1877e6;
+      color: white;
+      padding: 26px 28px;
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .title-block:after {
+      content: "";
+      position: absolute;
+      right: -110px;
+      top: -110px;
+      width: 290px;
+      height: 290px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(24px, 3vw, 40px);
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: rgba(255,255,255,.82);
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 980px;
+    }
+
+    .formula {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 20px;
+      min-width: 360px;
+      box-shadow: var(--shadow);
+    }
+
+    .formula h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      color: var(--slate);
+    }
+
+    .formula .line {
+      border-left: 4px solid var(--blue);
+      padding-left: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(220px, 1fr) auto auto;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    select, input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: white;
+      color: var(--text);
+      padding: 13px 14px;
+      font-size: 14px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+      outline: none;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 13px 18px;
+      background: #0f172a;
+      color: white;
+      cursor: pointer;
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .16);
+      white-space: nowrap;
+    }
+    button:hover { opacity: .92; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+    }
+
+    .btn-danger {
+      background: var(--red);
+      color: white;
+    }
+
+    .btn-small {
+      padding: 8px 10px;
+      font-size: 12px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      min-height: 120px;
+    }
+
+    .card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .card .value {
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .card .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status-GOOD { color: #166534; background: var(--green2); }
+    .status-NORMAL { color: #92400e; background: var(--amber2); }
+    .status-BAD { color: #991b1b; background: var(--red2); }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: currentColor;
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 70px;
+      gap: 12px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .machine-name { min-width: 0; }
+    .machine-name strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .machine-name span { color: var(--muted); font-size: 12px; }
+
+    .bar-track {
+      height: 14px;
+      background: #edf2f7;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--red);
+      transition: width .25s ease;
+    }
+    .bar-fill.good { background: var(--green); }
+    .bar-fill.normal { background: var(--amber); }
+    .bar-fill.bad { background: var(--red); }
+
+    .pct { text-align: right; font-weight: 900; }
+
+    .dist {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .donut {
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(var(--green) 0deg, var(--green) 0deg, var(--amber) 0deg, var(--amber) 0deg, var(--red) 0deg);
+      position: relative;
+    }
+    .donut:after {
+      content: "";
+      position: absolute;
+      width: 94px;
+      height: 94px;
+      background: white;
+      border-radius: 50%;
+    }
+    .donut-inner { position: relative; z-index: 1; text-align: center; }
+    .donut-inner strong { display: block; font-size: 28px; letter-spacing: -.04em; }
+    .donut-inner span { color: var(--muted); font-size: 11px; font-weight: 700; }
+
+    .legend { display: grid; gap: 10px; }
+    .legend-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .legend-row strong { color: var(--text); font-size: 18px; }
+
+    .table-wrap {
+      overflow: auto;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      min-width: 1380px;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      font-size: 13px;
+      color: #243044;
+    }
+    tr:hover td { background: #fbfdff; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .small { color: var(--muted); font-size: 12px; }
+    .right { text-align: right; }
+    .center { text-align: center; }
+    .nowrap { white-space: nowrap; }
+
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .pagination-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pagination button {
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+    }
+
+    .page-chip {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .note-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .note {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .note strong { color: var(--text); }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      background: #0f172a;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      display: none;
+      z-index: 60;
+      max-width: 420px;
+      font-size: 13px;
+    }
+    .toast.show { display: block; }
+    .toast.error { background: var(--red); }
+    .toast.ok { background: var(--green); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .48);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+    .modal-backdrop.show { display: flex; }
+
+    .modal {
+      background: white;
+      width: min(560px, 100%);
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      box-shadow: 0 25px 70px rgba(15, 23, 42, .26);
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .modal-head h3 { margin: 0; font-size: 18px; }
+    .modal-body { padding: 20px; display: grid; gap: 14px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-weight: 800;
+      color: var(--muted);
+      margin-bottom: 7px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 20px 20px;
+      border-top: 1px solid var(--border);
+    }
+    .modal-actions .left, .modal-actions .right { display: flex; gap: 10px; }
+
+    @media (max-width: 1180px) {
+      .hero, .grid, .note-grid { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .toolbar { grid-template-columns: 1fr; }
+      .formula { min-width: 0; }
+    }
+    @media (max-width: 720px) {
+      .shell { padding: 16px; }
+      .cards { grid-template-columns: 1fr 1fr; }
+      .bar-row { grid-template-columns: 1fr; gap: 6px; }
+      .pct { text-align: left; }
+      .dist { grid-template-columns: 1fr; justify-items: center; }
+      .modal-actions, .modal-actions .left, .modal-actions .right { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav style="display:flex;gap:10px;margin-bottom:16px;">
+      <a href="/" style="text-decoration:none;background:#0f172a;color:#fff;padding:11px 14px;border-radius:12px;font-weight:800;font-size:13px;">Dashboard Utama</a>
+    </nav>
+
+    <section class="hero">
+      <div class="title-block">
+        <h1>Dashboard Produktivitas Mesin Jahit</h1>
+        <p class="subtitle">
+          Produktivitas harian dihitung dari <b>Running Time / ProcTime</b> terhadap acuan 1 hari kerja = <b>8 jam / 28.800 detik</b>. Data <b>Location</b> dan <b>Nama Mesin Manual</b> dapat diubah user melalui tombol Edit.
+        </p>
+      </div>
+      <div class="formula">
+        <h3>Rumus Utama</h3>
+        <div class="line">
+          Produktivitas = Total ProcTime / 28.800 × 100%.<br/>
+          Downtime = Power On Duration - Running Time.<br/>
+          <b>Good</b> = 90% · <b>Normal</b> 80–&lt;90% · <b>Bad</b> &lt;80%.
+        </div>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <input type="date" id="dateSelect" aria-label="Pilih tanggal" />
+      <input id="searchInput" placeholder="Cari mesin, IP, UUID, location, atau program jahit..." />
+      <button onclick="loadData()">Refresh</button>
+      <button onclick="downloadCSV()">Download CSV</button>
+    </section>
+
+    <section class="cards">
+      <div class="card">
+        <div class="label">Total Mesin</div>
+        <div class="value" id="kpiMachines">0</div>
+        <div class="hint">Mesin dari machineinfo</div>
+      </div>
+      <div class="card">
+        <div class="label">Avg Produktivitas</div>
+        <div class="value" id="kpiAvg">0%</div>
+        <div class="hint">Rata-rata status mesin</div>
+      </div>
+      <div class="card">
+        <div class="label">Good</div>
+        <div class="value" id="kpiGood">0</div>
+        <div class="hint">= 90%</div>
+      </div>
+      <div class="card">
+        <div class="label">Normal</div>
+        <div class="value" id="kpiNormal">0</div>
+        <div class="hint">80% sampai &lt;90%</div>
+      </div>
+      <div class="card">
+        <div class="label">Bad</div>
+        <div class="value" id="kpiBad">0</div>
+        <div class="hint">&lt;80%</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Ranking Produktivitas per Mesin</h2>
+          <span class="small" id="dateCaption"></span>
+        </div>
+        <div class="bar-list" id="barList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Distribusi Status</h2>
+          <span class="small">berdasarkan 8 jam kerja</span>
+        </div>
+        <div class="dist">
+          <div class="donut" id="donut">
+            <div class="donut-inner">
+              <strong id="donutTotal">0</strong>
+              <span>MESIN</span>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-row"><span><span class="badge status-GOOD"><span class="dot"></span>GOOD</span></span><strong id="legendGood">0</strong></div>
+            <div class="legend-row"><span><span class="badge status-NORMAL"><span class="dot"></span>NORMAL</span></span><strong id="legendNormal">0</strong></div>
+            <div class="legend-row"><span><span class="badge status-BAD"><span class="dot"></span>BAD</span></span><strong id="legendBad">0</strong></div>
+            <div class="legend-row"><span>Total Running Time</span><strong id="legendProc">0h</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Detail Mesin Harian</h2>
+        <span class="small">Klik header kolom untuk sortir</span>
+      </div>
+      <div class="table-wrap">
+        <table id="detailTable">
+          <thead>
+            <tr>
+              <th data-key="nickName">Mesin</th>
+              <th data-key="uuid" class="admin-only">UUID</th>
+              <th data-key="ip">IP</th>
+              <th data-key="location">Location</th>
+              <th data-key="runtimeHours" class="center">Power On Duration</th>
+              <th data-key="procHours" class="center">Running Time</th>
+              <th data-key="downtimeHours" class="center">Downtime</th>
+              <th data-key="productivityPct" class="center">Produktivitas</th>
+              <th data-key="status" class="center">Status</th>
+              <th class="center admin-only">Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div class="small" id="pageInfo">Menampilkan 0 data</div>
+        <div class="pagination-actions">
+          <button type="button" id="prevPage" onclick="changePage(-1)">← Prev</button>
+          <span class="page-chip" id="pageChip">Page 1 / 1</span>
+          <button type="button" id="nextPage" onclick="changePage(1)">Next →</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:18px;">
+      <div class="panel-head"><h2>Catatan Pembacaan Data</h2></div>
+      <div class="note-grid">
+        <div class="note">
+          <strong>Identitas mesin:</strong> UUID dan IP diambil dari <b>machineinfo</b>. Nama mesin manual dan lokasi disimpan di tabel <b>machine_setting_manual</b> agar data asli mesin tidak berubah.
+        </div>
+        <div class="note">
+          <strong>Produktivitas:</strong> memakai <b>ProcTime</b> sebagai Running Time. <b>Power On Duration</b> tetap ditampilkan sebagai durasi mesin menyala.
+        </div>
+        <div class="note">
+          <strong>Downtime:</strong> dihitung dari <b>Power On Duration - Running Time</b>. Jika hasil minus, dashboard akan menampilkan 0.
+        </div>
+        <div class="note">
+          <strong>CRUD manual:</strong> tombol <b>Edit</b> menyimpan custom name dan location melalui endpoint <b>/api/machine-settings</b>.
+        </div>
+      </div>
+    </section>
+
+    <footer class="small" style="padding:18px 4px 6px;">
+      Source: SQL Server sewingiot · Dashboard live dari API Go.
+    </footer>
+  </div>
+
+  <div class="modal-backdrop" id="editModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Edit Data Manual Mesin</h3>
+        <button class="btn-secondary btn-small" type="button" onclick="closeEditModal()">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>UUID</label>
+          <input id="editUuid" readonly />
+        </div>
+        <div class="field">
+          <label>Nama Asli dari MachineInfo</label>
+          <input id="editOriginalName" readonly />
+        </div>
+        <div class="field">
+          <label>Nama Mesin Manual</label>
+          <input id="editCustomName" placeholder="Contoh: Jack Quilting Sleeve KK" />
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <input id="editLocation" placeholder="Contoh: Line Quilting Area 1" />
+        </div>
+        <div class="small">
+          Kosongkan nama manual jika ingin dashboard kembali memakai nama asli dari <b>machineinfo</b>.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <div class="left">
+          <button class="btn-danger" type="button" onclick="deleteMachineSetting()">Hapus Setting</button>
+        </div>
+        <div class="right">
+          <button class="btn-secondary" type="button" onclick="closeEditModal()">Batal</button>
+          <button type="button" onclick="saveMachineSetting()">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+<script>
+let currentRows = [];
+let machineSettings = new Map();
+let sortKey = "productivityPct";
+let sortDir = "desc";
+let currentPage = 1;
+let selectedEditRow = null;
+const pageSize = 5;
+
+function isAdminMode() {
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get("admin") === "1") {
+    localStorage.setItem("machineDashboardAdmin", "1");
+    return true;
+  }
+
+  if (params.get("admin") === "0") {
+    localStorage.removeItem("machineDashboardAdmin");
+    return false;
+  }
+
+  return localStorage.getItem("machineDashboardAdmin") === "1";
+}
+
+function tableColspan() {
+  return isAdminMode() ? 10 : 8;
+}
+
+function toNum(v, def = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
+function round2(v) {
+  return Math.round(toNum(v) * 100) / 100;
+}
+
+function todayLocal() {
+  const d = new Date();
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function getVal(obj, ...keys) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return "";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function getDowntimeSec(row) {
+  const powerOn = toNum(row.runtimeSec);
+  const running = toNum(row.procSec);
+  const downtime = powerOn - running;
+  return downtime > 0 ? downtime : 0;
+}
+
+function normalizeRow(r, selectedDate) {
+  const productiveSeconds = toNum(getVal(r, "runtimeSec", "productive_seconds", "ProductiveSeconds"));
+  const productiveHours = round2(getVal(r, "runtimeHours", "productive_hours", "ProductiveHours", productiveSeconds / 3600));
+  const output = toNum(getVal(r, "output", "output_ok", "OutputOK"));
+  const cycles = toNum(getVal(r, "cycles", "total_log", "TotalLog"));
+  const productivityPct = round2(getVal(r, "productivityPct", "productivity_pct", "ProductivityPct"));
+  const status = String(getVal(r, "status", "category", "Category") || "BAD").toUpperCase();
+  const procSec = toNum(getVal(r, "procSec", "ProcSec"));
+  const procHours = round2(getVal(r, "procHours", "ProcHours", procSec / 3600));
+  const incomplete = toNum(getVal(r, "incomplete", Math.max(cycles - output, 0)));
+  const avgCycle = round2(getVal(r, "avgCycle", output > 0 ? procSec / output : 0));
+
+  const uuid = String(getVal(r, "uuid", "UUID"));
+  const originalNickName = String(getVal(r, "originalNickName", "OriginalNickName") || getVal(r, "nickName", "machine_name", "MachineName") || uuid);
+  const nickName = String(getVal(r, "nickName", "machine_name", "MachineName") || uuid);
+  const location = String(getVal(r, "location", "Location") || "-");
+
+  const row = {
+    date: String(getVal(r, "date") || selectedDate),
+    uuid: uuid,
+    tableName: String(getVal(r, "tableName", "table_name", "TableName")),
+    nickName: nickName,
+    originalNickName: originalNickName,
+    location: location,
+    ip: String(getVal(r, "ip", "IP") || "-"),
+    macType: String(getVal(r, "macType", "MacType") || "-"),
+    macState: String(getVal(r, "macState", "MacState") || "-"),
+    runtimeSec: productiveSeconds,
+    runtimeHours: productiveHours,
+    productivityRaw: round2(getVal(r, "productivityRaw", "productivity_pct", "ProductivityPct")),
+    productivityPct: productivityPct,
+    status: status,
+    mainSource: String(getVal(r, "mainSource", "main_source") || "process_time"),
+    procSec: procSec,
+    procHours: procHours,
+    okProcSec: toNum(getVal(r, "okProcSec", "productive_seconds", "ProductiveSeconds")),
+    output: output,
+    cycles: cycles,
+    complete: toNum(getVal(r, "complete", "output_ok", "OutputOK")),
+    incomplete: incomplete,
+    avgCycle: avgCycle,
+    minCycle: round2(getVal(r, "minCycle", "min_cycle")),
+    maxCycle: round2(getVal(r, "maxCycle", "max_cycle")),
+    slowCycles: toNum(getVal(r, "slowCycles", "slow_cycles")),
+    uniqueFiles: toNum(getVal(r, "uniqueFiles", "unique_files")),
+    topFile: String(getVal(r, "topFile", "top_file") || "-"),
+    alarmCount: toNum(getVal(r, "alarmCount", "alarm_count")),
+    alarmTypes: String(getVal(r, "alarmTypes", "alarm_types") || ""),
+    firstProcess: String(getVal(r, "firstProcess", "first_start", "FirstStart") || ""),
+    lastProcess: String(getVal(r, "lastProcess", "last_start", "LastStart") || "")
+  };
+
+  row.downtimeSec = getDowntimeSec(row);
+  row.downtimeHours = round2(row.downtimeSec / 3600);
+  return row;
+}
+
+function filteredRows() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  let rows = currentRows;
+  if (q) {
+    rows = rows.filter(r => [
+      r.nickName, r.originalNickName, r.location, r.ip, r.uuid, r.tableName, r.topFile, r.status
+    ].join(" ").toLowerCase().includes(q));
+  }
+
+  rows = [...rows].sort((a, b) => {
+    const va = a[sortKey];
+    const vb = b[sortKey];
+    let res = 0;
+    if (typeof va === "number" && typeof vb === "number") {
+      res = va - vb;
+    } else {
+      res = String(va ?? "").localeCompare(String(vb ?? ""));
+    }
+    return sortDir === "asc" ? res : -res;
+  });
+
+  return rows;
+}
+
+function statusBadge(status) {
+  const s = String(status || "BAD").toUpperCase();
+  return `<span class="badge status-${s}"><span class="dot"></span>${escapeHtml(s)}</span>`;
+}
+
+function showToast(message, type = "ok") {
+  const el = document.getElementById("toast");
+  el.textContent = message;
+  el.className = `toast show ${type}`;
+  setTimeout(() => {
+    el.className = "toast";
+  }, 3200);
+}
+
+function renderKPIs(rows) {
+  const total = rows.length;
+  const good = rows.filter(r => r.status === "GOOD").length;
+  const normal = rows.filter(r => r.status === "NORMAL").length;
+  const bad = rows.filter(r => r.status === "BAD").length;
+  const avg = total ? round2(rows.reduce((a, r) => a + r.productivityPct, 0) / total) : 0;
+  const procHours = round2(rows.reduce((a, r) => a + r.procHours, 0));
+
+  document.getElementById("kpiMachines").textContent = total;
+  document.getElementById("kpiAvg").textContent = avg + "%";
+  document.getElementById("kpiGood").textContent = good;
+  document.getElementById("kpiNormal").textContent = normal;
+  document.getElementById("kpiBad").textContent = bad;
+
+  document.getElementById("donutTotal").textContent = total;
+  document.getElementById("legendGood").textContent = good;
+  document.getElementById("legendNormal").textContent = normal;
+  document.getElementById("legendBad").textContent = bad;
+  document.getElementById("legendProc").textContent = procHours + "h";
+
+  const gDeg = total ? good / total * 360 : 0;
+  const nDeg = total ? normal / total * 360 : 0;
+  document.getElementById("donut").style.background =
+    `conic-gradient(var(--green) 0deg ${gDeg}deg, var(--amber) ${gDeg}deg ${gDeg + nDeg}deg, var(--red) ${gDeg + nDeg}deg 360deg)`;
+}
+
+function renderBars(rows) {
+  const el = document.getElementById("barList");
+  const date = document.getElementById("dateSelect").value;
+  document.getElementById("dateCaption").textContent = date ? `Tanggal ${date}` : "";
+  const topRows = [...rows].sort((a,b) => b.productivityPct - a.productivityPct).slice(0, 14);
+
+  if (!topRows.length) {
+    el.innerHTML = `<div class="small">Tidak ada data pada tanggal ini.</div>`;
+    return;
+  }
+
+  el.innerHTML = topRows.map(r => {
+    const cls = r.status === "GOOD" ? "good" : r.status === "NORMAL" ? "normal" : "bad";
+    return `
+      <div class="bar-row">
+        <div class="machine-name">
+          <strong title="${escapeHtml(r.nickName)}">${escapeHtml(r.nickName)}</strong>
+          <span>${escapeHtml(r.ip)} · ${escapeHtml(r.location || "-")}</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill ${cls}" style="width:${Math.min(r.productivityPct, 100)}%"></div>
+        </div>
+        <div class="pct">${r.productivityPct}%</div>
+      </div>`;
+  }).join("");
+}
+
+function renderPagination(totalRows) {
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const startNo = totalRows ? ((currentPage - 1) * pageSize) + 1 : 0;
+  const endNo = Math.min(currentPage * pageSize, totalRows);
+
+  const pageInfo = document.getElementById("pageInfo");
+  const pageChip = document.getElementById("pageChip");
+  const prevBtn = document.getElementById("prevPage");
+  const nextBtn = document.getElementById("nextPage");
+
+  if (pageInfo) pageInfo.textContent = `Menampilkan ${startNo}-${endNo} dari ${totalRows} mesin`;
+  if (pageChip) pageChip.textContent = `Page ${currentPage} / ${totalPages}`;
+  if (prevBtn) prevBtn.disabled = currentPage <= 1;
+  if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+}
+
+function changePage(direction) {
+  const rows = filteredRows();
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  currentPage += direction;
+  if (currentPage < 1) currentPage = 1;
+  if (currentPage > totalPages) currentPage = totalPages;
+  renderTable(rows);
+}
+
+function renderTable(rows) {
+  const tbody = document.querySelector("#detailTable tbody");
+  const admin = isAdminMode();
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="${tableColspan()}" class="small">Tidak ada data pada tanggal/filter ini.</td></tr>`;
+    renderPagination(0);
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageRows = rows.slice(startIndex, startIndex + pageSize);
+
+  renderPagination(rows.length);
+
+  tbody.innerHTML = pageRows.map(r => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(r.nickName)}</strong>
+      </td>
+      ${admin ? `<td class="mono">${escapeHtml(r.uuid || "-")}</td>` : ""}
+      <td class="mono">${escapeHtml(r.ip || "-")}</td>
+      <td>${escapeHtml(r.location || "-")}</td>
+      <td class="center">${r.runtimeHours}h<div class="small">${r.runtimeSec}s</div></td>
+      <td class="center">${r.procHours}h<div class="small">${r.procSec}s</div></td>
+      <td class="center">${r.downtimeHours}h<div class="small">${r.downtimeSec}s</div></td>
+      <td class="center"><strong>${r.productivityPct}%</strong><div class="small">${escapeHtml(r.mainSource)}</div></td>
+      <td class="center">${statusBadge(r.status)}</td>
+      ${admin ? `
+        <td class="center nowrap">
+          <button class="btn-secondary btn-small" type="button" onclick="openEditModal('${escapeHtml(r.uuid)}')">Edit</button>
+        </td>
+      ` : ""}
+    </tr>
+  `).join("");
+}
+
+async function loadMachineSettings() {
+  machineSettings = new Map();
+  try {
+    const res = await fetch("/api/machine-settings");
+    if (!res.ok) return;
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : [];
+    list.forEach(item => {
+      const uuid = String(item.uuid || item.UUID || "");
+      if (!uuid) return;
+      machineSettings.set(uuid, {
+        uuid,
+        customName: String(item.customName || item.CustomName || ""),
+        location: String(item.location || item.Location || ""),
+        updatedAt: String(item.updatedAt || item.UpdatedAt || "")
+      });
+    });
+  } catch (err) {
+    console.warn("Gagal load machine settings:", err);
+  }
+}
+
+async function loadData(keepPage = false) {
+  const pageBefore = currentPage;
+  const date = document.getElementById("dateSelect").value || todayLocal();
+
+  document.getElementById("barList").innerHTML = `<div class="small">Loading data...</div>`;
+  document.querySelector("#detailTable tbody").innerHTML = `<tr><td colspan="${tableColspan()}" class="small">Loading data...</td></tr>`;
+
+  try {
+    await loadMachineSettings();
+
+    const res = await fetch(`/api/productivity?date=${encodeURIComponent(date)}`);
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.rows || data.Rows || []);
+    currentRows = rows.map(r => {
+      const row = normalizeRow(r, date);
+      const setting = machineSettings.get(row.uuid);
+      if (setting) {
+        if (!row.originalNickName) row.originalNickName = row.nickName;
+        if (setting.customName) row.nickName = setting.customName;
+        if (setting.location) row.location = setting.location;
+      }
+      return row;
+    });
+
+    currentPage = keepPage ? pageBefore : 1;
+
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    document.getElementById("barList").innerHTML = `<div class="small">Gagal load API: ${escapeHtml(err.message)}</div>`;
+    document.querySelector("#detailTable tbody").innerHTML = `<tr><td colspan="${tableColspan()}" class="small">Gagal load API: ${escapeHtml(err.message)}</td></tr>`;
+    renderKPIs([]);
+  }
+}
+
+function renderAll() {
+  const rows = filteredRows();
+
+  document.querySelectorAll(".admin-only").forEach(el => {
+    el.style.display = isAdminMode() ? "" : "none";
+  });
+
+  renderKPIs(rows);
+  renderBars(rows);
+  renderTable(rows);
+}
+
+function openEditModal(uuid) {
+  const row = currentRows.find(r => r.uuid === uuid);
+  if (!row) {
+    showToast("Data mesin tidak ditemukan", "error");
+    return;
+  }
+
+  selectedEditRow = row;
+  const setting = machineSettings.get(uuid) || {};
+
+  document.getElementById("editUuid").value = row.uuid;
+  document.getElementById("editOriginalName").value = row.originalNickName || row.nickName;
+  document.getElementById("editCustomName").value = setting.customName || (row.originalNickName && row.nickName !== row.originalNickName ? row.nickName : "");
+  document.getElementById("editLocation").value = setting.location || (row.location === "-" ? "" : row.location);
+
+  document.getElementById("editModal").classList.add("show");
+}
+
+function closeEditModal() {
+  selectedEditRow = null;
+  document.getElementById("editModal").classList.remove("show");
+}
+
+async function saveMachineSetting() {
+  if (!isAdminMode()) {
+    showToast("Mode edit tidak aktif", "error");
+    return;
+  }
+
+  const uuid = document.getElementById("editUuid").value.trim();
+  const customName = document.getElementById("editCustomName").value.trim();
+  const location = document.getElementById("editLocation").value.trim();
+
+  if (!uuid) {
+    showToast("UUID kosong, tidak bisa simpan", "error");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/machine-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uuid, customName, location })
+    });
+
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+
+    showToast("Data manual mesin berhasil disimpan", "ok");
+    closeEditModal();
+    await loadData(true);
+  } catch (err) {
+    showToast("Gagal simpan: " + err.message, "error");
+  }
+}
+
+async function deleteMachineSetting() {
+  if (!isAdminMode()) {
+    showToast("Mode edit tidak aktif", "error");
+    return;
+  }
+
+  const uuid = document.getElementById("editUuid").value.trim();
+  if (!uuid) {
+    showToast("UUID kosong, tidak bisa hapus", "error");
+    return;
+  }
+
+  const ok = confirm("Hapus setting manual untuk mesin ini? Nama dan location akan kembali ke data default.");
+  if (!ok) return;
+
+  try {
+    const res = await fetch(`/api/machine-settings?uuid=${encodeURIComponent(uuid)}`, {
+      method: "DELETE"
+    });
+
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+
+    showToast("Setting manual berhasil dihapus", "ok");
+    closeEditModal();
+    await loadData(true);
+  } catch (err) {
+    showToast("Gagal hapus: " + err.message, "error");
+  }
+}
+
+function downloadCSV() {
+  const rows = filteredRows();
+  const headers = [
+    "date","uuid","nickName","originalNickName","location","ip","productivityPct","productivityRaw","status",
+    "runtimeHours","runtimeSec","procHours","procSec","downtimeHours","downtimeSec",
+    "output","cycles","complete","incomplete","avgCycle","minCycle","maxCycle",
+    "firstProcess","lastProcess"
+  ];
+  const lines = [headers.join(",")].concat(rows.map(r => headers.map(h => {
+    const val = String(r[h] ?? "");
+    return `"${val.replace(/"/g, '""')}"`;
+  }).join(",")));
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "summary_produktivitas_mesin_" + document.getElementById("dateSelect").value + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function init() {
+  const dateInput = document.getElementById("dateSelect");
+  dateInput.value = todayLocal();
+
+  document.getElementById("searchInput").addEventListener("input", () => {
+    currentPage = 1;
+    renderAll();
+  });
+  dateInput.addEventListener("change", loadData);
+
+  document.querySelectorAll("#detailTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (!key) return;
+      if (sortKey === key) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortKey = key;
+        sortDir = "desc";
+      }
+      currentPage = 1;
+      renderAll();
+    });
+  });
+
+  document.getElementById("editModal").addEventListener("click", (event) => {
+    if (event.target.id === "editModal") closeEditModal();
+  });
+
+  loadData();
+}
+
+init();
+</script>
+</body>
+</html>

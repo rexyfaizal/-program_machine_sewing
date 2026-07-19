@@ -1,0 +1,40 @@
+﻿# Frontend Vue / Node
+frontend_machine/node_modules/
+frontend_machine/dist/
+frontend_machine/.vite/
+frontend_machine/.cache/
+
+# Environment rahasia
+frontend_machine/.env
+frontend_machine/.env.*
+!frontend_machine/.env.example
+
+backend_machine/.env
+backend_machine/.env.*
+!backend_machine/.env.example
+
+# Backend Go build
+backend_machine/bin/
+backend_machine/tmp/
+backend_machine/*.exe
+backend_machine/*.out
+backend_machine/coverage.out
+
+# Log
+*.log
+logs/
+
+# Database dan backup
+*.bak
+*.mdf
+*.ldf
+*.dump
+*.sql.gz
+
+# Editor
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini

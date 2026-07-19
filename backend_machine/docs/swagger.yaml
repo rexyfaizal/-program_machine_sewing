@@ -1,0 +1,391 @@
+definitions:
+  models.Employee:
+    properties:
+      branchdetail:
+        type: string
+      name:
+        type: string
+      nik:
+        type: string
+    type: object
+  models.MachineOperatorLoginRequest:
+    properties:
+      branchdetail:
+        type: string
+      location:
+        type: string
+      machineName:
+        type: string
+      operatorName:
+        type: string
+      operatorNik:
+        type: string
+      processName:
+        type: string
+      styleName:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.MachineOperatorLoginResponse:
+    properties:
+      isExisting:
+        type: boolean
+      message:
+        type: string
+      session:
+        $ref: '#/definitions/models.MachineOperatorSession'
+      status:
+        type: string
+    type: object
+  models.MachineOperatorNote:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      note:
+        type: string
+      operatorName:
+        type: string
+      operatorNik:
+        type: string
+      reasonCode:
+        type: string
+      reasonName:
+        type: string
+      sessionDate:
+        type: string
+      sessionId:
+        type: integer
+      uuid:
+        type: string
+    type: object
+  models.MachineOperatorNoteRequest:
+    properties:
+      note:
+        type: string
+      operatorNik:
+        type: string
+      reasonCode:
+        type: string
+      reasonName:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.MachineOperatorNoteResponse:
+    properties:
+      closed:
+        type: boolean
+      message:
+        type: string
+      noteId:
+        type: integer
+      sessionId:
+        type: integer
+      status:
+        type: string
+    type: object
+  models.MachineOperatorReportItem:
+    properties:
+      branchdetail:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: integer
+      location:
+        type: string
+      loginTime:
+        type: string
+      logoutTime:
+        type: string
+      machineName:
+        type: string
+      notes:
+        items:
+          $ref: '#/definitions/models.MachineOperatorNote'
+        type: array
+      operatorName:
+        type: string
+      operatorNik:
+        type: string
+      processName:
+        type: string
+      sessionDate:
+        type: string
+      status:
+        type: string
+      styleName:
+        type: string
+      updatedAt:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.MachineOperatorSession:
+    properties:
+      branchdetail:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: integer
+      location:
+        type: string
+      loginTime:
+        type: string
+      logoutTime:
+        type: string
+      machineName:
+        type: string
+      operatorName:
+        type: string
+      operatorNik:
+        type: string
+      processName:
+        type: string
+      sessionDate:
+        type: string
+      status:
+        type: string
+      styleName:
+        type: string
+      updatedAt:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.ProcessStyleItem:
+    properties:
+      styleName:
+        type: string
+    type: object
+  models.ProcessStyleProcess:
+    properties:
+      id:
+        type: integer
+      processName:
+        type: string
+      styleName:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /employees/search:
+    get:
+      description: Cari data karyawan berdasarkan NIK atau nama
+      parameters:
+      - description: NIK atau nama karyawan
+        in: query
+        name: q
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Employee'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "405":
+          description: Method Not Allowed
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Search employee
+      tags:
+      - Employees
+  /machine-operator/active:
+    get:
+      description: Mengambil session operator aktif berdasarkan UUID mesin
+      parameters:
+      - description: UUID mesin
+        in: query
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MachineOperatorSession'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Cek operator aktif di mesin
+      tags:
+      - Machine Operator
+  /machine-operator/login:
+    post:
+      consumes:
+      - application/json
+      description: Login operator berdasarkan UUID mesin dan NIK operator
+      parameters:
+      - description: Body login operator
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.MachineOperatorLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MachineOperatorLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Login operator ke mesin
+      tags:
+      - Machine Operator
+  /machine-operator/note:
+    post:
+      consumes:
+      - application/json
+      description: Menyimpan aktivitas/keterangan operator pada session aktif
+      parameters:
+      - description: Body note operator
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.MachineOperatorNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MachineOperatorNoteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Simpan catatan aktivitas operator
+      tags:
+      - Machine Operator
+  /machine-operator/report:
+    get:
+      description: Mengambil session operator dan note berdasarkan tanggal
+      parameters:
+      - description: Tanggal format YYYY-MM-DD
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.MachineOperatorReportItem'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Report operator mesin harian
+      tags:
+      - Machine Operator
+  /process-style/processes:
+    get:
+      description: Mengambil daftar proses berdasarkan style dari tabel dt_proses_style
+      parameters:
+      - description: Style
+        in: query
+        name: style
+        required: true
+        type: string
+      - description: Keyword proses
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ProcessStyleProcess'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Cari proses berdasarkan style
+      tags:
+      - Process Style
+  /process-style/styles:
+    get:
+      description: Mengambil daftar style dari tabel dt_proses_style
+      parameters:
+      - description: Keyword style
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ProcessStyleItem'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Cari daftar style
+      tags:
+      - Process Style
+swagger: "2.0"
