@@ -119,6 +119,21 @@ export function useOperatorMachinePage(uuidSource) {
     );
   }
 
+  function normalizeBoolean(value) {
+    if (value === true) return true;
+    if (value === false) return false;
+
+    const text = String(value ?? "")
+      .trim()
+      .toLowerCase();
+
+    return text === "true" || text === "1" || text === "yes" || text === "active";
+  }
+
+  function hasValue(value) {
+    return value !== undefined && value !== null;
+  }
+
   function normalizeSetting(row) {
     return {
       uuid: String(getVal(row, "uuid", "UUID") || ""),
@@ -390,6 +405,20 @@ export function useOperatorMachinePage(uuidSource) {
     saveSessionCache(session);
   }
 
+  function goToLoginMode(uuid, message = "") {
+    clearSessionCache(uuid);
+
+    activeSession.value = null;
+    activeNotes.value = [];
+    pageMode.value = "login";
+    forceReplace.value = false;
+
+    resetLoginForm();
+
+    errorMessage.value = "";
+    successMessage.value = message;
+  }
+
   function resetLoginForm() {
     operatorNik.value = "";
     operatorName.value = "";
@@ -475,11 +504,17 @@ export function useOperatorMachinePage(uuidSource) {
       const data = await getActiveMachineOperator(uuid);
       const root = unwrapResponse(data);
 
-      const isActive = Boolean(
-        getVal(root, "active", "Active") || getVal(data, "active", "Active")
-      );
+      const activeRawFromRoot = getVal(root, "active", "Active");
+      const activeRawFromData = getVal(data, "active", "Active");
 
-      const sessionRaw =
+      const activeRaw = hasValue(activeRawFromRoot)
+        ? activeRawFromRoot
+        : activeRawFromData;
+
+      const hasActiveFlag = hasValue(activeRaw);
+      const isActive = normalizeBoolean(activeRaw);
+
+      let sessionRaw =
         getVal(root, "session", "Session") ||
         getVal(data, "session", "Session");
 
@@ -488,43 +523,61 @@ export function useOperatorMachinePage(uuidSource) {
         getVal(data, "lastNotes", "LastNotes", "notes", "Notes") ||
         [];
 
+      /*
+        Kalau backend sudah mengirim active:false,
+        frontend harus percaya backend, hapus cache lama,
+        dan tampilkan form login.
+      */
+      if (hasActiveFlag && !isActive) {
+        goToLoginMode(uuid);
+        return;
+      }
+
+      /*
+        Kompatibilitas:
+        Jika backend lama mengirim session langsung tanpa wrapper active/session.
+      */
+      if (!sessionRaw && !hasActiveFlag) {
+        sessionRaw = root;
+      }
+
       const session = normalizeSession(sessionRaw);
       const status = String(session?.status || "").toUpperCase();
 
-      const hasActiveSession =
-        isActive ||
-        Boolean(session?.id) ||
-        status === "ACTIVE" ||
-        status === "OPEN";
+      const sessionStatusActive =
+        status === "ACTIVE" || status === "OPEN" || status === "";
 
-      if (hasActiveSession && session) {
-        activateSession(
-          session,
-          notesRaw,
-          "Operator sudah aktif di mesin ini"
-        );
+      if (hasActiveFlag) {
+        if (isActive && session?.id && sessionStatusActive) {
+          activateSession(
+            session,
+            notesRaw,
+            "Operator sudah aktif di mesin ini"
+          );
+          return;
+        }
+
+        goToLoginMode(uuid);
         return;
       }
 
-      const cached = loadSessionCache(uuid);
-
-      if (cached?.session) {
-        activateSession(
-          cached.session,
-          cached.notes,
-          "Operator sudah aktif di mesin ini"
-        );
+      /*
+        Fallback untuk response backend lama tanpa field active.
+        Hanya dianggap aktif kalau session ada dan status ACTIVE / OPEN.
+      */
+      if (session?.id && (status === "ACTIVE" || status === "OPEN")) {
+        activateSession(session, notesRaw, "Operator sudah aktif di mesin ini");
         return;
       }
 
-      activeSession.value = null;
-      activeNotes.value = [];
-      pageMode.value = "login";
-      forceReplace.value = false;
-      successMessage.value = "";
+      goToLoginMode(uuid);
     } catch (err) {
       console.warn("Gagal cek operator aktif:", err);
 
+      /*
+        Cache hanya dipakai saat endpoint gagal/error.
+        Kalau backend berhasil jawab active:false, cache tidak dipakai.
+      */
       const cached = loadSessionCache(uuid);
 
       if (cached?.session) {

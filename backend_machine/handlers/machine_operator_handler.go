@@ -116,13 +116,12 @@ func (h *Handler) MachineOperatorNote(w http.ResponseWriter, r *http.Request) {
 
 // MachineOperatorActive godoc
 // @Summary Cek operator aktif di mesin
-// @Description Mengambil session operator aktif berdasarkan UUID mesin
+// @Description Mengambil session operator aktif berdasarkan UUID mesin. Jika tidak ada, tetap return JSON active=false.
 // @Tags Machine Operator
 // @Produce json
 // @Param uuid query string true "UUID mesin"
-// @Success 200 {object} models.MachineOperatorSession
+// @Success 200 {object} models.MachineOperatorActiveResponse
 // @Failure 400 {string} string
-// @Failure 404 {string} string
 // @Failure 500 {string} string
 // @Router /machine-operator/active [get]
 func (h *Handler) MachineOperatorActive(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +142,11 @@ func (h *Handler) MachineOperatorActive(w http.ResponseWriter, r *http.Request) 
 	session, err := h.Repo.GetActiveMachineOperator(ctx, uuid)
 	if err != nil {
 		if errors.Is(err, repository.ErrMachineOperatorNotFound) || errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Tidak ada operator aktif", http.StatusNotFound)
+			writeJSON(w, models.MachineOperatorActiveResponse{
+				Active:  false,
+				Message: "Tidak ada operator aktif",
+				Session: nil,
+			})
 			return
 		}
 
@@ -151,7 +154,11 @@ func (h *Handler) MachineOperatorActive(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, session)
+	writeJSON(w, models.MachineOperatorActiveResponse{
+		Active:  true,
+		Message: "Operator aktif",
+		Session: session,
+	})
 }
 
 // MachineOperatorReport godoc

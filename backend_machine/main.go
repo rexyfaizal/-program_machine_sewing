@@ -52,6 +52,10 @@ func main() {
 	// Dengan ini logs_machine tetap update walaupun dashboard tidak dibuka.
 	startLogsMachineScheduler(repo, 1*time.Minute)
 
+	// Auto logout operator jika mesin offline >= 60 menit.
+	// Scheduler berjalan otomatis setiap 5 menit.
+	startMachineOperatorAutoLogoutScheduler(repo, 5*time.Minute)
+
 	mux := http.NewServeMux()
 
 	// Swagger
@@ -81,16 +85,20 @@ func main() {
 	mux.HandleFunc("/api/machine-settings", api.MachineSettings)
 	mux.HandleFunc("/api/employees/search", api.EmployeeSearch)
 
+	// Machine Operator
 	mux.HandleFunc("/api/machine-operator/login", api.MachineOperatorLogin)
 	mux.HandleFunc("/api/machine-operator/note", api.MachineOperatorNote)
 	mux.HandleFunc("/api/machine-operator/active", api.MachineOperatorActive)
 	mux.HandleFunc("/api/machine-operator/report", api.MachineOperatorReport)
+	mux.HandleFunc("/api/machine-operator/auto-logout/offline", api.MachineOperatorAutoLogoutOffline)
 
+	// Process Style
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)
 	mux.HandleFunc("/api/process-style/list", api.ProcessStyleList)
 	mux.HandleFunc("/api/process-style", api.ProcessStyleCreate)
 	mux.HandleFunc("/api/process-style/", api.ProcessStyleByID)
+
 	// WebSocket
 	mux.HandleFunc("/ws/productivity", api.ProductivityWS)
 
@@ -106,15 +114,13 @@ func main() {
 	log.Println("POST   /api/machine-settings")
 	log.Println("PUT    /api/machine-settings")
 	log.Println("DELETE /api/machine-settings?uuid=UUID")
-	log.Println("WS     /ws/productivity")
-	log.Println("")
-	log.Println("Swagger UI: http://localhost:5000/swagger/index.html")
-	log.Println("Scheduler logs_machine: aktif setiap 1 menit")
 	log.Println("GET    /api/employees/search?q=NIK")
+
 	log.Println("POST   /api/machine-operator/login")
 	log.Println("POST   /api/machine-operator/note")
 	log.Println("GET    /api/machine-operator/active?uuid=UUID")
 	log.Println("GET    /api/machine-operator/report?date=YYYY-MM-DD")
+	log.Println("POST   /api/machine-operator/auto-logout/offline")
 
 	log.Println("GET    /api/process-style/styles?q=STYLE")
 	log.Println("GET    /api/process-style/processes?style=STYLE&q=PROCESS")
@@ -122,6 +128,12 @@ func main() {
 	log.Println("POST   /api/process-style")
 	log.Println("PUT    /api/process-style/:id")
 	log.Println("DELETE /api/process-style/:id")
+
+	log.Println("WS     /ws/productivity")
+	log.Println("")
+	log.Println("Swagger UI: http://localhost:5000/swagger/index.html")
+	log.Println("Scheduler logs_machine: aktif setiap 1 menit")
+	log.Println("Scheduler auto logout offline: aktif setiap 5 menit")
 
 	log.Fatal(http.ListenAndServe(":5000", corsMiddleware(mux)))
 }

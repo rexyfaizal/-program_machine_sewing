@@ -69,3 +69,9 @@ type MachineOperatorReportItem struct {
 	MachineOperatorSession
 	Notes []MachineOperatorNote `json:"notes"`
 }
+
+type MachineOperatorActiveResponse struct {
+	Active  bool                    `json:"active"`
+	Message string                  `json:"message"`
+	Session *MachineOperatorSession `json:"session"`
+}
