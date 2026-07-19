@@ -1,0 +1,5 @@
+run_bot.ps1
+.env
+dist/
+*.exe
+*.log

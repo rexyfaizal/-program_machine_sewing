@@ -1,0 +1,17 @@
+$ErrorActionPreference = 'Stop'
+
+$env:BOT_TOKEN='TOKEN_DARI_BOTFATHER'
+
+$env:DB_SERVER='10.5.0.99'
+$env:DB_PORT='1433'
+$env:DB_USER='sa'
+$env:DB_PASSWORD='PASSWORD_SQL_SERVER'
+$env:DB_NAME='NAMA_DATABASE'
+$env:DB_ENCRYPT='disable'
+$env:DB_EMPLOYEE_TABLE='dbo.employee'
+
+if (Test-Path '.\telegram_notif.exe') {
+    .\telegram_notif.exe
+} else {
+    go run .
+}
