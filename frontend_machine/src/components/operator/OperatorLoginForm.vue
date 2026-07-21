@@ -97,7 +97,7 @@ const emit = defineEmits([
             :key="`emp-${emp.nik}-${emp.name}`"
             type="button"
             class="suggest-item"
-            @click="emit('select-employee', emp)"
+            @pointerdown.prevent="emit('select-employee', emp)"
           >
             <strong>{{ emp.nik }}</strong>
             <span>{{ emp.name }}</span>
@@ -149,8 +149,8 @@ const emit = defineEmits([
             :key="`style-${item.styleName}`"
             type="button"
             class="suggest-item style-only"
-            @click="emit('select-style', item)"
-            >
+            @pointerdown.prevent="emit('select-style', item)"
+          >
             <strong>{{ item.styleName }}</strong>
           </button>
         </div>
@@ -185,7 +185,7 @@ const emit = defineEmits([
             :key="`process-${item.id}-${item.processName}`"
             type="button"
             class="suggest-item"
-            @click="emit('select-process', item)"
+            @pointerdown.prevent="emit('select-process', item)"
           >
             <strong>{{ item.styleName }}</strong>
             <span>{{ item.processName }}</span>

@@ -18,6 +18,21 @@ type Client struct {
 	httpClient *http.Client
 }
 
+type keyboardButton struct {
+	Text string `json:"text"`
+}
+
+type replyKeyboardMarkup struct {
+	Keyboard              [][]keyboardButton `json:"keyboard"`
+	ResizeKeyboard        bool               `json:"resize_keyboard"`
+	OneTimeKeyboard       bool               `json:"one_time_keyboard"`
+	InputFieldPlaceholder string             `json:"input_field_placeholder,omitempty"`
+}
+
+type replyKeyboardRemove struct {
+	RemoveKeyboard bool `json:"remove_keyboard"`
+}
+
 func NewClient(token string) *Client {
 	return &Client{
 		token: token,
@@ -37,7 +52,13 @@ func (c *Client) GetUpdates(
 	form.Set("allowed_updates", `["message"]`)
 
 	var response models.TelegramUpdatesResponse
-	if err := c.postForm(ctx, "getUpdates", form, &response); err != nil {
+
+	if err := c.postForm(
+		ctx,
+		"getUpdates",
+		form,
+		&response,
+	); err != nil {
 		return nil, err
 	}
 
@@ -56,12 +77,129 @@ func (c *Client) SendMessage(
 	chatID int64,
 	message string,
 ) error {
+	return c.sendMessage(
+		ctx,
+		chatID,
+		message,
+		"",
+	)
+}
+
+func (c *Client) SendMessageWithKeyboard(
+	ctx context.Context,
+	chatID int64,
+	message string,
+	buttonRows [][]string,
+) error {
+	keyboard := make(
+		[][]keyboardButton,
+		0,
+		len(buttonRows),
+	)
+
+	for _, row := range buttonRows {
+		keyboardRow := make(
+			[]keyboardButton,
+			0,
+			len(row),
+		)
+
+		for _, buttonText := range row {
+			keyboardRow = append(
+				keyboardRow,
+				keyboardButton{
+					Text: buttonText,
+				},
+			)
+		}
+
+		keyboard = append(
+			keyboard,
+			keyboardRow,
+		)
+	}
+
+	markup := replyKeyboardMarkup{
+		Keyboard:              keyboard,
+		ResizeKeyboard:        true,
+		OneTimeKeyboard:       true,
+		InputFieldPlaceholder: "Pilih bagian Anda",
+	}
+
+	markupJSON, err := json.Marshal(markup)
+	if err != nil {
+		return fmt.Errorf(
+			"gagal membuat keyboard Telegram: %w",
+			err,
+		)
+	}
+
+	return c.sendMessage(
+		ctx,
+		chatID,
+		message,
+		string(markupJSON),
+	)
+}
+
+func (c *Client) SendMessageRemoveKeyboard(
+	ctx context.Context,
+	chatID int64,
+	message string,
+) error {
+	markup := replyKeyboardRemove{
+		RemoveKeyboard: true,
+	}
+
+	markupJSON, err := json.Marshal(markup)
+	if err != nil {
+		return fmt.Errorf(
+			"gagal menghapus keyboard Telegram: %w",
+			err,
+		)
+	}
+
+	return c.sendMessage(
+		ctx,
+		chatID,
+		message,
+		string(markupJSON),
+	)
+}
+
+func (c *Client) sendMessage(
+	ctx context.Context,
+	chatID int64,
+	message string,
+	replyMarkup string,
+) error {
 	form := url.Values{}
-	form.Set("chat_id", strconv.FormatInt(chatID, 10))
-	form.Set("text", message)
+
+	form.Set(
+		"chat_id",
+		strconv.FormatInt(chatID, 10),
+	)
+
+	form.Set(
+		"text",
+		message,
+	)
+
+	if strings.TrimSpace(replyMarkup) != "" {
+		form.Set(
+			"reply_markup",
+			replyMarkup,
+		)
+	}
 
 	var response models.TelegramBasicResponse
-	if err := c.postForm(ctx, "sendMessage", form, &response); err != nil {
+
+	if err := c.postForm(
+		ctx,
+		"sendMessage",
+		form,
+		&response,
+	); err != nil {
 		return err
 	}
 
@@ -108,7 +246,9 @@ func (c *Client) postForm(
 	}
 	defer response.Body.Close()
 
-	if err := json.NewDecoder(response.Body).Decode(responseTarget); err != nil {
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(responseTarget); err != nil {
 		return err
 	}
 

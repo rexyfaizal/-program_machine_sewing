@@ -4,6 +4,7 @@ type Employee struct {
 	NIK          string
 	Name         string
 	BranchDetail string
+	Bagian       string
 	TelegramID   *int64
 }
 

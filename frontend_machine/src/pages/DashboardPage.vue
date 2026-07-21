@@ -36,6 +36,8 @@ const notice = ref("");
 const noticeType = ref("ok");
 const isAdmin = ref(false);
 
+let noticeTimer = null;
+
 const {
   machines,
   loading,
@@ -96,8 +98,25 @@ const filteredMachines = computed(() => {
       m.machineName,
       m.originalMachineName,
       m.location,
+
+      // Operator aktif
       m.pic,
+      m.operatorNik,
+      m.operatorName,
+      m.operatorSubText,
+      m.operatorLoginText,
+      m.operatorActiveText,
+
+      // Operator note
+      m.operatorNote,
+      m.operatorNotes,
       m.spv,
+
+      // Proses/style operator
+      m.operatorProcessName,
+      m.operatorStyleName,
+
+      // Data mesin
       m.ip,
       m.uuid,
       m.tableName,
@@ -153,7 +172,11 @@ function showNotice(message, type = "ok") {
   notice.value = message;
   noticeType.value = type;
 
-  setTimeout(() => {
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+  }
+
+  noticeTimer = setTimeout(() => {
     notice.value = "";
   }, 3000);
 }
@@ -248,8 +271,13 @@ function downloadCSV() {
       "Mesin",
       "OriginalName",
       "Location",
-      "PIC",
-      "SPV",
+      "Operator Aktif",
+      "Operator Login Info",
+      "Operator Note",
+      "Operator NIK",
+      "Operator Name",
+      "Operator Process",
+      "Operator Style",
       "IP",
       "Power On Duration",
       "Running Time",
@@ -275,7 +303,12 @@ function downloadCSV() {
         m.originalMachineName,
         m.location,
         m.pic || "",
-        m.spv || "",
+        m.operatorSubText || "",
+        m.operatorNote || m.spv || "",
+        m.operatorNik || "",
+        m.operatorName || "",
+        m.operatorProcessName || "",
+        m.operatorStyleName || "",
         m.ip,
         runtime,
         procTime,
@@ -312,12 +345,16 @@ onMounted(async () => {
   emit("admin-mode-change", isAdmin.value);
   emit("socket-status-change", socketStatus.value);
 
-  loadDashboard(localDate.value);
+  await loadDashboard(localDate.value);
   connect(localDate.value);
 });
 
 onUnmounted(() => {
   close();
+
+  if (noticeTimer) {
+    clearTimeout(noticeTimer);
+  }
 });
 </script>
 
@@ -359,7 +396,8 @@ onUnmounted(() => {
       <div>
         <h3>QR Code Mesin</h3>
         <p>
-          Generate QR semua mesin untuk halaman operator input PIC dan SPV.
+          Generate QR semua mesin untuk login operator dan menu keterangan
+          operator.
         </p>
       </div>
 

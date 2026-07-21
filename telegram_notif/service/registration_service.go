@@ -12,12 +12,23 @@ import (
 
 var nikPattern = regexp.MustCompile(`^[0-9]{3,30}$`)
 
+const (
+	BagianOperator = "Operator"
+	BagianSPV      = "SPV"
+	BagianMekanik  = "Mekanik"
+)
+
 type RegistrationService interface {
 	Register(
 		ctx context.Context,
 		nik string,
+		bagian string,
 		telegramID int64,
-	) (message string, complete bool, err error)
+	) (
+		message string,
+		complete bool,
+		err error,
+	)
 }
 
 type registrationService struct {
@@ -25,14 +36,17 @@ type registrationService struct {
 }
 
 func NewRegistrationService(
-	repository repository.EmployeeRepository,
+	employeeRepository repository.EmployeeRepository,
 ) RegistrationService {
-	return &registrationService{repository: repository}
+	return &registrationService{
+		repository: employeeRepository,
+	}
 }
 
 func (s *registrationService) Register(
 	ctx context.Context,
 	nik string,
+	bagian string,
 	telegramID int64,
 ) (string, bool, error) {
 	nik = strings.TrimSpace(nik)
@@ -44,7 +58,29 @@ func (s *registrationService) Register(
 			"Silakan kirim ulang NIK Anda.", false, nil
 	}
 
-	result, err := s.repository.RegisterTelegramID(ctx, nik, telegramID)
+	normalizedBagian, valid := normalizeBagian(bagian)
+	if !valid {
+		return "Bagian yang dipilih tidak valid.\n\n" +
+			"Pilihan yang tersedia:\n" +
+			"- Operator\n" +
+			"- SPV\n" +
+			"- Mekanik\n\n" +
+			"Silakan ketik /start untuk memulai kembali.", false, nil
+	}
+
+	if telegramID <= 0 {
+		return "", false, fmt.Errorf(
+			"Telegram ID tidak valid: %d",
+			telegramID,
+		)
+	}
+
+	result, err := s.repository.RegisterTelegramID(
+		ctx,
+		nik,
+		normalizedBagian,
+		telegramID,
+	)
 	if err != nil {
 		return "", false, err
 	}
@@ -59,7 +95,7 @@ func (s *registrationService) Register(
 
 	case models.RegistrationAlreadyRegistered:
 		return employeeSuccessMessage(
-			"Akun Telegram Anda sudah terdaftar.",
+			"Data akun Telegram Anda berhasil diperbarui.",
 			result.Employee,
 			telegramID,
 		), true, nil
@@ -69,14 +105,14 @@ func (s *registrationService) Register(
 			"ID Telegram Anda sudah terdaftar pada NIK %s.\n\n"+
 				"Satu akun Telegram hanya dapat digunakan untuk satu NIK.\n"+
 				"Silakan hubungi administrator.",
-			result.ConflictingNIK,
+			valueOrDash(result.ConflictingNIK),
 		), false, nil
 
 	case models.RegistrationNIKUsed:
 		return fmt.Sprintf(
 			"NIK %s sudah terhubung dengan akun Telegram lain.\n\n"+
 				"Silakan hubungi administrator apabila ingin mengganti akun Telegram.",
-			result.Employee.NIK,
+			valueOrDash(result.Employee.NIK),
 		), false, nil
 
 	case models.RegistrationNIKNotFound:
@@ -95,7 +131,7 @@ func (s *registrationService) Register(
 
 	default:
 		return "", false, fmt.Errorf(
-			"status registrasi tidak dikenal: %s",
+			"status registrasi tidak dikenal: %v",
 			result.Status,
 		)
 	}
@@ -111,20 +147,46 @@ func employeeSuccessMessage(
 			"NIK: %s\n"+
 			"Nama: %s\n"+
 			"Branch: %s\n"+
+			"Bagian: %s\n"+
 			"ID Telegram: %d\n\n"+
 			"Akun Telegram Anda sudah terhubung dengan database karyawan.",
 		title,
 		valueOrDash(employee.NIK),
 		valueOrDash(employee.Name),
 		valueOrDash(employee.BranchDetail),
+		valueOrDash(employee.Bagian),
 		telegramID,
 	)
 }
 
-func valueOrDash(value string) string {
+func normalizeBagian(
+	bagian string,
+) (string, bool) {
+	switch strings.ToLower(
+		strings.TrimSpace(bagian),
+	) {
+	case "operator":
+		return BagianOperator, true
+
+	case "spv":
+		return BagianSPV, true
+
+	case "mekanik":
+		return BagianMekanik, true
+
+	default:
+		return "", false
+	}
+}
+
+func valueOrDash(
+	value string,
+) string {
 	value = strings.TrimSpace(value)
+
 	if value == "" {
 		return "-"
 	}
+
 	return value
 }

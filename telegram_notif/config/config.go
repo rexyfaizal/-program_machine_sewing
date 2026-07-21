@@ -12,13 +12,20 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	botToken := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
+	botToken := strings.TrimSpace(
+		os.Getenv("BOT_TOKEN"),
+	)
 
 	if botToken == "" {
-		return nil, fmt.Errorf("environment variable BOT_TOKEN belum diisi")
+		return nil, fmt.Errorf(
+			"environment variable BOT_TOKEN belum diisi",
+		)
 	}
 
-	employeeTable := strings.TrimSpace(os.Getenv("DB_EMPLOYEE_TABLE"))
+	employeeTable := strings.TrimSpace(
+		os.Getenv("DB_EMPLOYEE_TABLE"),
+	)
+
 	if employeeTable == "" {
 		employeeTable = "dbo.employee"
 	}

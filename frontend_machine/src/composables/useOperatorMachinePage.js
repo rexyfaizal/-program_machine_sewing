@@ -46,6 +46,8 @@ export function useOperatorMachinePage(uuidSource) {
   let styleSearchTimer = null;
   let processSearchTimer = null;
 
+  let employeeSearchSeq = 0;
+
   const reasonMenus = [
     { reasonCode: "MACHINE_BROKEN", reasonName: "Mesin Rusak" },
     { reasonCode: "TOILET", reasonName: "Ke Toilet" },
@@ -523,20 +525,11 @@ export function useOperatorMachinePage(uuidSource) {
         getVal(data, "lastNotes", "LastNotes", "notes", "Notes") ||
         [];
 
-      /*
-        Kalau backend sudah mengirim active:false,
-        frontend harus percaya backend, hapus cache lama,
-        dan tampilkan form login.
-      */
       if (hasActiveFlag && !isActive) {
         goToLoginMode(uuid);
         return;
       }
 
-      /*
-        Kompatibilitas:
-        Jika backend lama mengirim session langsung tanpa wrapper active/session.
-      */
       if (!sessionRaw && !hasActiveFlag) {
         sessionRaw = root;
       }
@@ -561,10 +554,6 @@ export function useOperatorMachinePage(uuidSource) {
         return;
       }
 
-      /*
-        Fallback untuk response backend lama tanpa field active.
-        Hanya dianggap aktif kalau session ada dan status ACTIVE / OPEN.
-      */
       if (session?.id && (status === "ACTIVE" || status === "OPEN")) {
         activateSession(session, notesRaw, "Operator sudah aktif di mesin ini");
         return;
@@ -574,10 +563,6 @@ export function useOperatorMachinePage(uuidSource) {
     } catch (err) {
       console.warn("Gagal cek operator aktif:", err);
 
-      /*
-        Cache hanya dipakai saat endpoint gagal/error.
-        Kalau backend berhasil jawab active:false, cache tidak dipakai.
-      */
       const cached = loadSessionCache(uuid);
 
       if (cached?.session) {
@@ -617,6 +602,7 @@ export function useOperatorMachinePage(uuidSource) {
     errorMessage.value = "";
     operatorName.value = "";
     operatorBranch.value = "";
+    employeeOptions.value = [];
     showEmployeeOptions.value = true;
 
     if (employeeSearchTimer) {
@@ -625,16 +611,18 @@ export function useOperatorMachinePage(uuidSource) {
 
     employeeSearchTimer = setTimeout(() => {
       searchEmployeeSuggestion();
-    }, 250);
+    }, 180);
   }
 
   async function searchEmployeeSuggestion() {
     const q = String(operatorNik.value || "").trim();
+    const requestSeq = ++employeeSearchSeq;
 
     employeeOptions.value = [];
 
     if (q.length < 1) {
       employeeSearching.value = false;
+      showEmployeeOptions.value = false;
       return;
     }
 
@@ -643,26 +631,53 @@ export function useOperatorMachinePage(uuidSource) {
     try {
       const rows = await searchEmployees(q);
 
-      employeeOptions.value = rows
+      if (requestSeq !== employeeSearchSeq) {
+        return;
+      }
+
+      const options = rows
         .map(normalizeEmployee)
         .filter((emp) => emp.nik || emp.name)
         .slice(0, 8);
 
+      const exactEmployee = options.find((emp) => {
+        return normalizeText(emp.nik) === normalizeText(q);
+      });
+
+      if (exactEmployee) {
+        selectEmployee(exactEmployee);
+        return;
+      }
+
+      employeeOptions.value = options;
       showEmployeeOptions.value = true;
     } catch (err) {
-      errorMessage.value = `Gagal cari operator: ${err.message}`;
+      if (requestSeq === employeeSearchSeq) {
+        errorMessage.value = `Gagal cari operator: ${err.message}`;
+      }
     } finally {
-      employeeSearching.value = false;
+      if (requestSeq === employeeSearchSeq) {
+        employeeSearching.value = false;
+      }
     }
   }
 
   function selectEmployee(emp) {
-    operatorNik.value = emp.nik;
-    operatorName.value = emp.name;
-    operatorBranch.value = emp.branchdetail;
+    const selected = normalizeEmployee(emp || {});
+
+    if (employeeSearchTimer) {
+      clearTimeout(employeeSearchTimer);
+    }
+
+    employeeSearchSeq++;
+
+    operatorNik.value = selected.nik;
+    operatorName.value = selected.name;
+    operatorBranch.value = selected.branchdetail;
 
     employeeOptions.value = [];
     showEmployeeOptions.value = false;
+    employeeSearching.value = false;
     errorMessage.value = "";
     successMessage.value = "";
   }
@@ -670,7 +685,7 @@ export function useOperatorMachinePage(uuidSource) {
   function hideSuggestionDelay() {
     setTimeout(() => {
       showEmployeeOptions.value = false;
-    }, 180);
+    }, 220);
   }
 
   function handleStyleInput() {
@@ -999,6 +1014,8 @@ export function useOperatorMachinePage(uuidSource) {
     if (employeeSearchTimer) clearTimeout(employeeSearchTimer);
     if (styleSearchTimer) clearTimeout(styleSearchTimer);
     if (processSearchTimer) clearTimeout(processSearchTimer);
+
+    employeeSearchSeq++;
   });
 
   return {

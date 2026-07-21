@@ -14,6 +14,10 @@ const lastUpdate = ref("-");
 const machineSettings = ref(new Map());
 const activeOperatorMap = ref(new Map());
 
+let dashboardRequestSeq = 0;
+let inFlightRequest = null;
+let inFlightDate = "";
+
 function setLastUpdate() {
   lastUpdate.value = new Date().toLocaleTimeString("id-ID", {
     hour: "2-digit",
@@ -118,6 +122,21 @@ function normalizeSetting(item) {
 
     updatedAt: String(getVal(item, "updatedAt", "UpdatedAt") || ""),
   };
+}
+
+function buildMachineSettingsMap(data) {
+  const list = extractRows(data);
+  const map = new Map();
+
+  list.forEach((item) => {
+    const setting = normalizeSetting(item);
+
+    if (setting.uuid) {
+      map.set(normalizeText(setting.uuid), setting);
+    }
+  });
+
+  return map;
 }
 
 function parseDateTime(value) {
@@ -286,25 +305,8 @@ function normalizeOperatorSession(item) {
   };
 }
 
-async function loadMachineSettings() {
-  const list = await getMachineSettings();
+function buildActiveOperatorMap(data) {
   const map = new Map();
-
-  list.forEach((item) => {
-    const setting = normalizeSetting(item);
-
-    if (setting.uuid) {
-      map.set(normalizeText(setting.uuid), setting);
-    }
-  });
-
-  machineSettings.value = map;
-}
-
-async function loadActiveOperators(date) {
-  const map = new Map();
-
-  const data = await getMachineOperatorReport(date);
   const rows = extractRows(data).map(normalizeOperatorSession);
 
   rows.forEach((session) => {
@@ -332,7 +334,17 @@ async function loadActiveOperators(date) {
     }
   });
 
-  activeOperatorMap.value = map;
+  return map;
+}
+
+async function loadMachineSettings() {
+  const data = await getMachineSettings();
+  machineSettings.value = buildMachineSettingsMap(data);
+}
+
+async function loadActiveOperators(date) {
+  const data = await getMachineOperatorReport(date);
+  activeOperatorMap.value = buildActiveOperatorMap(data);
 }
 
 function normalizeRows(json) {
@@ -524,30 +536,75 @@ function normalizeRows(json) {
 }
 
 async function loadDashboard(date) {
+  const requestDate = String(date || "").trim();
+
+  if (loading.value && inFlightRequest && inFlightDate === requestDate) {
+    return inFlightRequest;
+  }
+
+  const requestSeq = ++dashboardRequestSeq;
+
   loading.value = true;
   errorMessage.value = "";
+  inFlightDate = requestDate;
 
-  try {
-    try {
-      await loadMachineSettings();
-    } catch (settingErr) {
-      console.warn("Gagal load machine settings:", settingErr);
+  const request = (async () => {
+    const [
+      settingsResult,
+      operatorResult,
+      productivityResult,
+    ] = await Promise.allSettled([
+      getMachineSettings(),
+      getMachineOperatorReport(requestDate),
+      getProductivity(requestDate),
+    ]);
+
+    if (requestSeq !== dashboardRequestSeq) {
+      return;
     }
 
-    try {
-      await loadActiveOperators(date);
-    } catch (operatorErr) {
-      console.warn("Gagal load active operators:", operatorErr);
+    if (settingsResult.status === "fulfilled") {
+      machineSettings.value = buildMachineSettingsMap(settingsResult.value);
+    } else {
+      console.warn("Gagal load machine settings:", settingsResult.reason);
+    }
+
+    if (operatorResult.status === "fulfilled") {
+      activeOperatorMap.value = buildActiveOperatorMap(operatorResult.value);
+    } else {
+      console.warn("Gagal load active operators:", operatorResult.reason);
       activeOperatorMap.value = new Map();
     }
 
-    const data = await getProductivity(date);
-    normalizeRows(data);
+    if (productivityResult.status === "rejected") {
+      throw productivityResult.reason;
+    }
+
+    normalizeRows(productivityResult.value);
+  })();
+
+  inFlightRequest = request;
+
+  try {
+    await request;
   } catch (err) {
-    errorMessage.value = `Gagal mengambil data dari backend: ${err.message}`;
+    if (requestSeq === dashboardRequestSeq) {
+      errorMessage.value = `Gagal mengambil data dari backend: ${
+        err?.message || err
+      }`;
+    }
   } finally {
-    loading.value = false;
+    if (requestSeq === dashboardRequestSeq) {
+      loading.value = false;
+    }
+
+    if (inFlightRequest === request) {
+      inFlightRequest = null;
+      inFlightDate = "";
+    }
   }
+
+  return request;
 }
 
 function makeSummary(list) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"telegram_notif/models"
 )
@@ -18,6 +19,7 @@ type EmployeeRepository interface {
 	RegisterTelegramID(
 		ctx context.Context,
 		nik string,
+		bagian string,
 		telegramID int64,
 	) (models.RegistrationResult, error)
 }
@@ -35,8 +37,13 @@ func NewEmployeeRepository(
 		return nil, errors.New("database tidak boleh nil")
 	}
 
+	table = strings.TrimSpace(table)
+
 	if !tableNamePattern.MatchString(table) {
-		return nil, fmt.Errorf("nama tabel tidak valid: %s", table)
+		return nil, fmt.Errorf(
+			"nama tabel tidak valid: %s",
+			table,
+		)
 	}
 
 	return &employeeRepository{
@@ -48,17 +55,50 @@ func NewEmployeeRepository(
 func (r *employeeRepository) RegisterTelegramID(
 	ctx context.Context,
 	nik string,
+	bagian string,
 	telegramID int64,
 ) (models.RegistrationResult, error) {
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelSerializable,
-	})
+	nik = strings.TrimSpace(nik)
+	bagian = strings.TrimSpace(bagian)
+
+	if nik == "" {
+		return models.RegistrationResult{},
+			errors.New("NIK tidak boleh kosong")
+	}
+
+	if bagian == "" {
+		return models.RegistrationResult{},
+			errors.New("bagian tidak boleh kosong")
+	}
+
+	if telegramID <= 0 {
+		return models.RegistrationResult{},
+			errors.New("Telegram ID tidak valid")
+	}
+
+	tx, err := r.db.BeginTx(
+		ctx,
+		&sql.TxOptions{
+			Isolation: sql.LevelSerializable,
+		},
+	)
 	if err != nil {
 		return models.RegistrationResult{}, err
 	}
-	defer tx.Rollback()
 
-	conflictingNIK, err := r.findNIKByTelegramID(ctx, tx, telegramID)
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	/*
+		Periksa apakah Telegram ID sudah digunakan
+		oleh NIK lain.
+	*/
+	conflictingNIK, err := r.findNIKByTelegramID(
+		ctx,
+		tx,
+		telegramID,
+	)
 	if err != nil {
 		return models.RegistrationResult{}, err
 	}
@@ -74,7 +114,14 @@ func (r *employeeRepository) RegisterTelegramID(
 		}, nil
 	}
 
-	employees, err := r.findEmployeesByNIK(ctx, tx, nik)
+	/*
+		Cari data karyawan berdasarkan NIK.
+	*/
+	employees, err := r.findEmployeesByNIK(
+		ctx,
+		tx,
+		nik,
+	)
 	if err != nil {
 		return models.RegistrationResult{}, err
 	}
@@ -102,34 +149,58 @@ func (r *employeeRepository) RegisterTelegramID(
 
 	employee := employees[0]
 
-	if employee.TelegramID != nil {
-		status := models.RegistrationNIKUsed
-		if *employee.TelegramID == telegramID {
-			status = models.RegistrationAlreadyRegistered
-		}
+	/*
+		Jika NIK sudah memiliki Telegram ID yang berbeda,
+		registrasi ditolak.
+	*/
+	if employee.TelegramID != nil &&
+		*employee.TelegramID != telegramID {
 
 		if err := tx.Commit(); err != nil {
 			return models.RegistrationResult{}, err
 		}
 
 		return models.RegistrationResult{
-			Status:   status,
+			Status:   models.RegistrationNIKUsed,
 			Employee: employee,
 		}, nil
 	}
 
-	if err := r.assignTelegramID(ctx, tx, nik, telegramID); err != nil {
+	/*
+		Kondisi yang diperbolehkan:
+
+		1. id_telegram masih NULL:
+		   simpan Telegram ID dan bagian.
+
+		2. id_telegram sudah sama:
+		   tetap update bagian, termasuk jika bagian
+		   sebelumnya NULL.
+	*/
+	if err := r.assignRegistrationData(
+		ctx,
+		tx,
+		nik,
+		bagian,
+		telegramID,
+	); err != nil {
 		return models.RegistrationResult{}, err
 	}
 
 	employee.TelegramID = &telegramID
+	employee.Bagian = bagian
+
+	status := models.RegistrationSuccess
+
+	if conflictingNIK == nik {
+		status = models.RegistrationAlreadyRegistered
+	}
 
 	if err := tx.Commit(); err != nil {
 		return models.RegistrationResult{}, err
 	}
 
 	return models.RegistrationResult{
-		Status:   models.RegistrationSuccess,
+		Status:   status,
 		Employee: employee,
 	}, nil
 }
@@ -141,12 +212,15 @@ func (r *employeeRepository) findNIKByTelegramID(
 ) (string, error) {
 	query := fmt.Sprintf(`
 		SELECT TOP (1)
-			ISNULL(CONVERT(varchar(255), nik), '')
+			LTRIM(RTRIM(
+				ISNULL(CONVERT(varchar(255), nik), '')
+			))
 		FROM %s WITH (UPDLOCK, HOLDLOCK)
 		WHERE id_telegram = @telegram_id;
 	`, r.table)
 
 	var nik string
+
 	err := tx.QueryRowContext(
 		ctx,
 		query,
@@ -156,11 +230,12 @@ func (r *employeeRepository) findNIKByTelegramID(
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
+
 	if err != nil {
 		return "", err
 	}
 
-	return nik, nil
+	return strings.TrimSpace(nik), nil
 }
 
 func (r *employeeRepository) findEmployeesByNIK(
@@ -170,12 +245,27 @@ func (r *employeeRepository) findEmployeesByNIK(
 ) ([]models.Employee, error) {
 	query := fmt.Sprintf(`
 		SELECT
-			ISNULL(CONVERT(varchar(255), nik), ''),
-			ISNULL(CONVERT(varchar(255), name), ''),
-			ISNULL(CONVERT(varchar(255), branchdetail), ''),
+			LTRIM(RTRIM(
+				ISNULL(CONVERT(varchar(255), nik), '')
+			)) AS nik,
+
+			LTRIM(RTRIM(
+				ISNULL(CONVERT(varchar(255), name), '')
+			)) AS name,
+
+			LTRIM(RTRIM(
+				ISNULL(CONVERT(varchar(255), branchdetail), '')
+			)) AS branchdetail,
+
+			LTRIM(RTRIM(
+				ISNULL(CONVERT(varchar(255), bagian), '')
+			)) AS bagian,
+
 			id_telegram
 		FROM %s WITH (UPDLOCK, HOLDLOCK)
-		WHERE CONVERT(varchar(255), nik) = @nik;
+		WHERE LTRIM(RTRIM(
+			CONVERT(varchar(255), nik)
+		)) = @nik;
 	`, r.table)
 
 	rows, err := tx.QueryContext(
@@ -188,7 +278,11 @@ func (r *employeeRepository) findEmployeesByNIK(
 	}
 	defer rows.Close()
 
-	employees := make([]models.Employee, 0, 1)
+	employees := make(
+		[]models.Employee,
+		0,
+		1,
+	)
 
 	for rows.Next() {
 		var employee models.Employee
@@ -198,6 +292,7 @@ func (r *employeeRepository) findEmployeesByNIK(
 			&employee.NIK,
 			&employee.Name,
 			&employee.BranchDetail,
+			&employee.Bagian,
 			&telegramID,
 		); err != nil {
 			return nil, err
@@ -208,7 +303,10 @@ func (r *employeeRepository) findEmployeesByNIK(
 			employee.TelegramID = &value
 		}
 
-		employees = append(employees, employee)
+		employees = append(
+			employees,
+			employee,
+		)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -218,27 +316,39 @@ func (r *employeeRepository) findEmployeesByNIK(
 	return employees, nil
 }
 
-func (r *employeeRepository) assignTelegramID(
+func (r *employeeRepository) assignRegistrationData(
 	ctx context.Context,
 	tx *sql.Tx,
 	nik string,
+	bagian string,
 	telegramID int64,
 ) error {
 	query := fmt.Sprintf(`
 		UPDATE %s
-		SET id_telegram = @telegram_id
-		WHERE CONVERT(varchar(255), nik) = @nik
-		  AND id_telegram IS NULL;
+		SET
+			id_telegram = @telegram_id,
+			bagian = @bagian
+		WHERE LTRIM(RTRIM(
+			CONVERT(varchar(255), nik)
+		)) = @nik
+		  AND (
+				id_telegram IS NULL
+				OR id_telegram = @telegram_id
+		  );
 	`, r.table)
 
 	result, err := tx.ExecContext(
 		ctx,
 		query,
 		sql.Named("telegram_id", telegramID),
+		sql.Named("bagian", bagian),
 		sql.Named("nik", nik),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"gagal memperbarui data registrasi: %w",
+			err,
+		)
 	}
 
 	affectedRows, err := result.RowsAffected()
