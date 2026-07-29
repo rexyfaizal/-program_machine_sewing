@@ -1,17 +1,28 @@
 async function readResponse(res) {
   const text = await res.text();
 
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
   if (!res.ok) {
-    throw new Error(text || `HTTP ${res.status}`);
+    const message =
+      data?.message ||
+      data?.error ||
+      data?.Message ||
+      text ||
+      `HTTP ${res.status}`;
+
+    throw new Error(message);
   }
 
-  if (!text) return null;
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  return data;
 }
 
 function normalizeList(data) {
@@ -45,9 +56,6 @@ export async function getProcessDetail(arg1, arg2) {
   const first = String(arg1 || "");
   const second = String(arg2 || "");
 
-  // Support dua pola:
-  // getProcessDetail(date, uuid)
-  // getProcessDetail(uuid, date)
   if (/^\d{4}-\d{2}-\d{2}$/.test(first)) {
     date = first;
     uuid = second;
@@ -219,6 +227,63 @@ export async function saveMachineOperatorNote(payload) {
       note: String(payload.note || "").trim(),
     }),
   });
+
+  return await readResponse(res);
+}
+
+export async function startMachineOperatorLossEvent(payload) {
+  if (!payload?.uuid) {
+    throw new Error("UUID mesin wajib diisi.");
+  }
+
+  if (!payload?.reasonCode) {
+    throw new Error("Keterangan loss time wajib dipilih.");
+  }
+
+  const res = await fetch("/api/machine-operator/loss-event/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      uuid: String(payload.uuid || "").trim(),
+      reasonCode: String(payload.reasonCode || "").trim(),
+      reasonLabel: String(payload.reasonLabel || "").trim(),
+      note: String(payload.note || "").trim(),
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function finishMachineOperatorLossEvent(payload) {
+  if (!payload?.uuid) {
+    throw new Error("UUID mesin wajib diisi.");
+  }
+
+  const res = await fetch("/api/machine-operator/loss-event/finish", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      uuid: String(payload.uuid || "").trim(),
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getActiveMachineOperatorLossEvent(uuid) {
+  const id = String(uuid || "").trim();
+
+  if (!id) {
+    throw new Error("UUID mesin wajib diisi.");
+  }
+
+  const res = await fetch(
+    `/api/machine-operator/loss-event/active?uuid=${encodeURIComponent(id)}`
+  );
 
   return await readResponse(res);
 }

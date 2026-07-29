@@ -1,21 +1,26 @@
-import { onBeforeUnmount, onMounted, ref, unref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, unref } from "vue";
 import {
+  finishMachineOperatorLossEvent,
   getActiveMachineOperator,
+  getActiveMachineOperatorLossEvent,
   getMachineSettings,
   getProductivity,
   loginMachineOperator,
-  saveMachineOperatorNote,
   searchEmployees,
   searchStyles,
   searchProcessesByStyle,
+  startMachineOperatorLossEvent,
 } from "../api/machineApi";
 
 export function useOperatorMachinePage(uuidSource) {
   const loading = ref(false);
   const saving = ref(false);
   const noteSaving = ref(false);
+  const lossEventLoading = ref(false);
+
   const errorMessage = ref("");
   const successMessage = ref("");
+  const lossEventError = ref("");
 
   const pageMode = ref("login");
   const forceReplace = ref(false);
@@ -40,11 +45,15 @@ export function useOperatorMachinePage(uuidSource) {
 
   const activeSession = ref(null);
   const activeNotes = ref([]);
+  const activeLossEvent = ref(null);
   const otherNote = ref("");
+
+  const lossTick = ref(Date.now());
 
   let employeeSearchTimer = null;
   let styleSearchTimer = null;
   let processSearchTimer = null;
+  let lossTickTimer = null;
 
   let employeeSearchSeq = 0;
 
@@ -257,11 +266,66 @@ export function useOperatorMachinePage(uuidSource) {
         getVal(row, "reasonCode", "ReasonCode", "reason_code") || ""
       ),
       reasonName: String(
-        getVal(row, "reasonName", "ReasonName", "reason_name") || ""
+        getVal(row, "reasonName", "ReasonName", "reasonLabel", "ReasonLabel", "reason_name") || ""
       ),
       note: String(getVal(row, "note", "Note") || ""),
       createdAt: String(
+        getVal(row, "createdAt", "CreatedAt", "created_at", "startTime", "StartTime") || ""
+      ),
+    };
+  }
+
+  function normalizeLossEvent(row) {
+    if (!row) return null;
+
+    const id = Number(getVal(row, "id", "ID") || 0);
+    const reasonCode = String(
+      getVal(row, "reasonCode", "ReasonCode", "reason_code") || ""
+    );
+    const reasonLabel = String(
+      getVal(row, "reasonLabel", "ReasonLabel", "reasonName", "ReasonName") || ""
+    );
+    const startTime = String(
+      getVal(row, "startTime", "StartTime", "start_time") || ""
+    );
+
+    if (!id && !reasonCode && !startTime) {
+      return null;
+    }
+
+    return {
+      id,
+      sessionId: Number(
+        getVal(row, "sessionId", "SessionId", "SessionID", "session_id") || 0
+      ),
+      sessionDate: String(
+        getVal(row, "sessionDate", "SessionDate", "session_date") || ""
+      ),
+      uuid: String(getVal(row, "uuid", "UUID") || ""),
+      machineName: String(
+        getVal(row, "machineName", "MachineName", "machine_name") || ""
+      ),
+      location: String(getVal(row, "location", "Location") || ""),
+      operatorNik: String(
+        getVal(row, "operatorNik", "OperatorNik", "operator_nik") || ""
+      ),
+      operatorName: String(
+        getVal(row, "operatorName", "OperatorName", "operator_name") || ""
+      ),
+      reasonCode,
+      reasonLabel,
+      note: String(getVal(row, "note", "Note") || ""),
+      startTime,
+      endTime: String(getVal(row, "endTime", "EndTime", "end_time") || ""),
+      durationSeconds: Number(
+        getVal(row, "durationSeconds", "DurationSeconds", "duration_sec") || 0
+      ),
+      status: String(getVal(row, "status", "Status") || ""),
+      createdAt: String(
         getVal(row, "createdAt", "CreatedAt", "created_at") || ""
+      ),
+      updatedAt: String(
+        getVal(row, "updatedAt", "UpdatedAt", "updated_at") || ""
       ),
     };
   }
@@ -282,12 +346,29 @@ export function useOperatorMachinePage(uuidSource) {
     return item?.processName || "";
   }
 
+  function parseDateTime(value) {
+    if (!value) return null;
+
+    const raw = String(value || "").trim();
+
+    if (!raw) return null;
+
+    const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+    const d = new Date(normalized);
+
+    if (Number.isNaN(d.getTime())) {
+      return null;
+    }
+
+    return d;
+  }
+
   function formatDateTime(value) {
     if (!value) return "-";
 
-    const d = new Date(value);
+    const d = parseDateTime(value);
 
-    if (Number.isNaN(d.getTime())) {
+    if (!d) {
       return String(value).replace("T", " ").slice(0, 16);
     }
 
@@ -303,9 +384,9 @@ export function useOperatorMachinePage(uuidSource) {
   function formatTime(value) {
     if (!value) return "-";
 
-    const d = new Date(value);
+    const d = parseDateTime(value);
 
-    if (Number.isNaN(d.getTime())) {
+    if (!d) {
       return String(value).replace("T", " ").slice(11, 16);
     }
 
@@ -313,6 +394,17 @@ export function useOperatorMachinePage(uuidSource) {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  function formatDuration(seconds) {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds || 0)));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    return [hours, minutes, secs]
+      .map((item) => String(item).padStart(2, "0"))
+      .join(":");
   }
 
   function getCurrentShift() {
@@ -329,6 +421,59 @@ export function useOperatorMachinePage(uuidSource) {
 
     return { shiftCode: "SHIFT_3", shiftName: "Shift 3" };
   }
+
+  function startLossTimer() {
+    if (lossTickTimer) {
+      clearInterval(lossTickTimer);
+    }
+
+    lossTick.value = Date.now();
+
+    lossTickTimer = setInterval(() => {
+      lossTick.value = Date.now();
+    }, 1000);
+  }
+
+  function stopLossTimer() {
+    if (lossTickTimer) {
+      clearInterval(lossTickTimer);
+      lossTickTimer = null;
+    }
+  }
+
+  function setActiveLossEvent(event) {
+    activeLossEvent.value = event;
+
+    if (event) {
+      startLossTimer();
+    } else {
+      stopLossTimer();
+    }
+  }
+
+  const activeLossDurationSeconds = computed(() => {
+    const event = activeLossEvent.value;
+
+    if (!event) return 0;
+
+    const start = parseDateTime(event.startTime);
+
+    if (!start) {
+      return Number(event.durationSeconds || 0);
+    }
+
+    const status = String(event.status || "").toUpperCase();
+
+    if (status === "ACTIVE" || status === "OPEN" || !event.endTime) {
+      return Math.max(0, Math.floor((lossTick.value - start.getTime()) / 1000));
+    }
+
+    return Number(event.durationSeconds || 0);
+  });
+
+  const activeLossDurationText = computed(() => {
+    return formatDuration(activeLossDurationSeconds.value);
+  });
 
   function saveSessionCache(session) {
     const uuid = String(session?.uuid || machine.value.uuid || getUuid()).trim();
@@ -412,12 +557,15 @@ export function useOperatorMachinePage(uuidSource) {
 
     activeSession.value = null;
     activeNotes.value = [];
+    setActiveLossEvent(null);
+
     pageMode.value = "login";
     forceReplace.value = false;
 
     resetLoginForm();
 
     errorMessage.value = "";
+    lossEventError.value = "";
     successMessage.value = message;
   }
 
@@ -495,6 +643,49 @@ export function useOperatorMachinePage(uuidSource) {
       location: setting?.location || prodRow?.location || "",
       ip: prodRow?.ip || "",
     };
+  }
+
+  async function loadActiveLossEvent() {
+    const uuid = getUuid();
+
+    if (!uuid || !activeSession.value?.id) {
+      setActiveLossEvent(null);
+      return;
+    }
+
+    lossEventError.value = "";
+
+    try {
+      const data = await getActiveMachineOperatorLossEvent(uuid);
+      const root = unwrapResponse(data);
+
+      const hasActiveRaw =
+        getVal(root, "hasActiveEvent", "HasActiveEvent") ||
+        getVal(data, "hasActiveEvent", "HasActiveEvent");
+
+      if (hasValue(hasActiveRaw) && !normalizeBoolean(hasActiveRaw)) {
+        setActiveLossEvent(null);
+        return;
+      }
+
+      const eventRaw =
+        getVal(root, "event", "Event", "lossEvent", "LossEvent") ||
+        getVal(data, "event", "Event", "lossEvent", "LossEvent") ||
+        root;
+
+      const event = normalizeLossEvent(eventRaw);
+      const status = String(event?.status || "").toUpperCase();
+
+      if (event && (status === "ACTIVE" || status === "OPEN" || !event.endTime)) {
+        setActiveLossEvent(event);
+        return;
+      }
+
+      setActiveLossEvent(null);
+    } catch (err) {
+      console.warn("Gagal cek loss event aktif:", err);
+      lossEventError.value = err.message;
+    }
   }
 
   async function loadActiveOperator() {
@@ -576,6 +767,8 @@ export function useOperatorMachinePage(uuidSource) {
 
       activeSession.value = null;
       activeNotes.value = [];
+      setActiveLossEvent(null);
+
       pageMode.value = "login";
       forceReplace.value = false;
       successMessage.value = "";
@@ -586,10 +779,12 @@ export function useOperatorMachinePage(uuidSource) {
     loading.value = true;
     errorMessage.value = "";
     successMessage.value = "";
+    lossEventError.value = "";
 
     try {
       await loadMachineData();
       await loadActiveOperator();
+      await loadActiveLossEvent();
     } catch (err) {
       errorMessage.value = `Gagal membuka halaman operator: ${err.message}`;
     } finally {
@@ -836,6 +1031,7 @@ export function useOperatorMachinePage(uuidSource) {
 
     errorMessage.value = "";
     successMessage.value = "";
+    lossEventError.value = "";
 
     if (!uuid) {
       errorMessage.value = "UUID mesin tidak valid.";
@@ -910,7 +1106,9 @@ export function useOperatorMachinePage(uuidSource) {
       }
 
       activeNotes.value = [];
+      setActiveLossEvent(null);
       activateSession(session, [], message || "Operator berhasil login.");
+      await loadActiveLossEvent();
     } catch (err) {
       errorMessage.value = `Gagal login operator: ${err.message}`;
     } finally {
@@ -921,10 +1119,13 @@ export function useOperatorMachinePage(uuidSource) {
   function loginOperatorBaru() {
     clearSessionCache(machine.value.uuid || getUuid());
 
+    setActiveLossEvent(null);
+
     forceReplace.value = true;
     pageMode.value = "login";
     successMessage.value = "";
     errorMessage.value = "";
+    lossEventError.value = "";
     resetLoginForm();
   }
 
@@ -934,13 +1135,14 @@ export function useOperatorMachinePage(uuidSource) {
     errorMessage.value = "";
   }
 
-  async function submitNote(reason) {
+  async function startLossEvent(reason) {
     const session = activeSession.value;
     const sessionId = Number(session?.id || 0);
     const uuid = String(machine.value.uuid || "").trim();
 
     errorMessage.value = "";
     successMessage.value = "";
+    lossEventError.value = "";
 
     if (!sessionId) {
       errorMessage.value =
@@ -954,56 +1156,149 @@ export function useOperatorMachinePage(uuidSource) {
       return;
     }
 
+    if (activeLossEvent.value) {
+      lossEventError.value =
+        "Masih ada loss event aktif. Klik Selesai / Kembali Kerja dulu.";
+      return;
+    }
+
+    const reasonCode = String(reason?.reasonCode || "").trim();
+    const reasonLabel = String(
+      reason?.reasonLabel || reason?.reasonName || ""
+    ).trim();
     const noteText = String(otherNote.value || "").trim();
 
-    if (reason.reasonCode === "OTHER" && !noteText) {
+    if (!reasonCode) {
+      errorMessage.value = "Keterangan loss time wajib dipilih.";
+      return;
+    }
+
+    if (reasonCode === "OTHER" && !noteText) {
       errorMessage.value = "Untuk Other, keterangan tambahan wajib diisi.";
       return;
     }
 
     noteSaving.value = true;
+    lossEventLoading.value = true;
 
     try {
-      const data = await saveMachineOperatorNote({
-        sessionId,
+      const data = await startMachineOperatorLossEvent({
         uuid,
-        reasonCode: reason.reasonCode,
-        reasonName: reason.reasonName,
+        reasonCode,
+        reasonLabel,
         note: noteText,
       });
 
       const root = unwrapResponse(data);
-      const noteRaw =
-        getVal(root, "note", "Note") || getVal(data, "note", "Note");
+      const eventRaw =
+        getVal(root, "event", "Event", "lossEvent", "LossEvent") ||
+        getVal(data, "event", "Event", "lossEvent", "LossEvent") ||
+        root;
 
-      const savedNote = normalizeNote(noteRaw);
+      const event = normalizeLossEvent(eventRaw);
 
-      if (savedNote.id || savedNote.reasonCode) {
-        activeNotes.value = [savedNote, ...activeNotes.value].slice(0, 5);
-      } else {
-        activeNotes.value = [
-          {
-            id: Date.now(),
-            reasonCode: reason.reasonCode,
-            reasonName: reason.reasonName,
-            note: noteText,
-            createdAt: new Date().toISOString(),
-          },
-          ...activeNotes.value,
-        ].slice(0, 5);
+      if (!event) {
+        errorMessage.value =
+          "Loss event berhasil dimulai, tapi data event tidak terbaca.";
+        return;
       }
 
+      setActiveLossEvent(event);
+
+      activeNotes.value = [
+        {
+          id: event.id || Date.now(),
+          reasonCode: event.reasonCode,
+          reasonName: event.reasonLabel,
+          note: event.note,
+          createdAt: event.startTime || new Date().toISOString(),
+        },
+        ...activeNotes.value,
+      ].slice(0, 5);
+
       otherNote.value = "";
-      successMessage.value = `${reason.reasonName} berhasil disimpan.`;
+      successMessage.value = `${event.reasonLabel || reasonLabel} dimulai.`;
 
       if (activeSession.value) {
         saveSessionCache(activeSession.value);
       }
     } catch (err) {
-      errorMessage.value = `Gagal simpan keterangan: ${err.message}`;
+      errorMessage.value = `Gagal mulai loss event: ${err.message}`;
     } finally {
       noteSaving.value = false;
+      lossEventLoading.value = false;
     }
+  }
+
+  async function finishLossEvent() {
+    const uuid = String(machine.value.uuid || "").trim();
+
+    errorMessage.value = "";
+    successMessage.value = "";
+    lossEventError.value = "";
+
+    if (!uuid) {
+      errorMessage.value = "UUID mesin tidak valid.";
+      return;
+    }
+
+    if (!activeLossEvent.value) {
+      lossEventError.value = "Tidak ada loss event aktif.";
+      return;
+    }
+
+    noteSaving.value = true;
+    lossEventLoading.value = true;
+
+    try {
+      const oldEvent = activeLossEvent.value;
+
+      const data = await finishMachineOperatorLossEvent({
+        uuid,
+      });
+
+      const root = unwrapResponse(data);
+      const eventRaw =
+        getVal(root, "event", "Event", "lossEvent", "LossEvent") ||
+        getVal(data, "event", "Event", "lossEvent", "LossEvent") ||
+        null;
+
+      const finishedEvent = normalizeLossEvent(eventRaw) || oldEvent;
+      const durationText = formatDuration(
+        Number(finishedEvent.durationSeconds || activeLossDurationSeconds.value || 0)
+      );
+
+      setActiveLossEvent(null);
+      otherNote.value = "";
+
+      activeNotes.value = [
+        {
+          id: finishedEvent.id || Date.now(),
+          reasonCode: finishedEvent.reasonCode,
+          reasonName: finishedEvent.reasonLabel,
+          note: `Selesai. Durasi ${durationText}`,
+          createdAt: finishedEvent.endTime || new Date().toISOString(),
+        },
+        ...activeNotes.value,
+      ].slice(0, 5);
+
+      successMessage.value = `${
+        finishedEvent.reasonLabel || "Loss event"
+      } selesai. Durasi ${durationText}.`;
+
+      if (activeSession.value) {
+        saveSessionCache(activeSession.value);
+      }
+    } catch (err) {
+      errorMessage.value = `Gagal selesai loss event: ${err.message}`;
+    } finally {
+      noteSaving.value = false;
+      lossEventLoading.value = false;
+    }
+  }
+
+  async function submitNote(reason) {
+    await startLossEvent(reason);
   }
 
   onMounted(() => {
@@ -1015,6 +1310,8 @@ export function useOperatorMachinePage(uuidSource) {
     if (styleSearchTimer) clearTimeout(styleSearchTimer);
     if (processSearchTimer) clearTimeout(processSearchTimer);
 
+    stopLossTimer();
+
     employeeSearchSeq++;
   });
 
@@ -1022,8 +1319,10 @@ export function useOperatorMachinePage(uuidSource) {
     loading,
     saving,
     noteSaving,
+    lossEventLoading,
     errorMessage,
     successMessage,
+    lossEventError,
     pageMode,
     forceReplace,
 
@@ -1047,6 +1346,9 @@ export function useOperatorMachinePage(uuidSource) {
 
     activeSession,
     activeNotes,
+    activeLossEvent,
+    activeLossDurationSeconds,
+    activeLossDurationText,
     otherNote,
     reasonMenus,
     machine,
@@ -1057,6 +1359,7 @@ export function useOperatorMachinePage(uuidSource) {
 
     formatDateTime,
     formatTime,
+    formatDuration,
 
     handleEmployeeInput,
     selectEmployee,
@@ -1075,7 +1378,11 @@ export function useOperatorMachinePage(uuidSource) {
     submitLogin,
     loginOperatorBaru,
     batalGantiOperator,
+
     submitNote,
+    startLossEvent,
+    finishLossEvent,
+    loadActiveLossEvent,
     loadData,
   };
 }

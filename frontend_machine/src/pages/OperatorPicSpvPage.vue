@@ -30,7 +30,7 @@ function backDashboard() {
           <p class="eyebrow">QR Operator</p>
 
           <h1 v-if="page.pageMode.value === 'menu'">
-            Menu Keterangan Operator
+            Menu Loss Time Operator
           </h1>
 
           <h1 v-else-if="page.pageMode.value === 'conflict'">
@@ -42,18 +42,18 @@ function backDashboard() {
           </h1>
 
           <p v-if="page.pageMode.value === 'menu'">
-            Klik keterangan saat terjadi loss time atau kendala proses.
+            Klik alasan loss time untuk mulai menghitung durasi. Setelah selesai,
+            klik Selesai / Kembali Kerja.
           </p>
-
         </div>
 
         <button
-        v-if="page.pageMode.value !== 'login'"
-        type="button"
-        class="btn-back"
-        @click="backDashboard"
+          v-if="page.pageMode.value !== 'login'"
+          type="button"
+          class="btn-back"
+          @click="backDashboard"
         >
-        Dashboard
+          Dashboard
         </button>
       </div>
 
@@ -111,10 +111,15 @@ function backDashboard() {
         :machine="page.machine.value"
         :active-notes="page.activeNotes.value"
         :reason-menus="page.reasonMenus"
+        :active-loss-event="page.activeLossEvent.value"
+        :active-loss-duration-text="page.activeLossDurationText.value"
+        :loss-event-loading="page.lossEventLoading.value"
+        :loss-event-error="page.lossEventError.value"
         :note-saving="page.noteSaving.value"
         :format-date-time="page.formatDateTime"
         :format-time="page.formatTime"
         @submit-note="page.submitNote"
+        @finish-loss-event="page.finishLossEvent"
         @login-operator-baru="page.loginOperatorBaru"
       />
 

@@ -55,6 +55,12 @@ type MachineOperatorNote struct {
 	ReasonName   string `json:"reasonName"`
 	Note         string `json:"note"`
 	CreatedAt    string `json:"createdAt"`
+
+	EndTime           string `json:"endTime"`
+	DurationSeconds   int64  `json:"durationSeconds"`
+	DurationText      string `json:"durationText"`
+	Status            string `json:"status"`
+	IsActiveLossEvent bool   `json:"isActiveLossEvent"`
 }
 
 type MachineOperatorNoteResponse struct {
@@ -67,6 +73,14 @@ type MachineOperatorNoteResponse struct {
 
 type MachineOperatorReportItem struct {
 	MachineOperatorSession
+
+	ActiveLossReasonCode      string `json:"activeLossReasonCode,omitempty"`
+	ActiveLossReasonLabel     string `json:"activeLossReasonLabel,omitempty"`
+	ActiveLossStartTime       string `json:"activeLossStartTime,omitempty"`
+	ActiveLossDurationSeconds int64  `json:"activeLossDurationSeconds,omitempty"`
+	ActiveLossDurationText    string `json:"activeLossDurationText,omitempty"`
+	ActiveLossStatus          string `json:"activeLossStatus,omitempty"`
+
 	Notes []MachineOperatorNote `json:"notes"`
 }
 

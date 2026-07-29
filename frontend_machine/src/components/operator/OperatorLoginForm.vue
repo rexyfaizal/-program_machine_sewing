@@ -66,6 +66,39 @@ const emit = defineEmits([
 
   "submit-login",
 ]);
+
+let lastPickKey = "";
+let lastPickAt = 0;
+
+function emitOnce(eventName, payload, key) {
+  const now = Date.now();
+  const pickKey = `${eventName}:${key}`;
+
+  if (lastPickKey === pickKey && now - lastPickAt < 500) {
+    return;
+  }
+
+  lastPickKey = pickKey;
+  lastPickAt = now;
+
+  emit(eventName, payload);
+}
+
+function pickEmployee(emp) {
+  emitOnce("select-employee", emp, `${emp?.nik || ""}-${emp?.name || ""}`);
+}
+
+function pickStyle(item) {
+  emitOnce("select-style", item, `${item?.styleName || ""}`);
+}
+
+function pickProcess(item) {
+  emitOnce(
+    "select-process",
+    item,
+    `${item?.id || ""}-${item?.processName || ""}`
+  );
+}
 </script>
 
 <template>
@@ -79,6 +112,8 @@ const emit = defineEmits([
           type="text"
           placeholder="Ketik NIK"
           autocomplete="off"
+          inputmode="numeric"
+          enterkeyhint="done"
           @input="emit('input-employee')"
           @focus="emit('focus-employee')"
           @blur="emit('blur-employee')"
@@ -97,7 +132,9 @@ const emit = defineEmits([
             :key="`emp-${emp.nik}-${emp.name}`"
             type="button"
             class="suggest-item"
-            @pointerdown.prevent="emit('select-employee', emp)"
+            @touchstart.prevent.stop="pickEmployee(emp)"
+            @mousedown.prevent.stop="pickEmployee(emp)"
+            @click.prevent.stop="pickEmployee(emp)"
           >
             <strong>{{ emp.nik }}</strong>
             <span>{{ emp.name }}</span>
@@ -131,6 +168,7 @@ const emit = defineEmits([
           type="text"
           placeholder="Ketik style, contoh: 1101482"
           autocomplete="off"
+          enterkeyhint="done"
           @input="emit('input-style')"
           @focus="emit('focus-style')"
           @blur="emit('blur-style')"
@@ -149,7 +187,9 @@ const emit = defineEmits([
             :key="`style-${item.styleName}`"
             type="button"
             class="suggest-item style-only"
-            @pointerdown.prevent="emit('select-style', item)"
+            @touchstart.prevent.stop="pickStyle(item)"
+            @mousedown.prevent.stop="pickStyle(item)"
+            @click.prevent.stop="pickStyle(item)"
           >
             <strong>{{ item.styleName }}</strong>
           </button>
@@ -166,6 +206,7 @@ const emit = defineEmits([
           type="text"
           placeholder="Pilih proses sesuai style"
           autocomplete="off"
+          enterkeyhint="done"
           :disabled="!styleName"
           @input="emit('input-process')"
           @focus="emit('focus-process')"
@@ -185,7 +226,9 @@ const emit = defineEmits([
             :key="`process-${item.id}-${item.processName}`"
             type="button"
             class="suggest-item"
-            @pointerdown.prevent="emit('select-process', item)"
+            @touchstart.prevent.stop="pickProcess(item)"
+            @mousedown.prevent.stop="pickProcess(item)"
+            @click.prevent.stop="pickProcess(item)"
           >
             <strong>{{ item.styleName }}</strong>
             <span>{{ item.processName }}</span>

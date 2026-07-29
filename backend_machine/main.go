@@ -91,6 +91,9 @@ func main() {
 	mux.HandleFunc("/api/machine-operator/active", api.MachineOperatorActive)
 	mux.HandleFunc("/api/machine-operator/report", api.MachineOperatorReport)
 	mux.HandleFunc("/api/machine-operator/auto-logout/offline", api.MachineOperatorAutoLogoutOffline)
+	mux.HandleFunc("/api/machine-operator/loss-event/start", api.MachineOperatorLossEventStart)
+	mux.HandleFunc("/api/machine-operator/loss-event/finish", api.MachineOperatorLossEventFinish)
+	mux.HandleFunc("/api/machine-operator/loss-event/active", api.MachineOperatorLossEventActive)
 
 	// Process Style
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
@@ -128,6 +131,10 @@ func main() {
 	log.Println("POST   /api/process-style")
 	log.Println("PUT    /api/process-style/:id")
 	log.Println("DELETE /api/process-style/:id")
+
+	log.Println("POST   /api/machine-operator/loss-event/start")
+	log.Println("POST   /api/machine-operator/loss-event/finish")
+	log.Println("GET    /api/machine-operator/loss-event/active?uuid=UUID")
 
 	log.Println("WS     /ws/productivity")
 	log.Println("")

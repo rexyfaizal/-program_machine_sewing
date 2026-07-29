@@ -15,6 +15,7 @@ const emit = defineEmits([
   "update:keyword",
   "dateChange",
   "download",
+  "downloadWeekly",
 ]);
 </script>
 
@@ -38,15 +39,23 @@ const emit = defineEmits([
         <input
           type="text"
           :value="props.keyword"
-          placeholder="Cari mesin, IP, UUID, status, atau program jahit..."
+          placeholder="Cari mesin, IP, UUID, status, operator, atau program jahit..."
           @input="emit('update:keyword', $event.target.value)"
         />
       </label>
     </div>
 
     <div class="toolbar-right">
-      <button type="button" class="download-btn" @click="emit('download')">
-        Download CSV
+      <button type="button" class="download-btn daily-btn" @click="emit('download')">
+        Export Daily
+      </button>
+
+      <button
+        type="button"
+        class="download-btn weekly-btn"
+        @click="emit('downloadWeekly')"
+      >
+        Export Weekly
       </button>
     </div>
   </section>
@@ -119,22 +128,23 @@ const emit = defineEmits([
 }
 
 .toolbar-right {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   align-items: stretch;
   flex: 0 0 auto;
+  min-width: 300px;
 }
 
 .download-btn {
-  min-width: 150px;
+  min-width: 145px;
   border: 0;
   border-radius: 18px;
-  padding: 0 22px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  padding: 0 18px;
   color: #ffffff;
   font-weight: 900;
   font-size: 14px;
   cursor: pointer;
-  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
@@ -142,10 +152,27 @@ const emit = defineEmits([
   white-space: nowrap;
 }
 
+.daily-btn {
+  background: linear-gradient(135deg, #21a366, #107c41);
+  box-shadow: 0 14px 28px rgba(16, 124, 65, 0.24);
+}
+
+.weekly-btn {
+  background: linear-gradient(135deg, #0f766e, #115e59);
+  box-shadow: 0 14px 28px rgba(15, 118, 110, 0.24);
+}
+
 .download-btn:hover {
   transform: translateY(-2px);
   filter: brightness(1.03);
-  box-shadow: 0 18px 30px rgba(37, 99, 235, 0.3);
+}
+
+.daily-btn:hover {
+  box-shadow: 0 18px 30px rgba(16, 124, 65, 0.3);
+}
+
+.weekly-btn:hover {
+  box-shadow: 0 18px 30px rgba(15, 118, 110, 0.3);
 }
 
 .download-btn:active {
@@ -163,6 +190,7 @@ const emit = defineEmits([
 
   .toolbar-right {
     justify-content: flex-end;
+    min-width: 0;
   }
 
   .download-btn {
@@ -177,6 +205,7 @@ const emit = defineEmits([
 
   .toolbar-right {
     width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .download-btn {

@@ -23,6 +23,14 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  startDate: {
+    type: String,
+    default: "",
+  },
+  endDate: {
+    type: String,
+    default: "",
+  },
   keyword: {
     type: String,
     default: "",
@@ -32,6 +40,8 @@ const props = defineProps({
 const emit = defineEmits([
   "edit",
   "update:selectedDate",
+  "update:startDate",
+  "update:endDate",
   "update:keyword",
   "dateChange",
   "download",
@@ -72,7 +82,7 @@ const searchPlaceholder = computed(() => {
     return "Search machines, UUID, status, location, operator, operator note...";
   }
 
-  return "Search machines, UUID, status, location, operator logged in, operator note...";
+  return "Search machines, status, location, operator logged in, operator note...";
 });
 
 watch(
@@ -157,8 +167,15 @@ function getOperatorSubText(machine) {
   return machine?.operatorSubText || "";
 }
 
-function updateDate(event) {
-  emit("update:selectedDate", event.target.value);
+function updateStartDate(event) {
+  const value = event.target.value;
+
+  emit("update:startDate", value);
+  emit("update:selectedDate", value);
+}
+
+function updateEndDate(event) {
+  emit("update:endDate", event.target.value);
 }
 
 function updateKeyword(event) {
@@ -193,7 +210,7 @@ const visiblePages = computed(() => {
   <section class="panel table-panel">
     <div class="panel-head modern-head">
       <div>
-        <h2>Daily Machine Details</h2>
+        <h2>Machine Productivity Details</h2>
       </div>
 
       <span>{{ totalRows }} data</span>
@@ -201,13 +218,23 @@ const visiblePages = computed(() => {
 
     <div class="table-toolbar">
       <label class="table-filter date-filter">
-        <span>Date</span>
+        <span>Start Date</span>
 
         <input
           type="date"
-          :value="props.selectedDate"
-          @input="updateDate"
+          :value="props.startDate || props.selectedDate"
+          @input="updateStartDate"
           @change="emit('dateChange')"
+        />
+      </label>
+
+      <label class="table-filter date-filter">
+        <span>End Date</span>
+
+        <input
+          type="date"
+          :value="props.endDate || props.startDate || props.selectedDate"
+          @input="updateEndDate"
         />
       </label>
 
@@ -222,8 +249,13 @@ const visiblePages = computed(() => {
         />
       </label>
 
-      <button type="button" class="download-btn" @click="emit('download')">
-        Download CSV
+      <button
+        type="button"
+        class="download-btn"
+        :disabled="loading"
+        @click="emit('download')"
+      >
+        Export Excel
       </button>
     </div>
 
@@ -519,7 +551,11 @@ const visiblePages = computed(() => {
 
 .table-toolbar {
   display: grid;
-  grid-template-columns: minmax(150px, 190px) minmax(240px, 1fr) 140px;
+  grid-template-columns:
+    minmax(150px, 190px)
+    minmax(150px, 190px)
+    minmax(240px, 1fr)
+    minmax(150px, 180px);
   gap: 10px;
   margin-bottom: 12px;
   align-items: stretch;
@@ -547,7 +583,7 @@ const visiblePages = computed(() => {
 .table-filter input {
   width: 100%;
   min-width: 0;
-  height: 22px;
+  height: 24px;
   border: 0;
   outline: none;
   background: transparent;
@@ -564,26 +600,37 @@ const visiblePages = computed(() => {
 .download-btn {
   border: 0;
   border-radius: 13px;
-  background: linear-gradient(135deg, #21a366, #107c41);
   color: #ffffff;
+  background: linear-gradient(135deg, #21a366, #107c41);
+  box-shadow: 0 12px 24px rgba(16, 124, 65, 0.24);
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(16, 124, 65, 0.24);
+  min-height: 50px;
+  padding: 0 16px;
+  white-space: nowrap;
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
-    filter 0.2s ease;
+    filter 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.download-btn:hover {
+.download-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   filter: brightness(1.03);
   box-shadow: 0 16px 28px rgba(16, 124, 65, 0.32);
 }
 
-.download-btn:active {
+.download-btn:active:not(:disabled) {
   transform: translateY(0);
+}
+
+.download-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
 }
 
 .table-wrap {
@@ -808,6 +855,16 @@ tr:hover td {
 
 .page-total {
   text-align: right;
+}
+
+@media (max-width: 1200px) {
+  .table-toolbar {
+    grid-template-columns: minmax(150px, 190px) minmax(150px, 190px) 1fr;
+  }
+
+  .download-btn {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 980px) {

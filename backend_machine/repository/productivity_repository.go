@@ -54,12 +54,9 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 	lossTimeHours := utils.Round2(float64(lossTimeSec) / 3600)
 
 	// PRODUKTIVITAS
-	// Rumus yang benar sesuai frontend:
+	// Rumus:
 	// Productivity = Running Time / Power On Duration x 100
 	// Productivity = ProcTime / Runtime x 100
-	//
-	// Dalam detik:
-	// ProductivityPct = ps.ProcSec / runtimeSec x 100
 	productivityRaw := 0.0
 	productivityPct := 0.0
 
@@ -68,7 +65,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		productivityPct = productivityRaw
 	}
 
-	// Pengaman supaya produktivitas tidak lebih dari 100%.
 	if productivityPct > 100 {
 		productivityPct = 100
 	}
@@ -134,6 +130,51 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		FirstStart:        ps.FirstProcess,
 		LastStart:         ps.LastProcess,
 	}
+
+	// =====================================================
+	// FINAL SAFETY GUARD
+	// Pengaman akhir sebelum response dikirim ke frontend.
+	//
+	// Tujuan:
+	// 1. Power On Duration tidak boleh lebih kecil dari Running Time.
+	// 2. Loss Time tidak boleh minus.
+	// 3. Productivity tidak boleh lebih dari 100%.
+	// 4. Status harus mengikuti ProductivityPct final.
+	// =====================================================
+
+	if row.ProcSec > row.RuntimeSec {
+		row.RuntimeSec = row.ProcSec
+	}
+
+	row.LossTimeSec = row.RuntimeSec - row.ProcSec
+	if row.LossTimeSec < 0 {
+		row.LossTimeSec = 0
+	}
+
+	row.RuntimeHours = utils.Round2(float64(row.RuntimeSec) / 3600)
+	row.ProcHours = utils.Round2(float64(row.ProcSec) / 3600)
+	row.LossTimeHours = utils.Round2(float64(row.LossTimeSec) / 3600)
+
+	finalProductivityRaw := 0.0
+	finalProductivityPct := 0.0
+
+	if row.RuntimeSec > 0 {
+		finalProductivityRaw = float64(row.ProcSec) / float64(row.RuntimeSec) * 100
+		finalProductivityPct = finalProductivityRaw
+	}
+
+	if finalProductivityPct > 100 {
+		finalProductivityPct = 100
+	}
+
+	row.ProductivityRaw = utils.Round2(finalProductivityRaw)
+	row.ProductivityPct = utils.Round2(finalProductivityPct)
+
+	row.Status = utils.StatusFromPct(row.ProductivityPct)
+	row.Category = row.Status
+
+	row.ProductiveSeconds = row.ProcSec
+	row.ProductiveHours = row.ProcHours
 
 	return row, nil
 }

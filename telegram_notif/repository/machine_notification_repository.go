@@ -99,14 +99,15 @@ func (r *machineNotificationRepository) FindPending(
 				'MACHINE_BROKEN' AS reason_code,
 
 				LTRIM(RTRIM(
-					ISNULL(n.reason_name, 'Mesin Rusak')
+					ISNULL(n.reason_label, 'Mesin Rusak')
 				)) AS reason_name,
 
 				LTRIM(RTRIM(
 					ISNULL(n.note, '')
 				)) AS note,
 
-				ISNULL(
+				COALESCE(
+					n.start_time,
 					n.created_at,
 					SYSDATETIME()
 				) AS event_created_at,
@@ -132,7 +133,7 @@ func (r *machineNotificationRepository) FindPending(
 
 				e.id_telegram AS telegram_chat_id
 
-			FROM dbo.machine_operator_notes n
+			FROM dbo.machine_operator_loss_events n
 
 			OUTER APPLY
 			(
@@ -153,7 +154,7 @@ func (r *machineNotificationRepository) FindPending(
 					))
 				  ) = 'MACHINE_BROKEN'
 
-			  AND n.created_at >=
+			  AND COALESCE(n.start_time, n.created_at) >=
 				  DATEADD(MINUTE, -30, SYSDATETIME())
 
 			  AND UPPER(
@@ -200,14 +201,15 @@ func (r *machineNotificationRepository) FindPending(
 				'WAIT_HANCA' AS reason_code,
 
 				LTRIM(RTRIM(
-					ISNULL(n.reason_name, 'Tunggu Hanca')
+					ISNULL(n.reason_label, 'Tunggu Hanca')
 				)) AS reason_name,
 
 				LTRIM(RTRIM(
 					ISNULL(n.note, '')
 				)) AS note,
 
-				ISNULL(
+				COALESCE(
+					n.start_time,
 					n.created_at,
 					SYSDATETIME()
 				) AS event_created_at,
@@ -228,12 +230,12 @@ func (r *machineNotificationRepository) FindPending(
 				)) AS recipient_role,
 
 				LTRIM(RTRIM(
-					ISNULL(e.branchdetail, '')
+					ISNULL(a.branchdetail, '')
 				)) AS recipient_branch,
 
 				e.id_telegram AS telegram_chat_id
 
-			FROM dbo.machine_operator_notes n
+			FROM dbo.machine_operator_loss_events n
 
 			OUTER APPLY
 			(
@@ -257,20 +259,13 @@ func (r *machineNotificationRepository) FindPending(
 				)) =
 				   LTRIM(RTRIM(a.spv_nik))
 
-			   AND UPPER(LTRIM(RTRIM(
-					ISNULL(e.branchdetail, '')
-				   ))) =
-				   UPPER(LTRIM(RTRIM(
-					ISNULL(a.branchdetail, '')
-				   )))
-
 			WHERE UPPER(
 					LTRIM(RTRIM(
 						ISNULL(n.reason_code, '')
 					))
 				  ) = 'WAIT_HANCA'
 
-			  AND n.created_at >=
+			  AND COALESCE(n.start_time, n.created_at) >=
 				  DATEADD(MINUTE, -30, SYSDATETIME())
 
 			  AND UPPER(
