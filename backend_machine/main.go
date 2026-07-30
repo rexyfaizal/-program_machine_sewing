@@ -99,6 +99,7 @@ func main() {
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)
 	mux.HandleFunc("/api/process-style/list", api.ProcessStyleList)
+	mux.HandleFunc("/api/process-style/import", api.ProcessStyleImport)
 	mux.HandleFunc("/api/process-style", api.ProcessStyleCreate)
 	mux.HandleFunc("/api/process-style/", api.ProcessStyleByID)
 

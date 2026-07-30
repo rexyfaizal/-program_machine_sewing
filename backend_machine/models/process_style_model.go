@@ -25,3 +25,21 @@ type ProcessStyleRequest struct {
 	Proses string `json:"proses"`
 	Style  string `json:"style"`
 }
+
+type ProcessStyleImportRow struct {
+	Style       string `json:"style"`
+	ProcessName string `json:"processName"`
+	Proses      string `json:"proses,omitempty"`
+}
+
+type ProcessStyleImportRequest struct {
+	Rows []ProcessStyleImportRow `json:"rows"`
+}
+
+type ProcessStyleImportResponse struct {
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	Total    int    `json:"total"`
+	Inserted int    `json:"inserted"`
+	Skipped  int    `json:"skipped"`
+}

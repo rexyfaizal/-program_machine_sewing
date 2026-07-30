@@ -395,3 +395,34 @@ export async function searchProcessesByStyle(style, query = "") {
 
   return normalizeList(data);
 }
+
+export async function importProcessStyles(rows) {
+  if (!Array.isArray(rows)) {
+    throw new Error("Data import harus berupa array.");
+  }
+
+  const cleanRows = rows
+    .map((row) => {
+      return {
+        style: String(row?.style || "").trim(),
+        processName: String(row?.processName || "").trim(),
+      };
+    })
+    .filter((row) => row.style && row.processName);
+
+  if (!cleanRows.length) {
+    throw new Error("Tidak ada data valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/process-style/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      rows: cleanRows,
+    }),
+  });
+
+  return await readResponse(res);
+}

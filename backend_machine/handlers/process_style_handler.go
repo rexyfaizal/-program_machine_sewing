@@ -183,6 +183,29 @@ func (h *Handler) ProcessStyleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data)
 }
 
+func (h *Handler) ProcessStyleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method tidak diizinkan", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var input models.ProcessStyleImportRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "body JSON tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.Repo.ImportProcessStyles(r.Context(), input)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 // ProcessStyleByID godoc
 // @Summary Update atau delete proses style
 // @Description Update atau hapus data proses style berdasarkan id
