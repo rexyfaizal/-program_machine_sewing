@@ -1,631 +1,735 @@
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import {
   getMachineOperatorReport,
   getMachineSettings,
   getProductivity,
 } from "../api/machineApi";
-import { getStatus } from "../utils/format";
 
-const machines = ref([]);
-const loading = ref(false);
-const errorMessage = ref("");
-const lastUpdate = ref("-");
+const WORK_SECONDS_PER_DAY = 28800;
 
-const machineSettings = ref(new Map());
-const activeOperatorMap = ref(new Map());
+export function useDashboard() {
+  const machines = ref([]);
+  const loading = ref(false);
+  const errorMessage = ref("");
+  const lastUpdate = ref("-");
+  const machineSettings = ref(new Map());
+  const activeOperatorMap = ref(new Map());
 
-let dashboardRequestSeq = 0;
-let inFlightRequest = null;
-let inFlightDate = "";
+  let dashboardRequestSeq = 0;
+  let inFlightRequest = null;
+  let inFlightDate = "";
 
-function setLastUpdate() {
-  lastUpdate.value = new Date().toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
+  function setLastUpdate() {
+    lastUpdate.value = new Date().toLocaleString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
 
-function toNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
+  function toNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
 
-function getVal(obj, ...keys) {
-  for (const key of keys) {
-    if (obj && obj[key] !== undefined && obj[key] !== null) {
-      return obj[key];
+  function getVal(obj, ...keys) {
+    for (const key of keys) {
+      if (obj && obj[key] !== undefined && obj[key] !== null) {
+        return obj[key];
+      }
     }
+
+    return undefined;
   }
 
-  return undefined;
-}
+  function normalizeText(value) {
+    return String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+  }
 
-function normalizeText(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, " ");
-}
+  function extractRows(data) {
+    if (Array.isArray(data)) return data;
 
-function extractRows(data) {
-  if (Array.isArray(data)) return data;
+    return (
+      data?.rows ||
+      data?.Rows ||
+      data?.data ||
+      data?.Data ||
+      data?.items ||
+      data?.Items ||
+      data?.machines ||
+      data?.Machines ||
+      []
+    );
+  }
 
-  return (
-    data?.rows ||
-    data?.Rows ||
-    data?.data ||
-    data?.Data ||
-    data?.items ||
-    data?.Items ||
-    data?.machines ||
-    data?.Machines ||
-    []
-  );
-}
+  function parseDateTime(value) {
+    if (!value) return null;
 
-function normalizeMacState(value) {
-  const text = String(value ?? "").trim();
+    const raw = String(value || "").trim();
 
-  if (text === "2") return "2";
-  if (text === "1") return "1";
-  if (text === "0") return "0";
+    if (!raw) return null;
 
-  return "0";
-}
+    const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+    const d = new Date(normalized);
 
-function getRowMacState(row) {
-  return normalizeMacState(
-    getVal(
-      row,
-      "macState",
-      "MacState",
-      "mac_state",
-      "Macstate",
-      "macstate",
-      "MACSTATE"
-    )
-  );
-}
+    if (Number.isNaN(d.getTime())) return null;
 
-function normalizeSetting(item) {
-  return {
-    uuid: String(getVal(item, "uuid", "UUID") || ""),
-    customName: String(getVal(item, "customName", "CustomName") || ""),
-    location: String(getVal(item, "location", "Location") || ""),
+    return d;
+  }
 
-    pic: String(
-      getVal(
-        item,
-        "pic",
-        "PIC",
-        "Pic",
-        "picName",
-        "PICName",
-        "personInCharge",
-        "PersonInCharge"
-      ) || ""
-    ),
+  function formatClock(value) {
+    if (!value) return "";
 
-    spv: String(
-      getVal(
-        item,
-        "spv",
-        "SPV",
-        "Spv",
-        "supervisor",
-        "Supervisor",
-        "supervisorName",
-        "SupervisorName"
-      ) || ""
-    ),
+    const d = parseDateTime(value);
 
-    updatedAt: String(getVal(item, "updatedAt", "UpdatedAt") || ""),
-  };
-}
+    if (!d) {
+      const text = String(value || "").replace("T", " ");
+      const timePart = text.slice(11, 16);
 
-function buildMachineSettingsMap(data) {
-  const list = extractRows(data);
-  const map = new Map();
+      if (timePart) {
+        return timePart.replace(":", ".");
+      }
 
-  list.forEach((item) => {
-    const setting = normalizeSetting(item);
-
-    if (setting.uuid) {
-      map.set(normalizeText(setting.uuid), setting);
+      return text.slice(0, 16);
     }
-  });
 
-  return map;
-}
-
-function parseDateTime(value) {
-  const text = String(value || "").trim();
-
-  if (!text) return null;
-
-  const safeText = text.includes(" ") ? text.replace(" ", "T") : text;
-  const d = new Date(safeText);
-
-  if (Number.isNaN(d.getTime())) {
-    return null;
+    return d
+      .toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      .replace(":", ".");
   }
 
-  return d;
-}
+  function formatDurationSeconds(seconds) {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds || 0)));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
 
-function formatClock(value) {
-  const text = String(value || "").trim();
-
-  if (!text) return "";
-
-  const match = text.match(/\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})/);
-
-  if (match) {
-    return `${match[1]}.${match[2]}`;
+    return [hours, minutes, secs]
+      .map((item) => String(item).padStart(2, "0"))
+      .join(":");
   }
 
-  const d = parseDateTime(text);
+  function formatDurationFromMs(ms) {
+    const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
 
-  if (!d) return "";
+    if (hours > 0) {
+      return `${hours}j ${minutes}m`;
+    }
 
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-
-  return `${hh}.${mm}`;
-}
-
-function formatDurationFromMs(ms) {
-  const totalMinutes = Math.max(0, Math.floor(ms / 60000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours <= 0) {
     return `${minutes}m`;
   }
 
-  return `${hours}j ${minutes}m`;
-}
+  function formatActiveDuration(loginTime) {
+    const start = parseDateTime(loginTime);
 
-function formatActiveDuration(loginTime, logoutTime = "") {
-  const start = parseDateTime(loginTime);
+    if (!start) return "";
 
-  if (!start) return "";
-
-  const end = parseDateTime(logoutTime) || new Date();
-  const diffMs = end.getTime() - start.getTime();
-
-  return formatDurationFromMs(diffMs);
-}
-
-function formatNoteTime(value) {
-  const clock = formatClock(value);
-  return clock || "";
-}
-
-function normalizeOperatorNote(item) {
-  const reasonName = String(
-    getVal(item, "reasonName", "ReasonName", "reason_name") || ""
-  ).trim();
-
-  const reasonCode = String(
-    getVal(item, "reasonCode", "ReasonCode", "reason_code") || ""
-  ).trim();
-
-  const note = String(getVal(item, "note", "Note") || "").trim();
-
-  const createdAt = String(
-    getVal(item, "createdAt", "CreatedAt", "created_at") || ""
-  ).trim();
-
-  const time = formatNoteTime(createdAt);
-
-  let reasonText = reasonName || reasonCode || "";
-
-  if (note) {
-    reasonText = reasonText ? `${reasonText}: ${note}` : note;
+    return formatDurationFromMs(Date.now() - start.getTime());
   }
 
-  return {
-    id: toNumber(getVal(item, "id", "ID") || 0),
-    reasonCode,
-    reasonName,
-    note,
-    createdAt,
-    time,
-    text: time && reasonText ? `${time}-${reasonText}` : reasonText,
-  };
-}
+  function normalizeMacState(row) {
+    const value = String(
+      getVal(row, "macState", "MacState", "mac_state", "Macstate", "macstate") ??
+        ""
+    ).trim();
 
-function normalizeOperatorSession(item) {
-  const operatorNik = String(
-    getVal(item, "operatorNik", "OperatorNik", "operator_nik") || ""
-  ).trim();
+    if (value === "2") return "2";
+    if (value === "1") return "1";
 
-  const operatorName = String(
-    getVal(item, "operatorName", "OperatorName", "operator_name") || ""
-  ).trim();
+    return "0";
+  }
 
-  const status = String(getVal(item, "status", "Status") || "").toUpperCase();
+  function normalizeSetting(row) {
+    return {
+      uuid: String(getVal(row, "uuid", "UUID") || "").trim(),
+      customName: String(
+        getVal(row, "customName", "CustomName", "custom_name") || ""
+      ).trim(),
+      location: String(getVal(row, "location", "Location") || "").trim(),
+      pic: String(getVal(row, "pic", "PIC") || "").trim(),
+      spv: String(getVal(row, "spv", "SPV") || "").trim(),
+    };
+  }
 
-  const loginTime = String(
-    getVal(item, "loginTime", "LoginTime", "login_time") || ""
-  );
+  function buildMachineSettingsMap(data) {
+    const map = new Map();
 
-  const logoutTime = String(
-    getVal(item, "logoutTime", "LogoutTime", "logout_time") || ""
-  );
+    extractRows(data)
+      .map(normalizeSetting)
+      .filter((item) => item.uuid)
+      .forEach((item) => {
+        map.set(normalizeText(item.uuid), item);
+      });
 
-  const uuid = String(getVal(item, "uuid", "UUID") || "").trim();
+    return map;
+  }
 
-  const notesRaw =
-    getVal(item, "notes", "Notes", "lastNotes", "LastNotes") || [];
+  function getProductivityStatus(productivity) {
+    const value = Number(productivity || 0);
 
-  const notes = extractRows(notesRaw)
-    .map(normalizeOperatorNote)
-    .filter((note) => note.text);
+    if (value >= 90) return "GOOD";
+    if (value >= 80) return "NORMAL";
 
-  const notesText = notes.map((note) => note.text).join(" | ");
+    return "BAD";
+  }
 
-  const loginClock = formatClock(loginTime);
-  const activeDuration = formatActiveDuration(loginTime, logoutTime);
+  function normalizeOperatorNote(row) {
+    const reasonCode = String(
+      getVal(row, "reasonCode", "ReasonCode", "reason_code") || ""
+    ).trim();
 
-  const operatorLoginText = loginClock ? `Login ${loginClock}` : "";
-  const operatorActiveText = activeDuration ? `Aktif ${activeDuration}` : "";
-
-  const operatorSubText = [operatorLoginText, operatorActiveText]
-    .filter(Boolean)
-    .join(" • ");
-
-  return {
-    id: toNumber(getVal(item, "id", "ID", "sessionId", "SessionID") || 0),
-    uuid,
-    operatorNik,
-    operatorName,
-    processName: String(
-      getVal(item, "processName", "ProcessName", "process_name") || ""
-    ),
-    styleName: String(
-      getVal(item, "styleName", "StyleName", "style_name") || ""
-    ),
-    loginTime,
-    logoutTime,
-    loginClock,
-    activeDuration,
-    operatorLoginText,
-    operatorActiveText,
-    operatorSubText,
-    status,
-    notes,
-    notesText,
-    picText:
-      operatorNik && operatorName
-        ? `${operatorNik} - ${operatorName}`
-        : operatorName || operatorNik || "",
-  };
-}
-
-function buildActiveOperatorMap(data) {
-  const map = new Map();
-  const rows = extractRows(data).map(normalizeOperatorSession);
-
-  rows.forEach((session) => {
-    if (!session.uuid) return;
-
-    const status = String(session.status || "").toUpperCase();
-
-    if (status !== "ACTIVE" && status !== "OPEN") {
-      return;
-    }
-
-    const key = normalizeText(session.uuid);
-    const existing = map.get(key);
-
-    if (!existing) {
-      map.set(key, session);
-      return;
-    }
-
-    const existingTime = parseDateTime(existing.loginTime)?.getTime() || 0;
-    const currentTime = parseDateTime(session.loginTime)?.getTime() || 0;
-
-    if (currentTime >= existingTime) {
-      map.set(key, session);
-    }
-  });
-
-  return map;
-}
-
-async function loadMachineSettings() {
-  const data = await getMachineSettings();
-  machineSettings.value = buildMachineSettingsMap(data);
-}
-
-async function loadActiveOperators(date) {
-  const data = await getMachineOperatorReport(date);
-  activeOperatorMap.value = buildActiveOperatorMap(data);
-}
-
-function normalizeRows(json) {
-  const rawData = extractRows(json);
-
-  machines.value = rawData.map((x) => {
-    const uuid = String(getVal(x, "uuid", "UUID") || "-");
-    const uuidKey = normalizeText(uuid);
-
-    const procTime = toNumber(
+    const reasonName = String(
       getVal(
-        x,
-        "procSec",
-        "ProcSec",
-        "procTimeSec",
-        "ProcTimeSec",
-        "procTime",
-        "ProcTime",
-        "process_time",
-        "ProcessTime"
-      ) || 0
-    );
-
-    const runtime = toNumber(
-      getVal(
-        x,
-        "runtimeSec",
-        "RuntimeSec",
-        "runtime",
-        "Runtime",
-        "RunTime",
-        "runTime"
-      ) || 0
-    );
-
-    const productivity =
-      runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
-
-    const status = getStatus(productivity);
-
-    const backendName = String(
-      getVal(
-        x,
-        "nickName",
-        "NickName",
-        "machineName",
-        "MachineName",
-        "name",
-        "Name"
-      ) || uuid
-    );
-
-    const originalMachineName = String(
-      getVal(
-        x,
-        "originalNickName",
-        "OriginalNickName",
-        "originalMachineName",
-        "OriginalMachineName"
-      ) || backendName
-    );
-
-    const setting = machineSettings.value.get(uuidKey);
-    const activeOperator = activeOperatorMap.value.get(uuidKey);
-
-    const customName = setting?.customName || "";
-
-    const locationFromApi = String(getVal(x, "location", "Location") || "");
-    const location = setting?.location || locationFromApi || "-";
-
-    const picFromApi = String(
-      getVal(
-        x,
-        "pic",
-        "PIC",
-        "Pic",
-        "picName",
-        "PICName",
-        "personInCharge",
-        "PersonInCharge"
+        row,
+        "reasonName",
+        "ReasonName",
+        "reasonLabel",
+        "ReasonLabel",
+        "reason_name",
+        "reason_label"
       ) || ""
+    ).trim();
+
+    const note = String(getVal(row, "note", "Note") || "").trim();
+
+    const createdAt = String(
+      getVal(
+        row,
+        "createdAt",
+        "CreatedAt",
+        "created_at",
+        "startTime",
+        "StartTime",
+        "start_time"
+      ) || ""
+    ).trim();
+
+    const endTime = String(
+      getVal(row, "endTime", "EndTime", "end_time") || ""
+    ).trim();
+
+    const rawStatus = String(getVal(row, "status", "Status") || "").trim();
+    const status = rawStatus.toUpperCase();
+
+    let durationSeconds = toNumber(
+      getVal(
+        row,
+        "durationSeconds",
+        "DurationSeconds",
+        "duration_sec",
+        "duration"
+      ) || 0
     );
 
-    const pic = activeOperator?.picText || setting?.pic || picFromApi || "";
+    const startDate = parseDateTime(createdAt);
 
-    const operatorNote = activeOperator?.notesText || "";
-    const spv = operatorNote || "";
+    if ((status === "ACTIVE" || status === "OPEN") && startDate) {
+      durationSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - startDate.getTime()) / 1000)
+      );
+    }
 
-    const macState = getRowMacState(x);
+    const durationText =
+      String(
+        getVal(row, "durationText", "DurationText", "duration_text") || ""
+      ).trim() || formatDurationSeconds(durationSeconds);
+
+    const timeText = formatClock(createdAt);
+    const endTimeText = formatClock(endTime);
+
+    let noteText = note;
+
+    if (status === "ACTIVE" || status === "OPEN") {
+      if (!noteText || !noteText.toLowerCase().includes("sedang")) {
+        noteText = `Sedang berjalan ${durationText}`;
+      }
+    } else if (status === "CLOSED" || endTime) {
+      if (!noteText || !noteText.toLowerCase().includes("selesai")) {
+        noteText = `Selesai ${durationText}`;
+      }
+    }
+
+    let text = "";
+
+    if (reasonName) {
+      if (endTimeText && timeText) {
+        text = `${timeText}-${endTimeText} ${reasonName}: ${noteText}`;
+      } else if (timeText) {
+        text = `${timeText}-${reasonName}: ${noteText}`;
+      } else {
+        text = `${reasonName}: ${noteText}`;
+      }
+    } else {
+      text = noteText || "-";
+    }
 
     return {
-      date: String(getVal(x, "date", "Date") || ""),
-      machineName: customName || backendName,
-      nickName: customName || backendName,
-      originalMachineName,
-      customName,
-      location,
-
-      pic,
-
-      spv,
-      operatorNote,
-      operatorNotes: activeOperator?.notes || [],
-
-      operatorNik: activeOperator?.operatorNik || "",
-      operatorName: activeOperator?.operatorName || "",
-      operatorProcessName: activeOperator?.processName || "",
-      operatorStyleName: activeOperator?.styleName || "",
-      operatorLoginTime: activeOperator?.loginTime || "",
-      operatorLogoutTime: activeOperator?.logoutTime || "",
-      operatorLoginClock: activeOperator?.loginClock || "",
-      operatorActiveDuration: activeOperator?.activeDuration || "",
-      operatorLoginText: activeOperator?.operatorLoginText || "",
-      operatorActiveText: activeOperator?.operatorActiveText || "",
-      operatorSubText: activeOperator?.operatorSubText || "",
-
-      ip: String(getVal(x, "ip", "IP", "lastLoginIP", "LastLoginIP") || "-"),
-
-      uuid,
-      tableName: String(getVal(x, "tableName", "TableName") || "-"),
-
-      macState,
-      MacState: macState,
-      mac_state: macState,
-
-      procTime,
-      runtime,
-
-      output: toNumber(
-        getVal(x, "output", "Output", "procCounts", "ProcCounts") || 0
-      ),
-
-      complete: toNumber(getVal(x, "complete", "Complete") || 0),
-
-      abnormal: toNumber(
-        getVal(
-          x,
-          "incomplete",
-          "Incomplete",
-          "abnormal",
-          "Abnormal",
-          "abnormalCount",
-          "AbnormalCount"
-        ) || 0
-      ),
-
-      avgCT: toNumber(
-        getVal(x, "avgCycle", "AvgCycle", "avgCT", "AvgCT", "avgCt", "AvgCt") ||
-          0
-      ),
-
-      maxCT: toNumber(
-        getVal(x, "maxCycle", "MaxCycle", "maxCT", "MaxCT") || 0
-      ),
-
-      minCT: toNumber(
-        getVal(x, "minCycle", "MinCycle", "minCT", "MinCT") || 0
-      ),
-
-      alarm: toNumber(
-        getVal(x, "alarmCount", "AlarmCount", "alarm", "Alarm") || 0
-      ),
-
-      alarmTypes: String(getVal(x, "alarmTypes", "AlarmTypes") || "-"),
-
-      program: String(
-        getVal(
-          x,
-          "topFile",
-          "TopFile",
-          "program",
-          "Program",
-          "programName",
-          "ProgramName"
-        ) || "-"
-      ),
-
-      firstProcess: String(getVal(x, "firstProcess", "FirstProcess") || "-"),
-      lastProcess: String(getVal(x, "lastProcess", "LastProcess") || "-"),
-
-      mainSource: String(getVal(x, "mainSource", "MainSource") || "process_time"),
-
-      productivity,
+      id: Number(getVal(row, "id", "ID") || Date.now()),
+      reasonCode,
+      reasonName,
+      note: noteText,
+      createdAt,
+      endTime,
+      durationSeconds,
+      durationText,
       status,
+      text,
     };
-  });
-
-  setLastUpdate();
-}
-
-async function loadDashboard(date) {
-  const requestDate = String(date || "").trim();
-
-  if (loading.value && inFlightRequest && inFlightDate === requestDate) {
-    return inFlightRequest;
   }
 
-  const requestSeq = ++dashboardRequestSeq;
+  function normalizeOperatorSession(row) {
+    if (!row) return null;
 
-  loading.value = true;
-  errorMessage.value = "";
-  inFlightDate = requestDate;
+    const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
 
-  const request = (async () => {
-    const [
-      settingsResult,
-      operatorResult,
-      productivityResult,
-    ] = await Promise.allSettled([
-      getMachineSettings(),
-      getMachineOperatorReport(requestDate),
-      getProductivity(requestDate),
-    ]);
+    if (!uuid) return null;
 
-    if (requestSeq !== dashboardRequestSeq) {
-      return;
+    const operatorNik = String(
+      getVal(row, "operatorNik", "OperatorNik", "operator_nik") || ""
+    ).trim();
+
+    const operatorName = String(
+      getVal(row, "operatorName", "OperatorName", "operator_name") || ""
+    ).trim();
+
+    const processName = String(
+      getVal(row, "processName", "ProcessName", "process_name") || ""
+    ).trim();
+
+    const styleName = String(
+      getVal(row, "styleName", "StyleName", "style_name") || ""
+    ).trim();
+
+    const loginTime = String(
+      getVal(row, "loginTime", "LoginTime", "login_time") || ""
+    ).trim();
+
+    const logoutTime = String(
+      getVal(row, "logoutTime", "LogoutTime", "logout_time") || ""
+    ).trim();
+
+    const status = String(getVal(row, "status", "Status") || "").trim();
+
+    let notes = extractRows(
+      getVal(row, "notes", "Notes", "lastNotes", "LastNotes") || []
+    )
+      .map(normalizeOperatorNote)
+      .filter((note) => note.reasonName || note.note || note.text);
+
+    const activeLossReasonCode = String(
+      getVal(
+        row,
+        "activeLossReasonCode",
+        "ActiveLossReasonCode",
+        "active_loss_reason_code"
+      ) || ""
+    ).trim();
+
+    const activeLossReasonLabel = String(
+      getVal(
+        row,
+        "activeLossReasonLabel",
+        "ActiveLossReasonLabel",
+        "active_loss_reason_label"
+      ) || ""
+    ).trim();
+
+    const activeLossStartTime = String(
+      getVal(
+        row,
+        "activeLossStartTime",
+        "ActiveLossStartTime",
+        "active_loss_start_time"
+      ) || ""
+    ).trim();
+
+    const activeLossDurationSeconds = toNumber(
+      getVal(
+        row,
+        "activeLossDurationSeconds",
+        "ActiveLossDurationSeconds",
+        "active_loss_duration_seconds"
+      ) || 0
+    );
+
+    const activeLossStatus = String(
+      getVal(
+        row,
+        "activeLossStatus",
+        "ActiveLossStatus",
+        "active_loss_status"
+      ) || ""
+    ).trim();
+
+    if (activeLossReasonLabel && !notes.length) {
+      notes = [
+        normalizeOperatorNote({
+          reasonCode: activeLossReasonCode,
+          reasonName: activeLossReasonLabel,
+          note: `Sedang berjalan ${formatDurationSeconds(
+            activeLossDurationSeconds
+          )}`,
+          createdAt: activeLossStartTime,
+          durationSeconds: activeLossDurationSeconds,
+          status: activeLossStatus || "ACTIVE",
+        }),
+      ];
     }
 
-    if (settingsResult.status === "fulfilled") {
-      machineSettings.value = buildMachineSettingsMap(settingsResult.value);
-    } else {
-      console.warn("Gagal load machine settings:", settingsResult.reason);
-    }
+    const operatorLabel =
+      operatorNik && operatorName
+        ? `${operatorNik} - ${operatorName}`
+        : operatorName || operatorNik || "";
 
-    if (operatorResult.status === "fulfilled") {
-      activeOperatorMap.value = buildActiveOperatorMap(operatorResult.value);
-    } else {
-      console.warn("Gagal load active operators:", operatorResult.reason);
-      activeOperatorMap.value = new Map();
-    }
+    const loginClock = formatClock(loginTime);
+    const activeDuration = formatActiveDuration(loginTime);
 
-    if (productivityResult.status === "rejected") {
-      throw productivityResult.reason;
-    }
+    const operatorSubText =
+      loginClock && activeDuration
+        ? `Login ${loginClock} · Aktif ${activeDuration}`
+        : loginClock
+          ? `Login ${loginClock}`
+          : "";
 
-    normalizeRows(productivityResult.value);
-  })();
-
-  inFlightRequest = request;
-
-  try {
-    await request;
-  } catch (err) {
-    if (requestSeq === dashboardRequestSeq) {
-      errorMessage.value = `Gagal mengambil data dari backend: ${
-        err?.message || err
-      }`;
-    }
-  } finally {
-    if (requestSeq === dashboardRequestSeq) {
-      loading.value = false;
-    }
-
-    if (inFlightRequest === request) {
-      inFlightRequest = null;
-      inFlightDate = "";
-    }
+    return {
+      id: Number(getVal(row, "id", "ID", "sessionId", "SessionID") || 0),
+      uuid,
+      operatorNik,
+      operatorName,
+      operatorLabel,
+      branchdetail: String(
+        getVal(row, "branchdetail", "BranchDetail", "branch_detail") || ""
+      ).trim(),
+      processName,
+      styleName,
+      loginTime,
+      logoutTime,
+      status,
+      notes,
+      operatorNote: notes.map((note) => note.text).join(" | "),
+      operatorNotes: notes.map((note) => note.text).join(" | "),
+      operatorLoginClock: loginClock,
+      operatorActiveDuration: activeDuration,
+      operatorSubText,
+      operatorLoginText: operatorSubText,
+      operatorActiveText: activeDuration,
+    };
   }
 
-  return request;
-}
+  function buildActiveOperatorMap(data) {
+    const map = new Map();
 
-function makeSummary(list) {
-  const totalMachine = list.length;
-  const totalProductivity = list.reduce((sum, m) => sum + m.productivity, 0);
+    extractRows(data)
+      .map(normalizeOperatorSession)
+      .filter((item) => item?.uuid)
+      .forEach((item) => {
+        const status = String(item.status || "").toUpperCase();
 
-  return {
-    totalMachine,
-    avgProductivity: totalMachine ? totalProductivity / totalMachine : 0,
-    good: list.filter((m) => m.status === "GOOD").length,
-    normal: list.filter((m) => m.status === "NORMAL").length,
-    bad: list.filter((m) => m.status === "BAD").length,
-    totalOutput: list.reduce((sum, m) => sum + m.output, 0),
-    totalAlarm: list.reduce((sum, m) => sum + m.alarm, 0),
-    totalSewingTime: list.reduce((sum, m) => sum + m.procTime, 0),
-  };
-}
+        if (status && !["ACTIVE", "OPEN"].includes(status)) {
+          return;
+        }
 
-const allSummary = computed(() => makeSummary(machines.value));
+        map.set(normalizeText(item.uuid), item);
+      });
 
-export function useDashboard() {
+    return map;
+  }
+
+  async function loadMachineSettings() {
+    const data = await getMachineSettings();
+    machineSettings.value = buildMachineSettingsMap(data);
+
+    return machineSettings.value;
+  }
+
+  async function loadActiveOperators(date) {
+    const data = await getMachineOperatorReport(date);
+    activeOperatorMap.value = buildActiveOperatorMap(data);
+
+    return activeOperatorMap.value;
+  }
+
+  function normalizeRows(data) {
+    const rows = extractRows(data);
+
+    const normalized = rows.map((row) => {
+      const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
+      const setting = machineSettings.value.get(normalizeText(uuid)) || null;
+      const operator = activeOperatorMap.value.get(normalizeText(uuid)) || null;
+
+      const backendName = String(
+        getVal(
+          row,
+          "machineName",
+          "MachineName",
+          "nickName",
+          "NickName",
+          "name",
+          "Name"
+        ) || uuid
+      ).trim();
+
+      const originalMachineName = String(
+        getVal(
+          row,
+          "originalMachineName",
+          "OriginalMachineName",
+          "originalNickName",
+          "OriginalNickName",
+          "original_name",
+          "OriginalName"
+        ) || backendName
+      ).trim();
+
+      const machineName =
+        setting?.customName || backendName || originalMachineName || uuid;
+
+      const operatorProcessName = operator?.processName || "";
+      const displayMachineName = operatorProcessName || machineName;
+
+      let runtime = toNumber(
+        getVal(
+          row,
+          "runtimeSec",
+          "RuntimeSec",
+          "runtime",
+          "Runtime",
+          "runTime",
+          "RunTime",
+          "powerOnSeconds",
+          "PowerOnSeconds",
+          "power_on_seconds"
+        ) || 0
+      );
+
+      const procTime = toNumber(
+        getVal(
+          row,
+          "procSec",
+          "ProcSec",
+          "procTimeSec",
+          "ProcTimeSec",
+          "procTime",
+          "ProcTime",
+          "productive_seconds",
+          "productiveSeconds",
+          "process_time",
+          "ProcessTime"
+        ) || 0
+      );
+
+      const okProcTime = toNumber(
+        getVal(
+          row,
+          "okProcSec",
+          "OkProcSec",
+          "ok_proc_sec",
+          "okProcessTime",
+          "OkProcessTime"
+        ) || 0
+      );
+
+      if (procTime > runtime) {
+        runtime = procTime;
+      }
+
+      const lossTime = Math.max(0, runtime - procTime);
+
+      const productivity =
+        runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
+
+      const locationFromApi = String(getVal(row, "location", "Location") || "");
+      const location = setting?.location || locationFromApi || "-";
+
+      const output = toNumber(getVal(row, "output", "Output") || 0);
+      const cycles = toNumber(getVal(row, "cycles", "Cycles") || 0);
+      const complete = toNumber(getVal(row, "complete", "Complete") || 0);
+      const incomplete = toNumber(getVal(row, "incomplete", "Incomplete") || 0);
+
+      const avgCT = toNumber(
+        getVal(row, "avgCycle", "AvgCycle", "avgCT", "AvgCT") || 0
+      );
+
+      const minCT = toNumber(
+        getVal(row, "minCycle", "MinCycle", "minCT", "MinCT") || 0
+      );
+
+      const maxCT = toNumber(
+        getVal(row, "maxCycle", "MaxCycle", "maxCT", "MaxCT") || 0
+      );
+
+      const slowCycles = toNumber(
+        getVal(row, "slowCycles", "SlowCycles") || 0
+      );
+
+      const alarm = toNumber(
+        getVal(row, "alarmCount", "AlarmCount", "alarm", "Alarm") || 0
+      );
+
+      return {
+        date: String(getVal(row, "date", "Date") || ""),
+        uuid,
+        tableName: String(getVal(row, "tableName", "TableName") || ""),
+        machineName,
+        displayMachineName,
+        originalMachineName,
+        customName: setting?.customName || "",
+        location,
+        manualPic: setting?.pic || "",
+        manualSpv: setting?.spv || "",
+        ip: String(getVal(row, "ip", "IP") || ""),
+
+        macType: String(getVal(row, "macType", "MacType") || ""),
+        macState: normalizeMacState(row),
+
+        runtime,
+        procTime,
+        okProcTime,
+        lossTime,
+
+        runtimeHours: Number((runtime / 3600).toFixed(2)),
+        procHours: Number((procTime / 3600).toFixed(2)),
+        lossTimeHours: Number((lossTime / 3600).toFixed(2)),
+
+        productivity,
+        productivityPct: productivity,
+        status: getProductivityStatus(productivity),
+
+        output,
+        cycles,
+        complete,
+        incomplete,
+        abnormal: incomplete,
+
+        avgCT,
+        minCT,
+        maxCT,
+        slowCycles,
+
+        uniqueFiles: toNumber(
+          getVal(row, "uniqueFiles", "UniqueFiles", "unique_files") || 0
+        ),
+        program: String(
+          getVal(row, "topFile", "TopFile", "program", "Program") || ""
+        ),
+        firstProcess: String(
+          getVal(row, "firstProcess", "FirstProcess", "first_process") || ""
+        ),
+        lastProcess: String(
+          getVal(row, "lastProcess", "LastProcess", "last_process") || ""
+        ),
+        alarm,
+        alarmTypes: String(
+          getVal(row, "alarmTypes", "AlarmTypes", "alarm_types") || ""
+        ),
+
+        workSecondsPerDay: WORK_SECONDS_PER_DAY,
+
+        pic: operator?.operatorLabel || "",
+        spv: setting?.spv || "",
+
+        operatorNik: operator?.operatorNik || "",
+        operatorName: operator?.operatorName || "",
+        operatorLabel: operator?.operatorLabel || "",
+        operatorProcessName,
+        operatorStyleName: operator?.styleName || "",
+        operatorLoginTime: operator?.loginTime || "",
+        operatorLogoutTime: operator?.logoutTime || "",
+        operatorLoginClock: operator?.operatorLoginClock || "",
+        operatorActiveDuration: operator?.operatorActiveDuration || "",
+        operatorLoginText: operator?.operatorLoginText || "",
+        operatorActiveText: operator?.operatorActiveText || "",
+        operatorSubText: operator?.operatorSubText || "",
+        operatorNote: operator?.operatorNote || "",
+        operatorNotes: operator?.operatorNotes || "",
+      };
+    });
+
+    machines.value = normalized;
+    setLastUpdate();
+
+    return normalized;
+  }
+
+  async function loadDashboard(date) {
+    const requestDate = String(date || "").trim();
+
+    if (loading.value && inFlightRequest && inFlightDate === requestDate) {
+      return inFlightRequest;
+    }
+
+    const requestSeq = ++dashboardRequestSeq;
+
+    loading.value = true;
+    errorMessage.value = "";
+    inFlightDate = requestDate;
+
+    const request = (async () => {
+      const [settingsResult, operatorResult, productivityResult] =
+        await Promise.allSettled([
+          getMachineSettings(),
+          getMachineOperatorReport(requestDate),
+          getProductivity(requestDate),
+        ]);
+
+      if (requestSeq !== dashboardRequestSeq) return;
+
+      if (settingsResult.status === "fulfilled") {
+        machineSettings.value = buildMachineSettingsMap(settingsResult.value);
+      } else {
+        console.warn("Gagal load machine settings:", settingsResult.reason);
+      }
+
+      if (operatorResult.status === "fulfilled") {
+        activeOperatorMap.value = buildActiveOperatorMap(operatorResult.value);
+      } else {
+        console.warn("Gagal load active operators:", operatorResult.reason);
+        activeOperatorMap.value = new Map();
+      }
+
+      if (productivityResult.status === "rejected") {
+        throw productivityResult.reason;
+      }
+
+      normalizeRows(productivityResult.value);
+    })();
+
+    inFlightRequest = request;
+
+    try {
+      await request;
+    } catch (err) {
+      if (requestSeq === dashboardRequestSeq) {
+        errorMessage.value = `Gagal mengambil data dari backend: ${
+          err?.message || err
+        }`;
+      }
+    } finally {
+      if (requestSeq === dashboardRequestSeq) {
+        loading.value = false;
+      }
+
+      if (inFlightRequest === request) {
+        inFlightRequest = null;
+        inFlightDate = "";
+      }
+    }
+
+    return request;
+  }
+
   return {
     machines,
     loading,
@@ -633,11 +737,10 @@ export function useDashboard() {
     lastUpdate,
     machineSettings,
     activeOperatorMap,
-    allSummary,
-    loadDashboard,
+
     loadMachineSettings,
     loadActiveOperators,
+    loadDashboard,
     normalizeRows,
-    makeSummary,
   };
 }
