@@ -3,55 +3,80 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
-func (r *Repository) GetRuntimeSec(ctx context.Context, uuid string, start, end time.Time) (int64, error) {
+func (r *Repository) GetRuntimeSec(ctx context.Context, uuid string, macState string, start, end time.Time) (int64, error) {
+	uuid = strings.TrimSpace(uuid)
+
+	if uuid == "" {
+		return 0, nil
+	}
+
+	// macState sengaja tidak dipakai dulu.
+	// Alasannya: ada kasus macState = 0, tapi runtime aktif tetap harus dihitung
+	// dari ShutTime terakhir sampai waktu aplikasi/server.
+	_ = macState
+
 	query := `
-WITH raw AS (
-    SELECT
-        TRY_CONVERT(datetime2, StartTime) AS st,
-        CASE
-            WHEN TRY_CONVERT(datetime2, ShutTime) IS NOT NULL
-             AND TRY_CONVERT(datetime2, ShutTime) > TRY_CONVERT(datetime2, StartTime)
-            THEN TRY_CONVERT(datetime2, ShutTime)
-            WHEN TRY_CONVERT(int, RunTime) IS NOT NULL
-             AND TRY_CONVERT(datetime2, StartTime) IS NOT NULL
-            THEN DATEADD(SECOND, TRY_CONVERT(int, RunTime), TRY_CONVERT(datetime2, StartTime))
-            ELSE NULL
-        END AS et
-    FROM dbo.record_runtime
-    WHERE UUID = @uuid
-      AND TRY_CONVERT(datetime2, StartTime) IS NOT NULL
-)
-SELECT ISNULL(SUM(
+DECLARE @server_now DATETIME2 = SYSDATETIME();
+
+-- Kalau tanggal yang diminta adalah hari ini, hitung sampai waktu server sekarang.
+-- Kalau tanggal lama, batasnya tetap @end_time supaya tidak melewati tanggal tersebut.
+DECLARE @waktu_aplikasi DATETIME2 =
     CASE
-        WHEN st < @end_time AND et > @start_time THEN
+        WHEN @server_now < @end_time THEN @server_now
+        ELSE @end_time
+    END;
+
+WITH runtime_data AS (
+    SELECT
+        ISNULL(SUM(
             CASE
-                WHEN DATEDIFF(SECOND,
-                    CASE WHEN st < @start_time THEN @start_time ELSE st END,
-                    CASE WHEN et > @end_time THEN @end_time ELSE et END
-                ) > 0 THEN
-                    DATEDIFF(SECOND,
-                        CASE WHEN st < @start_time THEN @start_time ELSE st END,
-                        CASE WHEN et > @end_time THEN @end_time ELSE et END
-                    )
+                WHEN ISNULL(TRY_CONVERT(BIGINT, [RunTime]), 0) >= 60
+                    THEN TRY_CONVERT(BIGINT, [RunTime])
                 ELSE 0
             END
-        ELSE 0
-    END
-), 0) AS RuntimeSec
-FROM raw
-WHERE st IS NOT NULL AND et IS NOT NULL;
+        ), 0) AS runtime_selesai,
+
+        MAX(TRY_CONVERT(DATETIME2, [ShutTime])) AS waktu_terakhir
+    FROM [sewingiot].[dbo].[Record_RunTime]
+    WHERE LOWER(LTRIM(RTRIM([UUID]))) = LOWER(LTRIM(RTRIM(@uuid)))
+      AND TRY_CONVERT(DATETIME2, [StartTime]) >= @start_time
+      AND TRY_CONVERT(DATETIME2, [StartTime]) <  @end_time
+)
+SELECT
+    CAST(
+        ISNULL(runtime_selesai, 0)
+        +
+        CASE
+            WHEN waktu_terakhir IS NOT NULL
+             AND waktu_terakhir < @waktu_aplikasi
+                THEN DATEDIFF_BIG(SECOND, waktu_terakhir, @waktu_aplikasi)
+            ELSE 0
+        END
+    AS BIGINT) AS total_runtime_detik
+FROM runtime_data;
 `
 
-	var runtimeSec int64
+	var runtimeSec sql.NullInt64
 
-	err := r.DB.QueryRowContext(ctx, query,
+	err := r.DB.QueryRowContext(
+		ctx,
+		query,
 		sql.Named("uuid", uuid),
 		sql.Named("start_time", start),
 		sql.Named("end_time", end),
 	).Scan(&runtimeSec)
 
-	return runtimeSec, err
+	if err != nil {
+		return 0, err
+	}
+
+	if !runtimeSec.Valid || runtimeSec.Int64 < 0 {
+		return 0, nil
+	}
+
+	return runtimeSec.Int64, nil
 }

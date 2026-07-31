@@ -24,17 +24,16 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		return models.ProductivityRow{}, err
 	}
 
-	runtimeSec, err := r.GetRuntimeSec(ctx, m.UUID, start, end)
+	// Runtime sekarang dihitung dari:
+	// runtime selesai + runtime mesin yang sedang aktif
+	runtimeSec, err := r.GetRuntimeSec(ctx, m.UUID, m.MacState, start, end)
 	if err != nil {
-		// Jika tabel record_runtime belum ada atau belum terisi,
-		// dashboard tetap tampil memakai data ProcTime.
 		log.Printf("runtime skip uuid=%s: %v", m.UUID, err)
 		runtimeSec = 0
 	}
 
 	as, err := r.GetAlarmStats(ctx, m.UUID, start, end)
 	if err != nil {
-		// Jika tabel alarm belum ada, jangan gagalkan dashboard.
 		log.Printf("alarm skip uuid=%s: %v", m.UUID, err)
 		as = models.AlarmStats{}
 	}
@@ -42,10 +41,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 	runtimeHours := utils.Round2(float64(runtimeSec) / 3600)
 	procHours := utils.Round2(float64(ps.ProcSec) / 3600)
 
-	// LOSS TIME
-	// Rumus:
-	// Loss Time = Power On Duration - Running Time
-	// Loss Time = Runtime - ProcTime
 	lossTimeSec := runtimeSec - ps.ProcSec
 	if lossTimeSec < 0 {
 		lossTimeSec = 0
@@ -53,10 +48,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 
 	lossTimeHours := utils.Round2(float64(lossTimeSec) / 3600)
 
-	// PRODUKTIVITAS
-	// Rumus:
-	// Productivity = Running Time / Power On Duration x 100
-	// Productivity = ProcTime / Runtime x 100
 	productivityRaw := 0.0
 	productivityPct := 0.0
 
@@ -134,12 +125,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 	// =====================================================
 	// FINAL SAFETY GUARD
 	// Pengaman akhir sebelum response dikirim ke frontend.
-	//
-	// Tujuan:
-	// 1. Power On Duration tidak boleh lebih kecil dari Running Time.
-	// 2. Loss Time tidak boleh minus.
-	// 3. Productivity tidak boleh lebih dari 100%.
-	// 4. Status harus mengikuti ProductivityPct final.
 	// =====================================================
 
 	if row.ProcSec > row.RuntimeSec {

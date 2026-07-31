@@ -172,81 +172,28 @@ func (r *Repository) RunMachineOfflineAutoLogout(ctx context.Context) (models.Ma
 		}
 	}
 
-	autoLogoutQuery := `
-		DECLARE @closed TABLE (
-			id BIGINT,
-			session_date DATE,
-			uuid NVARCHAR(100),
-			operator_nik NVARCHAR(100),
-			operator_name NVARCHAR(255)
-		);
-
-		UPDATE s
-		SET
-			s.logout_time = SYSDATETIME(),
-			s.status = 'AUTO_LOGOUT',
-			s.updated_at = SYSDATETIME()
-		OUTPUT
-			INSERTED.id,
-			INSERTED.session_date,
-			INSERTED.uuid,
-			INSERTED.operator_nik,
-			INSERTED.operator_name
-		INTO @closed
-		FROM dbo.machine_operator_sessions s
-		INNER JOIN dbo.machine_offline_state o
-			ON LOWER(LTRIM(RTRIM(s.uuid))) = LOWER(LTRIM(RTRIM(o.uuid)))
-		WHERE
-			s.status = 'ACTIVE'
-			AND s.logout_time IS NULL
-			AND o.offline_since IS NOT NULL
-			AND o.offline_since <= DATEADD(MINUTE, -60, SYSDATETIME());
-
-		INSERT INTO dbo.machine_operator_notes (
-			session_id,
-			session_date,
-			uuid,
-			operator_nik,
-			operator_name,
-			reason_code,
-			reason_name,
-			note,
-			created_at
-		)
-		SELECT
-			c.id,
-			c.session_date,
-			c.uuid,
-			c.operator_nik,
-			c.operator_name,
-			'AUTO_LOGOUT_OFFLINE',
-			'Auto Logout Mesin Offline',
-			'Session ditutup otomatis karena mesin offline lebih dari 60 menit',
-			SYSDATETIME()
-		FROM @closed c
-		WHERE NOT EXISTS (
-			SELECT 1
-			FROM dbo.machine_operator_notes n
-			WHERE n.session_id = c.id
-			  AND n.reason_code = 'AUTO_LOGOUT_OFFLINE'
-		);
-
-		SELECT COUNT(*) FROM @closed;
-	`
-
-	var autoLogoutSessions int64
-
-	if err := r.DB.QueryRowContext(ctx, autoLogoutQuery).Scan(&autoLogoutSessions); err != nil {
-		return models.MachineOfflineAutoLogoutResponse{}, err
-	}
+	// =====================================================
+	// AUTO LOGOUT OFFLINE DINONAKTIFKAN
+	// =====================================================
+	//
+	// Sebelumnya di sini ada query yang menutup session ACTIVE
+	// menjadi AUTO_LOGOUT jika mesin offline lebih dari 60 menit.
+	//
+	// Sekarang bagian itu dimatikan.
+	// Jadi:
+	// - Data machine_offline_state tetap update.
+	// - Session operator tidak akan ditutup karena mesin offline.
+	// - AUTO_LOGOUT karena ganti operator / scan baru tetap jalan
+	//   di LoginMachineOperator().
+	// =====================================================
 
 	return models.MachineOfflineAutoLogoutResponse{
 		Status:             "ok",
-		Message:            "Auto logout offline selesai diproses",
+		Message:            "Cek offline selesai, AUTO_LOGOUT_OFFLINE sedang dinonaktifkan",
 		CheckedAt:          time.Now().Format("2006-01-02 15:04:05"),
 		TotalMachines:      totalMachines,
 		OnlineMachines:     onlineMachines,
 		OfflineMachines:    offlineMachines,
-		AutoLogoutSessions: autoLogoutSessions,
+		AutoLogoutSessions: 0,
 	}, nil
 }

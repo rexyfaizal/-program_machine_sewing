@@ -54,7 +54,7 @@ func main() {
 
 	// Auto logout operator jika mesin offline >= 60 menit.
 	// Scheduler berjalan otomatis setiap 5 menit.
-	startMachineOperatorAutoLogoutScheduler(repo, 5*time.Minute)
+	//startMachineOperatorAutoLogoutScheduler(repo, 5*time.Minute)
 
 	mux := http.NewServeMux()
 
