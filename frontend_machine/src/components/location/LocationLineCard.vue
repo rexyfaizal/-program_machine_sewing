@@ -65,6 +65,17 @@ function downTimeSec(machine) {
 function productivityText(machine) {
   return `${toNumber(machine?.productivity).toFixed(2)}%`;
 }
+
+function operatorLoginTitle(machine) {
+  const name = String(machine?.operatorName || "").trim();
+  const nik = String(machine?.operatorNik || "").trim();
+
+  if (nik && name) return `Operator login: ${nik} - ${name}`;
+  if (name) return `Operator login: ${name}`;
+  if (nik) return `Operator login: ${nik}`;
+
+  return "Operator sedang login";
+}
 </script>
 
 <template>
@@ -124,15 +135,33 @@ function productivityText(machine) {
           class="machine-chip clickable"
           @click.stop="emit('openDetailMachine', machine)"
         >
-          <span
-            class="machine-dot"
-            :class="getMachineStatusClass(machine)"
-          ></span>
+          <div class="machine-status-col">
+            <span
+              class="machine-dot"
+              :class="getMachineStatusClass(machine)"
+              :title="getMachineStatusText(machine)"
+            ></span>
+
+            <span
+              v-if="machine.operatorLoggedIn"
+              class="operator-check"
+              :title="operatorLoginTitle(machine)"
+            >
+              ✓
+            </span>
+          </div>
 
           <div class="machine-info">
             <strong :title="machine.machineName">
               {{ machine.machineName }}
             </strong>
+
+            <small
+              v-if="machine.usingProcessName && machine.operatorStyleName"
+              class="style-line"
+            >
+              Style: {{ machine.operatorStyleName }}
+            </small>
 
             <small>{{ getMachineStatusText(machine) }}</small>
 
@@ -148,6 +177,36 @@ function productivityText(machine) {
           <div class="machine-tooltip">
             <div class="tooltip-title">
               {{ machine.machineName }}
+            </div>
+
+            <div
+              v-if="machine.operatorLoggedIn"
+              class="tooltip-row"
+            >
+              <span>Operator</span>
+              <strong>
+                {{
+                  machine.operatorNik && machine.operatorName
+                    ? `${machine.operatorNik} - ${machine.operatorName}`
+                    : machine.operatorName || machine.operatorNik || "Login"
+                }}
+              </strong>
+            </div>
+
+            <div
+              v-if="machine.usingProcessName && machine.operatorStyleName"
+              class="tooltip-row"
+            >
+              <span>Style</span>
+              <strong>{{ machine.operatorStyleName }}</strong>
+            </div>
+
+            <div
+              v-if="machine.usingProcessName && machine.customName"
+              class="tooltip-row"
+            >
+              <span>Mesin</span>
+              <strong>{{ machine.customName }}</strong>
             </div>
 
             <div class="tooltip-row">
@@ -452,11 +511,32 @@ function productivityText(machine) {
   border-left-color: #ffffff;
 }
 
+.machine-status-col {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 5px;
+  margin-top: 2px;
+}
+
 .machine-dot {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  margin-top: 3px;
+}
+
+.operator-check {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 }
 
 /* MacState 2 = Working = Hijau */
@@ -495,6 +575,11 @@ function productivityText(machine) {
   font-size: 10px;
   color: #64748b;
   margin-top: 2px;
+}
+
+.machine-info small.style-line {
+  color: #2563eb;
+  font-weight: 700;
 }
 
 .machine-tooltip {

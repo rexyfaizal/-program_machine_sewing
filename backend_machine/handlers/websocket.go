@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -52,8 +53,13 @@ func (h *Handler) ProductivityWS(w http.ResponseWriter, r *http.Request) {
 		date = time.Now().Format("2006-01-02")
 	}
 
+	shift := strings.TrimSpace(r.URL.Query().Get("shift"))
+
 	sendSnapshot := func() bool {
 		apiURL := "/api/productivity?date=" + url.QueryEscape(date)
+		if shift != "" {
+			apiURL += "&shift=" + url.QueryEscape(shift)
+		}
 
 		req := httptest.NewRequest(http.MethodGet, apiURL, nil)
 		rec := httptest.NewRecorder()

@@ -50,6 +50,7 @@ const {
   loadDashboard,
   normalizeRows,
   machineSettings,
+  shiftConfigMap,
 } = useDashboard();
 
 const { socketStatus, connect, close } = useProductivitySocket(normalizeRows);
@@ -62,6 +63,10 @@ const localDate = computed({
 const {
   keyword,
   locationFilter,
+  shiftFilter,
+  shiftOptions,
+  showShiftFilter,
+  productivityShift,
   locationOptions,
   filteredMachines,
   rankingMachines,
@@ -71,7 +76,7 @@ const {
   summary,
   executiveMessage,
   donutStyle,
-} = useDashboardFilters(machines);
+} = useDashboardFilters(machines, shiftConfigMap);
 
 const {
   startDate,
@@ -83,6 +88,8 @@ const {
   locationFilter,
   machineSettings,
   showNotice,
+  productivityShift,
+  shiftConfigMap,
 });
 
 watch(
@@ -119,8 +126,11 @@ async function refreshDashboardByDate() {
     localDate.value = startDate.value;
   }
 
-  await loadDashboard(startDate.value || localDate.value);
-  connect(startDate.value || localDate.value);
+  const date = startDate.value || localDate.value;
+  const shift = productivityShift.value;
+
+  await loadDashboard(date, { shift });
+  connect(date, shift);
 }
 
 function openEditModal(machine) {
@@ -171,7 +181,7 @@ async function handleSaveMachineSetting(machine) {
     showNotice("Setting manual berhasil disimpan.", "ok");
     closeEditModal();
 
-    await loadDashboard(localDate.value);
+    await loadDashboard(localDate.value, { shift: productivityShift.value });
   } catch (err) {
     showNotice(`Gagal menyimpan setting mesin: ${err.message}`, "error");
   }
@@ -191,7 +201,7 @@ async function handleDeleteMachineSetting(uuid) {
     showNotice("Setting manual berhasil dihapus.", "ok");
     closeEditModal();
 
-    await loadDashboard(localDate.value);
+    await loadDashboard(localDate.value, { shift: productivityShift.value });
   } catch (err) {
     showNotice(`Gagal hapus: ${err.message}`, "error");
   }
@@ -203,8 +213,7 @@ onMounted(async () => {
   emit("admin-mode-change", isAdmin.value);
   emit("socket-status-change", socketStatus.value);
 
-  await loadDashboard(localDate.value);
-  connect(localDate.value);
+  await refreshDashboardByDate();
 });
 
 onUnmounted(() => {
@@ -277,7 +286,10 @@ onUnmounted(() => {
       v-model:end-date="endDate"
       v-model:keyword="keyword"
       v-model:location-value="locationFilter"
+      v-model:shift-value="shiftFilter"
       :location-options="locationOptions"
+      :shift-options="shiftOptions"
+      :show-shift-filter="showShiftFilter"
       :machines="filteredMachines"
       :loading="loading || rangeExporting"
       :page-size="10"

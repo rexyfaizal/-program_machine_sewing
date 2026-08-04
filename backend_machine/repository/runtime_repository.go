@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// GetRuntimeSec menghitung Power On Duration seperti aplikasi bawaan:
+// StartTime → ShutTime (atau now jika masih ON / ShutTime kosong).
+// Tidak menambah waktu setelah ShutTime.
 func (r *Repository) GetRuntimeSec(ctx context.Context, uuid string, macState string, start, end time.Time) (int64, error) {
 	uuid = strings.TrimSpace(uuid)
 
@@ -14,50 +17,111 @@ func (r *Repository) GetRuntimeSec(ctx context.Context, uuid string, macState st
 		return 0, nil
 	}
 
-	// macState sengaja tidak dipakai dulu.
-	// Alasannya: ada kasus macState = 0, tapi runtime aktif tetap harus dihitung
-	// dari ShutTime terakhir sampai waktu aplikasi/server.
+	// macState tidak dipakai: status ON/OFF ditentukan dari ShutTime record.
 	_ = macState
 
+	// Kirim sebagai string naive supaya driver tidak geser timezone
+	// (time.Time UTC pernah membuat window jadi H-1 17:00 → H 17:00).
+	startText := start.UTC().Format("2006-01-02 15:04:05")
+	endText := end.UTC().Format("2006-01-02 15:04:05")
+
 	query := `
+DECLARE @start_time DATETIME2 = TRY_CONVERT(DATETIME2, @p_start_time);
+DECLARE @end_time DATETIME2 = TRY_CONVERT(DATETIME2, @p_end_time);
 DECLARE @server_now DATETIME2 = SYSDATETIME();
 
--- Kalau tanggal yang diminta adalah hari ini, hitung sampai waktu server sekarang.
--- Kalau tanggal lama, batasnya tetap @end_time supaya tidak melewati tanggal tersebut.
-DECLARE @waktu_aplikasi DATETIME2 =
+-- Batas hitung: hari ini sampai now, tanggal lama sampai end of day.
+DECLARE @cutoff DATETIME2 =
     CASE
         WHEN @server_now < @end_time THEN @server_now
         ELSE @end_time
     END;
 
-WITH runtime_data AS (
+WITH raw_runtime AS
+(
     SELECT
-        ISNULL(SUM(
-            CASE
-                WHEN ISNULL(TRY_CONVERT(BIGINT, [RunTime]), 0) >= 60
-                    THEN TRY_CONVERT(BIGINT, [RunTime])
-                ELSE 0
-            END
-        ), 0) AS runtime_selesai,
+        TRY_CONVERT(DATETIME2, [StartTime]) AS start_time,
 
-        MAX(TRY_CONVERT(DATETIME2, [ShutTime])) AS waktu_terakhir
+        -- ShutTime ada = mesin sudah mati → pakai ShutTime.
+        -- ShutTime kosong = masih ON → pakai cutoff (now / end of day).
+        COALESCE(
+            TRY_CONVERT(DATETIME2, [ShutTime]),
+            @cutoff
+        ) AS end_time
     FROM [sewingiot].[dbo].[Record_RunTime]
     WHERE LOWER(LTRIM(RTRIM([UUID]))) = LOWER(LTRIM(RTRIM(@uuid)))
-      AND TRY_CONVERT(DATETIME2, [StartTime]) >= @start_time
-      AND TRY_CONVERT(DATETIME2, [StartTime]) <  @end_time
+      AND TRY_CONVERT(DATETIME2, [StartTime]) < @cutoff
+      AND COALESCE(
+            TRY_CONVERT(DATETIME2, [ShutTime]),
+            @cutoff
+          ) > @start_time
+),
+clipped_runtime AS
+(
+    SELECT
+        CASE
+            WHEN start_time > @start_time THEN start_time
+            ELSE @start_time
+        END AS start_time,
+        CASE
+            WHEN end_time < @cutoff THEN end_time
+            ELSE @cutoff
+        END AS end_time
+    FROM raw_runtime
+    WHERE start_time IS NOT NULL
+      AND end_time IS NOT NULL
+),
+valid_runtime AS
+(
+    SELECT start_time, end_time
+    FROM clipped_runtime
+    WHERE end_time > start_time
+),
+ordered_runtime AS
+(
+    SELECT
+        start_time,
+        end_time,
+        MAX(end_time) OVER (
+            ORDER BY start_time, end_time
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS previous_max_end
+    FROM valid_runtime
+),
+marked_runtime AS
+(
+    SELECT
+        start_time,
+        end_time,
+        CASE
+            WHEN previous_max_end IS NULL OR start_time > previous_max_end THEN 1
+            ELSE 0
+        END AS new_group
+    FROM ordered_runtime
+),
+grouped_runtime AS
+(
+    SELECT
+        start_time,
+        end_time,
+        SUM(new_group) OVER (
+            ORDER BY start_time, end_time
+            ROWS UNBOUNDED PRECEDING
+        ) AS group_id
+    FROM marked_runtime
+),
+merged_runtime AS
+(
+    SELECT
+        group_id,
+        MIN(start_time) AS start_time,
+        MAX(end_time) AS end_time
+    FROM grouped_runtime
+    GROUP BY group_id
 )
 SELECT
-    CAST(
-        ISNULL(runtime_selesai, 0)
-        +
-        CASE
-            WHEN waktu_terakhir IS NOT NULL
-             AND waktu_terakhir < @waktu_aplikasi
-                THEN DATEDIFF_BIG(SECOND, waktu_terakhir, @waktu_aplikasi)
-            ELSE 0
-        END
-    AS BIGINT) AS total_runtime_detik
-FROM runtime_data;
+    CAST(ISNULL(SUM(DATEDIFF_BIG(SECOND, start_time, end_time)), 0) AS BIGINT) AS total_runtime_detik
+FROM merged_runtime;
 `
 
 	var runtimeSec sql.NullInt64
@@ -66,8 +130,8 @@ FROM runtime_data;
 		ctx,
 		query,
 		sql.Named("uuid", uuid),
-		sql.Named("start_time", start),
-		sql.Named("end_time", end),
+		sql.Named("p_start_time", startText),
+		sql.Named("p_end_time", endText),
 	).Scan(&runtimeSec)
 
 	if err != nil {

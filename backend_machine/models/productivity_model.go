@@ -30,6 +30,9 @@ type ProductivityRow struct {
 	MacType          string `json:"macType"`
 	MacState         string `json:"macState"`
 
+	ShiftCode string `json:"shiftCode,omitempty"`
+	ShiftName string `json:"shiftName,omitempty"`
+
 	RuntimeSec   int64   `json:"runtimeSec"`
 	RuntimeHours float64 `json:"runtimeHours"`
 

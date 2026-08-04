@@ -17,6 +17,9 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		date = time.Now().Format("2006-01-02")
 	}
 
+	shiftParam := strings.TrimSpace(r.URL.Query().Get("shift"))
+	workDate, shiftCode := utils.ResolveRequestedShift(date, shiftParam, time.Now())
+
 	ctx, cancel := contextWithTimeout(r, 60*time.Second)
 	defer cancel()
 
@@ -27,7 +30,19 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Tanggal request:", date)
+	settings, err := h.Repo.GetMachineSettings(ctx)
+	if err != nil {
+		log.Println("Gagal ambil machine setting manual:", err)
+		settings = map[string]models.MachineSetting{}
+	}
+
+	shiftConfigMap, err := h.Repo.GetLineShiftConfigMap(ctx)
+	if err != nil {
+		log.Println("Gagal ambil line shift config:", err)
+		shiftConfigMap = map[string]models.LineShiftConfig{}
+	}
+
+	log.Println("Tanggal request:", date, "workDate:", workDate, "shift:", shiftCode)
 	log.Println("Jumlah mesin dari machineinfo:", len(machines))
 
 	rows := make([]models.ProductivityRow, 0)
@@ -40,7 +55,25 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 	var good, normal, bad int
 
 	for _, m := range machines {
-		row, err := h.Repo.GetMachineProductivity(ctx, m, date)
+		key := strings.ToLower(strings.TrimSpace(m.UUID))
+		location := ""
+		if setting, ok := settings[key]; ok {
+			location = setting.Location
+		}
+
+		var row models.ProductivityRow
+		var err error
+
+		useShift, segments, schedule := utils.ResolveShiftSegmentsForLocation(location, shiftConfigMap)
+		if useShift && shiftParam != "" {
+			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, shiftCode, segments, schedule)
+		} else if useShift {
+			// Tanpa query shift: hitung ALL shifts untuk line yang pakai shift.
+			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, utils.ShiftALL, segments, schedule)
+		} else {
+			row, err = h.Repo.GetMachineProductivity(ctx, m, date)
+		}
+
 		if err != nil {
 			log.Printf("skip machine table=%s uuid=%s: %v", m.TableName, m.UUID, err)
 			continue
@@ -64,39 +97,22 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Merge data manual dari machine_setting_manual:
-	// custom_name, location, pic, spv.
-	settings, err := h.Repo.GetMachineSettings(ctx)
-	if err != nil {
-		log.Println("Gagal ambil machine setting manual:", err)
-	} else {
-		for i := range rows {
-			rows[i].OriginalNickName = rows[i].NickName
+	for i := range rows {
+		rows[i].OriginalNickName = rows[i].NickName
 
-			key := strings.ToLower(strings.TrimSpace(rows[i].UUID))
+		key := strings.ToLower(strings.TrimSpace(rows[i].UUID))
 
-			if setting, ok := settings[key]; ok {
-				if setting.CustomName != "" {
-					rows[i].NickName = setting.CustomName
-					rows[i].MachineName = setting.CustomName
-				}
-
-				rows[i].Location = setting.Location
-				rows[i].Pic = setting.Pic
-				rows[i].Spv = setting.Spv
+		if setting, ok := settings[key]; ok {
+			if setting.CustomName != "" {
+				rows[i].NickName = setting.CustomName
+				rows[i].MachineName = setting.CustomName
 			}
+
+			rows[i].Location = setting.Location
+			rows[i].Pic = setting.Pic
+			rows[i].Spv = setting.Spv
 		}
 	}
-
-	// Simpan / update snapshot harian ke logs_machine.
-	// Logic di repository:
-	// - Jika log_date + uuid belum ada  => INSERT
-	// - Jika log_date + uuid sudah ada  => UPDATE
-	// - Jika ganti hari                 => INSERT row baru
-	// - Jika uuid mesin baru            => INSERT row baru
-	// if err := h.Repo.SaveLogsMachine(ctx, date, rows); err != nil {
-	// 	log.Println("Gagal simpan logs_machine:", err)
-	// }
 
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].ProductivityPct == rows[j].ProductivityPct {
@@ -110,6 +126,14 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		avg = utils.Round2(sumPct / float64(len(rows)))
 	}
 
+	workHours := 8.0
+	if shiftCode != "" && shiftCode != utils.ShiftALL {
+		mins := utils.EffectiveWorkMinutes(shiftCode)
+		if mins > 0 {
+			workHours = utils.Round2(float64(mins) / 60)
+		}
+	}
+
 	resp := models.APIResponse{
 		Summary: models.Summary{
 			Date:        date,
@@ -118,11 +142,13 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 			Normal:      normal,
 			Bad:         bad,
 			AvgPct:      avg,
-			WorkHours:   8,
+			WorkHours:   workHours,
 			TotalOutput: totalOutput,
 			TotalAlarm:  totalAlarm,
 			TotalProc:   totalProc,
 			TotalRun:    totalRun,
+			ShiftCode:   shiftCode,
+			ShiftName:   utils.ShiftDisplayName(shiftCode),
 		},
 		Rows: rows,
 	}

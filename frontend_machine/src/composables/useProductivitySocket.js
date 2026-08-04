@@ -12,6 +12,7 @@ export function useProductivitySocket(onData) {
   let reconnectTimer = null;
   let manualClose = false;
   let lastDate = "";
+  let lastShift = "";
 
   function clearReconnectTimer() {
     if (reconnectTimer) {
@@ -20,12 +21,14 @@ export function useProductivitySocket(onData) {
     }
   }
 
-  function buildSocketUrl(date) {
+  function buildSocketUrl(date, shift) {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const params = new URLSearchParams();
 
-    return `${protocol}://${window.location.host}/ws/productivity?date=${encodeURIComponent(
-      date || ""
-    )}`;
+    if (date) params.set("date", date);
+    if (shift) params.set("shift", shift);
+
+    return `${protocol}://${window.location.host}/ws/productivity?${params.toString()}`;
   }
 
   function closeExistingSocket() {
@@ -44,7 +47,7 @@ export function useProductivitySocket(onData) {
     socket.value = null;
   }
 
-  function scheduleReconnect(date) {
+  function scheduleReconnect(date, shift) {
     clearReconnectTimer();
 
     socketStatus.value = "connecting";
@@ -53,13 +56,14 @@ export function useProductivitySocket(onData) {
       reconnectTimer = null;
 
       if (!manualClose) {
-        connect(date || lastDate);
+        connect(date || lastDate, shift || lastShift);
       }
     }, 5000);
   }
 
-  function connect(date) {
+  function connect(date, shift = "") {
     lastDate = date || lastDate;
+    lastShift = shift === undefined || shift === null ? lastShift : String(shift || "");
 
     clearReconnectTimer();
     closeExistingSocket();
@@ -67,7 +71,7 @@ export function useProductivitySocket(onData) {
     manualClose = false;
     socketStatus.value = "connecting";
 
-    const url = buildSocketUrl(lastDate);
+    const url = buildSocketUrl(lastDate, lastShift);
     const ws = new WebSocket(url);
 
     socket.value = ws;
@@ -91,7 +95,6 @@ export function useProductivitySocket(onData) {
           onData(json);
         }
 
-        // Selama message masuk, status tetap aktif
         socketStatus.value = "active";
       } catch (err) {
         socketStatus.value = "error";
@@ -120,7 +123,7 @@ export function useProductivitySocket(onData) {
         return;
       }
 
-      scheduleReconnect(lastDate);
+      scheduleReconnect(lastDate, lastShift);
     };
   }
 

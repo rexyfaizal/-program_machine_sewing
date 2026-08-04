@@ -2,8 +2,10 @@ import { ref } from "vue";
 import {
   getMachineOperatorReport,
   getMachineSettings,
+  getLineShiftConfig,
   getProductivity,
 } from "../api/machineApi";
+import { buildLineShiftConfigMap } from "../utils/gm3Shift";
 
 const WORK_SECONDS_PER_DAY = 28800;
 
@@ -14,6 +16,7 @@ export function useDashboard() {
   const lastUpdate = ref("-");
   const machineSettings = ref(new Map());
   const activeOperatorMap = ref(new Map());
+  const shiftConfigMap = ref(new Map());
 
   let dashboardRequestSeq = 0;
   let inFlightRequest = null;
@@ -454,6 +457,19 @@ export function useDashboard() {
     return machineSettings.value;
   }
 
+  async function loadShiftConfigs() {
+    try {
+      const data = await getLineShiftConfig("");
+      const lines = Array.isArray(data?.lines) ? data.lines : [];
+      shiftConfigMap.value = buildLineShiftConfigMap(lines);
+    } catch (err) {
+      console.warn("Gagal load line shift config:", err);
+      shiftConfigMap.value = new Map();
+    }
+
+    return shiftConfigMap.value;
+  }
+
   async function loadActiveOperators(date) {
     const data = await getMachineOperatorReport(date);
     activeOperatorMap.value = buildActiveOperatorMap(data);
@@ -663,10 +679,12 @@ export function useDashboard() {
     return normalized;
   }
 
-  async function loadDashboard(date) {
+  async function loadDashboard(date, options = {}) {
     const requestDate = String(date || "").trim();
+    const requestShift = String(options.shift || "").trim();
+    const requestKey = `${requestDate}|${requestShift}`;
 
-    if (loading.value && inFlightRequest && inFlightDate === requestDate) {
+    if (loading.value && inFlightRequest && inFlightDate === requestKey) {
       return inFlightRequest;
     }
 
@@ -674,14 +692,15 @@ export function useDashboard() {
 
     loading.value = true;
     errorMessage.value = "";
-    inFlightDate = requestDate;
+    inFlightDate = requestKey;
 
     const request = (async () => {
-      const [settingsResult, operatorResult, productivityResult] =
+      const [settingsResult, operatorResult, productivityResult, shiftConfigResult] =
         await Promise.allSettled([
           getMachineSettings(),
           getMachineOperatorReport(requestDate),
-          getProductivity(requestDate),
+          getProductivity(requestDate, { shift: requestShift }),
+          getLineShiftConfig(""),
         ]);
 
       if (requestSeq !== dashboardRequestSeq) return;
@@ -690,6 +709,15 @@ export function useDashboard() {
         machineSettings.value = buildMachineSettingsMap(settingsResult.value);
       } else {
         console.warn("Gagal load machine settings:", settingsResult.reason);
+      }
+
+      if (shiftConfigResult.status === "fulfilled") {
+        const lines = Array.isArray(shiftConfigResult.value?.lines)
+          ? shiftConfigResult.value.lines
+          : [];
+        shiftConfigMap.value = buildLineShiftConfigMap(lines);
+      } else {
+        console.warn("Gagal load line shift config:", shiftConfigResult.reason);
       }
 
       if (operatorResult.status === "fulfilled") {
@@ -737,8 +765,10 @@ export function useDashboard() {
     lastUpdate,
     machineSettings,
     activeOperatorMap,
+    shiftConfigMap,
 
     loadMachineSettings,
+    loadShiftConfigs,
     loadActiveOperators,
     loadDashboard,
     normalizeRows,

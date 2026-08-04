@@ -47,6 +47,18 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  shiftValue: {
+    type: String,
+    default: "CURRENT",
+  },
+  shiftOptions: {
+    type: Array,
+    default: () => [],
+  },
+  showShiftFilter: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -56,6 +68,7 @@ const emit = defineEmits([
   "update:endDate",
   "update:keyword",
   "update:locationValue",
+  "update:shiftValue",
   "dateChange",
   "download",
 ]);
@@ -94,11 +107,15 @@ const {
       :keyword="props.keyword"
       :location-value="props.locationValue"
       :location-options="props.locationOptions"
+      :shift-value="props.shiftValue"
+      :shift-options="props.shiftOptions"
+      :show-shift-filter="props.showShiftFilter"
       @update:selected-date="emit('update:selectedDate', $event)"
       @update:start-date="emit('update:startDate', $event)"
       @update:end-date="emit('update:endDate', $event)"
       @update:keyword="emit('update:keyword', $event)"
       @update:location-value="emit('update:locationValue', $event)"
+      @update:shift-value="emit('update:shiftValue', $event)"
       @date-change="emit('dateChange')"
       @download="emit('download')"
     />

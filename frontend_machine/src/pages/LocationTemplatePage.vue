@@ -4,6 +4,7 @@ import LocationInfoCards from "../components/location/LocationInfoCards.vue";
 import LocationLineGrid from "../components/location/LocationLineGrid.vue";
 import LineModal from "../components/location/LineModal.vue";
 import MachineLocationModal from "../components/location/MachineLocationModal.vue";
+import ShiftConfigModal from "../components/location/ShiftConfigModal.vue";
 
 import { useLocationTemplate } from "../composables/useLocationTemplate";
 
@@ -21,6 +22,9 @@ const {
   lineModalMode,
   oldLineName,
   lineFormName,
+  shiftModalOpen,
+  shiftModalSaving,
+  shiftConfigs,
   draggingLine,
   dragOverLine,
   form,
@@ -37,6 +41,9 @@ const {
   closeLineModal,
   saveLine,
   deleteLine,
+  openShiftConfigModal,
+  closeShiftConfigModal,
+  saveShiftConfig,
   onLineDragStart,
   onLineDragEnter,
   onLineDragOver,
@@ -63,8 +70,10 @@ function openDetailMachine(machine) {
       v-model:selected-factory="selectedFactory"
       v-model:selected-date="selectedDate"
       :factory-options="factoryOptions"
+      :is-admin="isAdmin"
       @factory-change="selectFactory"
       @refresh="loadData"
+      @open-shift-config="openShiftConfigModal"
     />
 
     <div v-if="notice" class="notice">
@@ -115,6 +124,16 @@ function openDetailMachine(machine) {
       @save="saveLine"
     />
 
+    <ShiftConfigModal
+      :show="shiftModalOpen"
+      :factory="selectedFactory"
+      :lines="activeLines"
+      :saved-configs="shiftConfigs"
+      :saving="shiftModalSaving"
+      @close="closeShiftConfigModal"
+      @save="saveShiftConfig"
+    />
+
     <MachineLocationModal
       :show="modalOpen"
       :mode="modalMode"
@@ -150,14 +169,8 @@ function openDetailMachine(machine) {
 }
 
 .notice.error {
-  color: #b91c1c;
-  background: #fee2e2;
+  background: #fef2f2;
   border-color: #fecaca;
-}
-
-@media (max-width: 768px) {
-  .location-page {
-    padding: 16px;
-  }
+  color: #b91c1c;
 }
 </style>

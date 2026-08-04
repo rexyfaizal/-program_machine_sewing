@@ -1,4 +1,10 @@
 import * as XLSX from "xlsx";
+import {
+  getExportShiftLabel,
+  getGM3ShiftWindow,
+  isDateInShiftWindow,
+  resolveLineShiftForLocation,
+} from "./gm3Shift";
 
 export function toNumber(value) {
   const n = Number(value);
@@ -214,44 +220,169 @@ export function normalizeExportNote(row) {
   const endClock = formatExportTime(endTime);
   const statusUpper = String(status || "").toUpperCase();
 
-  let noteText = "";
+  let statusText = "";
 
   if (statusUpper === "CLOSED" || endTime) {
-    noteText = `Selesai ${durationText}`;
+    statusText = `Selesai ${durationText}`;
   } else {
-    noteText = `Sedang berjalan ${durationText}`;
+    statusText = `Sedang berjalan ${durationText}`;
   }
+
+  // Bersihkan deskripsi bebas: buang teks sistem / duplikat reason / durasi dobel.
+  let freeNote = note;
+  const freeUpper = freeNote.toUpperCase();
+  const reasonUpper = reasonName.toUpperCase();
 
   if (
-    note &&
-    !isSystemDurationNote(note, durationText) &&
-    !isAutoLogoutText(note)
+    !freeNote ||
+    isSystemDurationNote(freeNote, durationText) ||
+    isAutoLogoutText(freeNote) ||
+    freeUpper === reasonUpper ||
+    freeUpper === `${reasonUpper} - SELESAI` ||
+    freeUpper === `${reasonUpper} SELESAI` ||
+    /^[A-Z0-9 \-_/]+ - SELESAI$/.test(freeUpper) ||
+    /^SELESAI(\s+\d{2}:\d{2}:\d{2})?$/.test(freeUpper) ||
+    /^SEDANG BERJALAN(\s+\d{2}:\d{2}:\d{2})?$/.test(freeUpper)
   ) {
-    noteText = `${noteText} | ${note}`;
+    freeNote = "";
+  } else {
+    freeNote = freeNote
+      .replace(/\s*-\s*Selesai\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+      .replace(/\s+Selesai\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+      .replace(/\s*-\s*Sedang berjalan\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+      .trim();
+
+    if (
+      !freeNote ||
+      freeNote.toUpperCase() === reasonUpper ||
+      isSystemDurationNote(freeNote, durationText)
+    ) {
+      freeNote = "";
+    }
   }
 
+  let body = statusText;
+
+  if (freeNote) {
+    body = `${statusText} | ${freeNote}`;
+  }
+
+  const label = reasonName || "Other";
+
   if (startClock && endClock) {
-    return `${startClock}-${endClock} ${reasonName}: ${noteText}`;
+    return `${startClock}-${endClock} ${label}: ${body}`;
   }
 
   if (startClock) {
-    return `${startClock}-${reasonName}: ${noteText}`;
+    return `${startClock}-${label}: ${body}`;
   }
 
   if (reasonName) {
-    return `${reasonName}: ${noteText}`;
+    return `${label}: ${body}`;
   }
 
-  return noteText;
+  return body;
 }
 
-export function buildOperatorExportMap(reportData) {
+/**
+ * Bangun map operator per UUID mesin.
+ * options.workDate + options.shiftCode → filter note/session hanya yang overlap shift.
+ * options.shiftConfigMap + options.getLocationByUuid → window per line.
+ * ALL / kosong / tanpa window → seharian (perilaku lama).
+ */
+export function buildOperatorExportMap(reportData, options = {}) {
+  const workDate = String(options.workDate || "").trim();
+  const shiftCode = String(options.shiftCode || "ALL").trim().toUpperCase();
+  const shiftConfigMap = options.shiftConfigMap || new Map();
+  const getLocationByUuid =
+    typeof options.getLocationByUuid === "function"
+      ? options.getLocationByUuid
+      : () => "";
+
+  const resolveScheduleForUuid = (uuid) => {
+    const location = getLocationByUuid(uuid);
+    const resolved = resolveLineShiftForLocation(location, shiftConfigMap);
+    if (!resolved.useShift) return null;
+    return resolved.schedule;
+  };
+
+  const noteInShift = (noteRow, schedule) => {
+    const window = getGM3ShiftWindow(workDate, shiftCode, schedule);
+    if (!window) return true;
+
+    const startAt =
+      getVal(
+        noteRow,
+        "createdAt",
+        "CreatedAt",
+        "created_at",
+        "startTime",
+        "StartTime",
+        "start_time"
+      ) || "";
+
+    return isDateInShiftWindow(startAt, workDate, shiftCode, schedule);
+  };
+
+  const sessionInShift = (row, schedule) => {
+    const window = getGM3ShiftWindow(workDate, shiftCode, schedule);
+    if (!window) return true;
+
+    const loginAt =
+      getVal(
+        row,
+        "loginTime",
+        "LoginTime",
+        "login_time",
+        "startTime",
+        "StartTime",
+        "createdAt",
+        "CreatedAt"
+      ) || "";
+
+    const logoutAt =
+      getVal(row, "logoutTime", "LogoutTime", "logout_time", "endTime", "EndTime") ||
+      "";
+
+    // Session masuk shift jika login di dalam window, atau overlap window.
+    if (isDateInShiftWindow(loginAt, workDate, shiftCode, schedule)) {
+      return true;
+    }
+
+    if (!loginAt || !logoutAt) {
+      return false;
+    }
+
+    const loginRaw = String(loginAt).trim();
+    const logoutRaw = String(logoutAt).trim();
+    const loginDate = new Date(
+      loginRaw.includes("T") ? loginRaw : loginRaw.replace(" ", "T")
+    );
+    const logoutDate = new Date(
+      logoutRaw.includes("T") ? logoutRaw : logoutRaw.replace(" ", "T")
+    );
+
+    if (Number.isNaN(loginDate.getTime()) || Number.isNaN(logoutDate.getTime())) {
+      return false;
+    }
+
+    return (
+      loginDate.getTime() < window.end.getTime() &&
+      logoutDate.getTime() > window.start.getTime()
+    );
+  };
+
   const tempMap = new Map();
 
   extractRows(reportData).forEach((row) => {
     const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
 
     if (!uuid) return;
+
+    const schedule = resolveScheduleForUuid(uuid);
+    const filterByShift = Boolean(
+      schedule && getGM3ShiftWindow(workDate, shiftCode, schedule)
+    );
 
     const rowStatus = String(getVal(row, "status", "Status") || "").trim();
     const key = normalizeText(uuid);
@@ -260,10 +391,14 @@ export function buildOperatorExportMap(reportData) {
       tempMap.set(key, {
         operatorRows: [],
         rowKeySet: new Set(),
+        processName: "",
+        styleName: "",
+        hasActiveProcess: false,
       });
     }
 
     const current = tempMap.get(key);
+    const isActive = ["ACTIVE", "OPEN"].includes(rowStatus.toUpperCase());
 
     const operatorNik = String(
       getVal(row, "operatorNik", "OperatorNik", "operator_nik") || ""
@@ -271,18 +406,59 @@ export function buildOperatorExportMap(reportData) {
 
     const operatorName = String(
       getVal(row, "operatorName", "OperatorName", "operator_name") || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const processName = String(
+      getVal(
+        row,
+        "processName",
+        "ProcessName",
+        "process_name",
+        "process",
+        "Process"
+      ) || ""
     ).trim();
+
+    const styleName = String(
+      getVal(row, "styleName", "StyleName", "style_name", "style", "Style") ||
+        ""
+    ).trim();
+
+    const rawNotes = extractRows(
+      getVal(row, "notes", "Notes", "lastNotes", "LastNotes") || []
+    ).filter((noteRow) => noteInShift(noteRow, schedule));
+
+    // Skip session yang sama sekali tidak relevan dengan shift terpilih.
+    if (filterByShift && !rawNotes.length && !sessionInShift(row, schedule)) {
+      return;
+    }
+
+    // Sama seperti dashboard: utamakan process/style dari session ACTIVE di shift ini.
+    if (
+      isActive &&
+      processName &&
+      (!filterByShift || sessionInShift(row, schedule))
+    ) {
+      current.processName = processName;
+      current.styleName = styleName;
+      current.hasActiveProcess = true;
+    } else if (!current.hasActiveProcess) {
+      if (processName && !current.processName) {
+        current.processName = processName;
+      }
+      if (styleName && !current.styleName) {
+        current.styleName = styleName;
+      }
+    }
 
     const operator =
       operatorNik && operatorName
         ? `${operatorNik} - ${operatorName}`
         : operatorName || operatorNik || "";
 
-    const notes = extractRows(
-      getVal(row, "notes", "Notes", "lastNotes", "LastNotes") || []
-    )
-      .map(normalizeExportNote)
-      .filter(Boolean);
+    const notes = rawNotes.map(normalizeExportNote).filter(Boolean);
 
     const activeLossReasonCode = String(
       getVal(
@@ -324,7 +500,14 @@ export function buildOperatorExportMap(reportData) {
       activeLossReasonLabel &&
       !isAutoLogoutText(activeLossReasonLabel) &&
       !isAutoLogoutText(rowStatus) &&
-      !notes.length
+      !notes.length &&
+      (!filterByShift ||
+        isDateInShiftWindow(
+          activeLossStartTime,
+          workDate,
+          shiftCode,
+          schedule
+        ))
     ) {
       notes.push(
         normalizeExportNote({
@@ -337,8 +520,18 @@ export function buildOperatorExportMap(reportData) {
       );
     }
 
-    if (!notes.length && operator && !isAutoLogoutText(rowStatus)) {
+    if (
+      !notes.length &&
+      operator &&
+      !isAutoLogoutText(rowStatus) &&
+      (!filterByShift || sessionInShift(row, schedule))
+    ) {
       notes.push("");
+    }
+
+    // Setelah filter shift, session tanpa note relevan → jangan tampilkan operator.
+    if (!notes.length) {
+      return;
     }
 
     notes.forEach((note) => {
@@ -348,7 +541,7 @@ export function buildOperatorExportMap(reportData) {
         return;
       }
 
-      const rowKey = `${operator}||${cleanNote}`;
+      const rowKey = `${operator}||${processName}||${styleName}||${cleanNote}`;
 
       if (current.rowKeySet.has(rowKey)) {
         return;
@@ -357,7 +550,11 @@ export function buildOperatorExportMap(reportData) {
       current.rowKeySet.add(rowKey);
       current.operatorRows.push({
         operator,
+        operatorNik,
+        operatorName,
         note: cleanNote,
+        processName,
+        styleName,
       });
     });
   });
@@ -367,6 +564,8 @@ export function buildOperatorExportMap(reportData) {
   tempMap.forEach((value, key) => {
     map.set(key, {
       operatorRows: value.operatorRows,
+      processName: value.processName,
+      styleName: value.styleName,
     });
   });
 
@@ -463,7 +662,9 @@ export function normalizeRangeItem(
   row,
   dateText,
   operatorMap = new Map(),
-  getManualSettingByUuid = () => null
+  getManualSettingByUuid = () => null,
+  shiftCode = "",
+  shiftConfigMap = new Map()
 ) {
   const uuid = String(getVal(row, "uuid", "UUID") || "");
   const setting = getManualSettingByUuid(uuid);
@@ -512,25 +713,68 @@ export function normalizeRangeItem(
       "name",
       "Name"
     ) || uuid
-  );
-
-  const machineName = setting?.customName || backendName;
+  ).trim();
 
   const locationFromApi = String(getVal(row, "location", "Location") || "");
   const location = setting?.location || locationFromApi || "-";
+  const locationGroup = getLocationGroup(location);
+  const lineShift = resolveLineShiftForLocation(location, shiftConfigMap);
 
   const operatorInfo = operatorMap.get(normalizeText(uuid)) || {};
   const operatorRows = Array.isArray(operatorInfo.operatorRows)
     ? operatorInfo.operatorRows
     : [];
 
+  const processFromOperatorRows = String(
+    operatorRows.find((item) => String(item.processName || "").trim())
+      ?.processName || ""
+  ).trim();
+
+  const styleFromOperatorRows = String(
+    operatorRows.find((item) => String(item.styleName || "").trim())
+      ?.styleName || ""
+  ).trim();
+
+  const processFromOperatorInfo = String(operatorInfo.processName || "").trim();
+  const styleFromOperatorInfo = String(operatorInfo.styleName || "").trim();
+
+  // Sama dashboard: display name = process operator, fallback custom/backend name.
+  const operatorProcessName =
+    processFromOperatorInfo || processFromOperatorRows;
+  const operatorStyleName = styleFromOperatorInfo || styleFromOperatorRows;
+
+  const originalMesin = setting?.customName || backendName || uuid;
+  const machineName = operatorProcessName || originalMesin;
+
+  const apiShiftCode = String(
+    getVal(row, "shiftCode", "ShiftCode", "shift_code") || ""
+  ).trim();
+
+  const apiShiftName = String(
+    getVal(row, "shiftName", "ShiftName", "shift_name") || ""
+  ).trim();
+
+  const resolvedShiftCode = apiShiftCode || shiftCode || "";
+  const resolvedShiftName =
+    apiShiftName ||
+    getExportShiftLabel(locationGroup, resolvedShiftCode, {
+      useShift: lineShift.useShift,
+      schedule: lineShift.schedule,
+      explicitDisabled: !lineShift.useShift,
+    });
+
   return {
     dateText,
     tanggal: formatExcelDate(dateText),
     hari: getDayName(dateText),
+    uuid,
     mesin: machineName,
+    originalMesin,
+    styleName: operatorStyleName,
     location,
-    locationGroup: getLocationGroup(location),
+    locationGroup,
+    shiftCode: resolvedShiftCode,
+    shiftName: resolvedShiftName,
     operatorRows,
     runtime,
     procTime,
@@ -559,49 +803,119 @@ export function safeFileName(value) {
     .replace(/\s+/g, "_");
 }
 
-function makeBlankRow(baseRow) {
-  const blank = {};
+function resolveOperatorNikName(item) {
+  const nik = String(item?.operatorNik || "").trim();
+  let name = String(item?.operatorName || "").trim();
 
-  Object.keys(baseRow).forEach((key) => {
-    blank[key] = "";
-  });
+  if (nik || name) {
+    return {
+      operatorNik: nik,
+      operatorName: name.toUpperCase(),
+    };
+  }
 
-  return blank;
+  const combined = String(item?.operator || "").trim();
+
+  if (!combined) {
+    return { operatorNik: "", operatorName: "" };
+  }
+
+  const parts = combined.split(" - ");
+
+  if (parts.length >= 2) {
+    return {
+      operatorNik: String(parts[0] || "").trim(),
+      operatorName: parts.slice(1).join(" - ").trim().toUpperCase(),
+    };
+  }
+
+  if (/^\d+$/.test(combined)) {
+    return { operatorNik: combined, operatorName: "" };
+  }
+
+  return { operatorNik: "", operatorName: combined.toUpperCase() };
 }
 
-export function expandOperatorRows(baseRow, operatorRows) {
-  const rows = Array.isArray(operatorRows) ? operatorRows : [];
+function isUsefulOperatorRow(item) {
+  const { operatorNik, operatorName } = resolveOperatorNikName(item);
+  const note = String(item?.note || "").trim();
+
+  return Boolean(operatorNik || operatorName || note);
+}
+
+export function expandOperatorRows(baseRow, operatorRows, options = {}) {
+  const fallbackMesin = String(
+    options.fallbackMesin || baseRow.Mesin || ""
+  ).trim();
+  const fallbackStyle = String(
+    options.fallbackStyle || baseRow.Style || ""
+  ).trim();
+
+  let rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
+    isUsefulOperatorRow
+  );
+
+  // Utamakan baris yang punya note (seperti contoh Excel).
+  const rowsWithNotes = rows.filter((item) => String(item?.note || "").trim());
+  if (rowsWithNotes.length) {
+    rows = rowsWithNotes;
+  }
 
   if (!rows.length) {
     return [
       {
         ...baseRow,
-        Operator: "",
+        Mesin: fallbackMesin,
+        Style: fallbackStyle,
+        "Operator NIK": "",
+        "Operator Name": "",
         "Operator Note": "",
       },
     ];
   }
 
-  let lastOperator = "";
+  // Urutkan: NIK → Name → Note.
+  const sortedRows = rows.slice().sort((a, b) => {
+    const left = resolveOperatorNikName(a);
+    const right = resolveOperatorNikName(b);
 
-  return rows.map((item, index) => {
-    const operator = String(item.operator || "").trim();
-    const note = String(item.note || "").trim();
+    const nikCmp = left.operatorNik.localeCompare(right.operatorNik);
+    if (nikCmp !== 0) return nikCmp;
 
-    const row = index === 0 ? { ...baseRow } : makeBlankRow(baseRow);
+    const nameCmp = left.operatorName.localeCompare(right.operatorName);
+    if (nameCmp !== 0) return nameCmp;
 
-    row.Operator = operator && operator !== lastOperator ? operator : "";
-    row["Operator Note"] = note;
+    return String(a?.note || "").localeCompare(String(b?.note || ""));
+  });
 
-    if (operator) {
-      lastOperator = operator;
+  // Pola seperti gambar:
+  // - Baris pertama tiap operator: isi NIK + Name + Note
+  // - Baris note berikutnya: NIK/Name kosong, Note tetap terisi
+  let lastOperatorKey = "";
+
+  return sortedRows.map((item) => {
+    const { operatorNik, operatorName } = resolveOperatorNikName(item);
+    const processName = String(item?.processName || "").trim();
+    const styleName = String(item?.styleName || "").trim();
+    const operatorKey = `${operatorNik}||${operatorName}`;
+    const isFirstOfOperator = operatorKey !== lastOperatorKey;
+
+    if (isFirstOfOperator) {
+      lastOperatorKey = operatorKey;
     }
 
-    return row;
+    return {
+      ...baseRow,
+      Mesin: isFirstOfOperator ? processName || fallbackMesin : "",
+      Style: isFirstOfOperator ? styleName || fallbackStyle : "",
+      "Operator NIK": isFirstOfOperator ? operatorNik : "",
+      "Operator Name": isFirstOfOperator ? operatorName : "",
+      "Operator Note": String(item?.note || "").trim(),
+    };
   });
 }
 
-export function buildRangeDetailRows(items) {
+export function buildRangeDetailRows(items, shiftCode = "") {
   return items
     .slice()
     .sort((a, b) => {
@@ -619,12 +933,22 @@ export function buildRangeDetailRows(items) {
       return String(a.mesin).localeCompare(String(b.mesin));
     })
     .flatMap((item) => {
+      const area = getLocationGroup(item.location);
+      const shift =
+        item.shiftName ||
+        getExportShiftLabel(area, item.shiftCode || shiftCode, {
+          useShift: area === "GM3" || Boolean(item.shiftCode),
+          schedule: null,
+        });
+
       const baseRow = {
         Tanggal: item.tanggal,
         Hari: item.hari,
-        Area: getLocationGroup(item.location),
-        Mesin: item.mesin,
+        Shift: shift,
+        Area: area,
         Location: item.location,
+        Mesin: item.mesin,
+        Style: item.styleName || "",
         "Power On Duration": formatSeconds(item.runtime),
         "Running Time": formatSeconds(item.procTime),
         "Loss Time": formatSeconds(item.lossTime),
@@ -632,23 +956,36 @@ export function buildRangeDetailRows(items) {
         Status: item.status,
       };
 
-      return expandOperatorRows(baseRow, item.operatorRows);
+      return expandOperatorRows(baseRow, item.operatorRows, {
+        fallbackMesin: item.originalMesin || item.mesin,
+        fallbackStyle: item.styleName || "",
+      });
     });
 }
 
-export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd) {
+export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode = "") {
   const map = new Map();
 
   items.forEach((item) => {
     const area = getLocationGroup(item.location);
-    const key = `${area}||${item.location}||${item.mesin}`;
+    const shift =
+      item.shiftName ||
+      getExportShiftLabel(area, item.shiftCode || shiftCode, {
+        useShift: Boolean(item.shiftName) || area === "GM3",
+        schedule: null,
+      });
+    const uuid = String(item.uuid || "").trim() || `${item.location}||${item.originalMesin || item.mesin}`;
+    const key = `${area}||${shift}||${uuid}`;
 
     if (!map.has(key)) {
       map.set(key, {
         periode: `${formatExcelDate(rangeStart)} - ${formatExcelDate(rangeEnd)}`,
+        shift,
         area,
         location: item.location,
         mesin: item.mesin,
+        styleName: item.styleName || "",
+        originalMesin: item.originalMesin || item.mesin,
         totalPowerOn: 0,
         totalRunning: 0,
         totalLoss: 0,
@@ -663,19 +1000,37 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd) {
     current.totalRunning += Number(item.procTime || 0);
     current.totalLoss += Number(item.lossTime || 0);
 
+    // Update nama tampilan ke process/style terbaru (selaras dashboard).
+    if (item.mesin && item.mesin !== item.originalMesin) {
+      current.mesin = item.mesin;
+    }
+    if (item.styleName) {
+      current.styleName = item.styleName;
+    }
+    if (item.location) {
+      current.location = item.location;
+    }
+
     const operatorRows = Array.isArray(item.operatorRows)
       ? item.operatorRows
       : [];
 
     operatorRows.forEach((operatorRow) => {
+      const { operatorNik, operatorName } = resolveOperatorNikName(operatorRow);
       const operator = String(operatorRow.operator || "").trim();
       const note = String(operatorRow.note || "").trim();
+      const processName = String(operatorRow.processName || "").trim();
+      const styleName = String(operatorRow.styleName || "").trim();
 
-      if (isAutoLogoutText(operator) || isAutoLogoutText(note)) {
+      if (
+        isAutoLogoutText(operator) ||
+        isAutoLogoutText(operatorName) ||
+        isAutoLogoutText(note)
+      ) {
         return;
       }
 
-      const rowKey = `${operator}||${note}`;
+      const rowKey = `${operatorNik}||${operatorName}||${processName}||${styleName}||${note}`;
 
       if (current.operatorRowKeySet.has(rowKey)) {
         return;
@@ -684,7 +1039,11 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd) {
       current.operatorRowKeySet.add(rowKey);
       current.operatorRows.push({
         operator,
+        operatorNik,
+        operatorName,
         note,
+        processName,
+        styleName,
       });
     });
   });
@@ -698,9 +1057,12 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd) {
 
       return {
         periode: item.periode,
+        shift: item.shift,
         area: item.area,
         location: item.location,
         mesin: item.mesin,
+        styleName: item.styleName,
+        originalMesin: item.originalMesin,
         totalPowerOn: item.totalPowerOn,
         totalRunning: item.totalRunning,
         totalLoss: item.totalLoss,
@@ -712,10 +1074,14 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd) {
     })
     .sort((a, b) => {
       const areaCompare = String(a.area).localeCompare(String(b.area));
+      const shiftCompare = String(a.shift).localeCompare(String(b.shift));
       const locCompare = String(a.location).localeCompare(String(b.location));
+      const mesinCompare = String(a.mesin).localeCompare(String(b.mesin));
 
       if (areaCompare !== 0) return areaCompare;
+      if (shiftCompare !== 0) return shiftCompare;
       if (locCompare !== 0) return locCompare;
+      if (mesinCompare !== 0) return mesinCompare;
 
       return Number(a.productivity || 0) - Number(b.productivity || 0);
     });
@@ -725,17 +1091,22 @@ export function buildRangeSummaryRows(summaryBaseRows) {
   return summaryBaseRows.flatMap((item) => {
     const baseRow = {
       Periode: item.periode,
+      Shift: item.shift,
       Area: item.area,
       Location: item.location,
       Mesin: item.mesin,
-      "Total Power On Duration": formatSeconds(item.totalPowerOn),
-      "Total Running Time": formatSeconds(item.totalRunning),
-      "Total Loss Time": formatSeconds(item.totalLoss),
+      Style: item.styleName || "",
+      "Power On Duration": formatSeconds(item.totalPowerOn),
+      "Running Time": formatSeconds(item.totalRunning),
+      "Loss Time": formatSeconds(item.totalLoss),
       Produktivitas: item.productivity,
       Status: item.status,
     };
 
-    return expandOperatorRows(baseRow, item.operatorRows);
+    return expandOperatorRows(baseRow, item.operatorRows, {
+      fallbackMesin: item.originalMesin || item.mesin,
+      fallbackStyle: item.styleName || "",
+    });
   });
 }
 
@@ -748,13 +1119,19 @@ export function buildBadPriorityRows(summaryBaseRows, selectedLocation) {
     return [
       {
         Rank: "",
+        Shift: "",
         Area: selectedLocation === "ALL" ? "All GM" : selectedLocation,
         Location: "",
         Mesin: "Tidak ada mesin BAD",
+        Style: "",
+        "Power On Duration": "",
+        "Running Time": "",
+        "Loss Time": "",
         Produktivitas: "",
-        "Total Loss Time": "",
+        Status: "",
         Rekomendasi: "Semua mesin tidak berstatus BAD pada periode ini.",
-        Operator: "",
+        "Operator NIK": "",
+        "Operator Name": "",
         "Operator Note": "",
       },
     ];
@@ -769,57 +1146,50 @@ export function buildBadPriorityRows(summaryBaseRows, selectedLocation) {
 
     const baseRow = {
       Rank: index + 1,
+      Shift: row.shift,
       Area: row.area,
       Location: row.location,
       Mesin: row.mesin,
+      Style: row.styleName || "",
+      "Power On Duration": formatSeconds(row.totalPowerOn),
+      "Running Time": formatSeconds(row.totalRunning),
+      "Loss Time": formatSeconds(row.totalLoss),
       Produktivitas: row.productivity,
-      "Total Loss Time": formatSeconds(row.totalLoss),
+      Status: row.status,
       Rekomendasi: rekomendasi,
     };
 
-    return expandOperatorRows(baseRow, row.operatorRows);
+    return expandOperatorRows(baseRow, row.operatorRows, {
+      fallbackMesin: row.originalMesin || row.mesin,
+      fallbackStyle: row.styleName || "",
+    });
   });
 }
 
 export function createRangeWorkbook(summaryRows, detailRows, badPriorityRows) {
   const workbook = XLSX.utils.book_new();
 
+  const summaryCols = 14;
+  const detailCols = 15;
+  const badCols = 15;
+
   const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
   setWorksheetWidth(summarySheet, [
-    24,
-    12,
-    18,
-    42,
-    24,
-    22,
-    18,
-    16,
-    12,
-    32,
-    90,
+    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 50,
   ]);
-  setAutoFilter(summarySheet, summaryRows.length, 11);
+  setAutoFilter(summarySheet, summaryRows.length, summaryCols);
 
   const detailSheet = XLSX.utils.json_to_sheet(detailRows);
   setWorksheetWidth(detailSheet, [
-    12,
-    14,
-    12,
-    42,
-    18,
-    22,
-    18,
-    16,
-    16,
-    12,
-    32,
-    90,
+    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 50,
   ]);
-  setAutoFilter(detailSheet, detailRows.length, 12);
+  setAutoFilter(detailSheet, detailRows.length, detailCols);
 
   const badSheet = XLSX.utils.json_to_sheet(badPriorityRows);
-  setWorksheetWidth(badSheet, [8, 12, 18, 42, 16, 18, 48, 32, 90]);
-  setAutoFilter(badSheet, badPriorityRows.length, 9);
+  setWorksheetWidth(badSheet, [
+    8, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 40, 14, 28, 50,
+  ]);
+  setAutoFilter(badSheet, badPriorityRows.length, badCols);
 
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Range Summary");
   XLSX.utils.book_append_sheet(workbook, detailSheet, "Daily Detail");

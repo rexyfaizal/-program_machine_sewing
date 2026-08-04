@@ -41,8 +41,19 @@ function normalizeList(data) {
   );
 }
 
-export async function getProductivity(date) {
-  const query = date ? `?date=${encodeURIComponent(date)}` : "";
+export async function getProductivity(date, options = {}) {
+  const params = new URLSearchParams();
+
+  if (date) {
+    params.set("date", date);
+  }
+
+  const shift = String(options.shift || "").trim();
+  if (shift) {
+    params.set("shift", shift);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
 
   const res = await fetch(`/api/productivity${query}`);
 
@@ -136,6 +147,38 @@ export async function deleteMachineSetting(uuid) {
       method: "DELETE",
     }
   );
+
+  return await readResponse(res);
+}
+
+export async function getLineShiftConfig(factory = "") {
+  const params = new URLSearchParams();
+  const factoryText = String(factory || "").trim();
+  if (factoryText) {
+    params.set("factory", factoryText);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/line-shift-config${query}`);
+  return await readResponse(res);
+}
+
+export async function saveLineShiftConfig(payload) {
+  const factory = String(payload?.factory || "").trim();
+  if (!factory) {
+    throw new Error("Factory wajib diisi.");
+  }
+
+  const res = await fetch("/api/line-shift-config", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      factory,
+      lines: Array.isArray(payload?.lines) ? payload.lines : [],
+    }),
+  });
 
   return await readResponse(res);
 }

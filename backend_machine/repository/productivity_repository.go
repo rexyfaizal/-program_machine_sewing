@@ -24,8 +24,8 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		return models.ProductivityRow{}, err
 	}
 
-	// Runtime sekarang dihitung dari:
-	// runtime selesai + runtime mesin yang sedang aktif
+	// Runtime dihitung dari:
+	// StartTime → ShutTime (atau now jika masih ON), tanpa ekstra setelah ShutTime.
 	runtimeSec, err := r.GetRuntimeSec(ctx, m.UUID, m.MacState, start, end)
 	if err != nil {
 		log.Printf("runtime skip uuid=%s: %v", m.UUID, err)
@@ -38,6 +38,21 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		as = models.AlarmStats{}
 	}
 
+	row := buildProductivityRow(m, date, runtimeSec, ps, as)
+	row.MainSource = "process_time_runtime"
+	row.ShiftCode = ""
+	row.ShiftName = ""
+
+	return row, nil
+}
+
+func buildProductivityRow(
+	m models.Machine,
+	date string,
+	runtimeSec int64,
+	ps models.ProductionStats,
+	as models.AlarmStats,
+) models.ProductivityRow {
 	runtimeHours := utils.Round2(float64(runtimeSec) / 3600)
 	procHours := utils.Round2(float64(ps.ProcSec) / 3600)
 
@@ -62,9 +77,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 
 	status := utils.StatusFromPct(productivityPct)
 
-	productivityBaseSec := ps.ProcSec
-	mainSource := "process_time_runtime"
-
 	row := models.ProductivityRow{
 		Date:             date,
 		UUID:             m.UUID,
@@ -87,7 +99,7 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		ProductivityRaw: utils.Round2(productivityRaw),
 		ProductivityPct: utils.Round2(productivityPct),
 		Status:          status,
-		MainSource:      mainSource,
+		MainSource:      "process_time_runtime",
 
 		ProcSec:    ps.ProcSec,
 		ProcHours:  procHours,
@@ -111,9 +123,8 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		FirstProcess: ps.FirstProcess,
 		LastProcess:  ps.LastProcess,
 
-		// Alias lama agar dashboard versi sebelumnya tetap aman.
 		MachineName:       m.NickName,
-		ProductiveSeconds: productivityBaseSec,
+		ProductiveSeconds: ps.ProcSec,
 		ProductiveHours:   procHours,
 		Category:          status,
 		OutputOK:          ps.Complete,
@@ -121,11 +132,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		FirstStart:        ps.FirstProcess,
 		LastStart:         ps.LastProcess,
 	}
-
-	// =====================================================
-	// FINAL SAFETY GUARD
-	// Pengaman akhir sebelum response dikirim ke frontend.
-	// =====================================================
 
 	if row.ProcSec > row.RuntimeSec {
 		row.RuntimeSec = row.ProcSec
@@ -161,5 +167,5 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 	row.ProductiveSeconds = row.ProcSec
 	row.ProductiveHours = row.ProcHours
 
-	return row, nil
+	return row
 }

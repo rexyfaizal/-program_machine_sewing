@@ -1,9 +1,15 @@
 import { computed, ref, watch } from "vue";
 import { getLocationGroup } from "../utils/dashboardExportExcel";
+import {
+  GM3_SHIFT_OPTIONS,
+  buildShiftOptionsFromConfigMap,
+  factoryHasEnabledShift,
+} from "../utils/gm3Shift";
 
-export function useDashboardFilters(machines) {
+export function useDashboardFilters(machines, shiftConfigMap = null) {
   const keyword = ref("");
   const locationFilter = ref("ALL");
+  const shiftFilter = ref("CURRENT");
 
   const locationOptions = computed(() => {
     return [
@@ -22,6 +28,33 @@ export function useDashboardFilters(machines) {
     });
   });
 
+  const configMap = computed(() => {
+    if (shiftConfigMap?.value instanceof Map) {
+      return shiftConfigMap.value;
+    }
+    return new Map();
+  });
+
+  const showShiftFilter = computed(() => {
+    const area = String(locationFilter.value || "").trim().toUpperCase();
+    if (!area || area === "ALL") return false;
+    return factoryHasEnabledShift(area, configMap.value);
+  });
+
+  const shiftOptions = computed(() => {
+    const area = String(locationFilter.value || "").trim().toUpperCase();
+    if (!area || area === "ALL") return GM3_SHIFT_OPTIONS;
+    return buildShiftOptionsFromConfigMap(area, configMap.value);
+  });
+
+  const productivityShift = computed(() => {
+    if (!showShiftFilter.value) {
+      return "";
+    }
+
+    return String(shiftFilter.value || "CURRENT").trim();
+  });
+
   watch(
     locationOptions,
     (options) => {
@@ -33,6 +66,12 @@ export function useDashboardFilters(machines) {
     },
     { immediate: true }
   );
+
+  watch(showShiftFilter, (show) => {
+    if (!show) {
+      shiftFilter.value = "CURRENT";
+    }
+  });
 
   const filteredMachines = computed(() => {
     const key = keyword.value.toLowerCase().trim();
@@ -140,6 +179,10 @@ export function useDashboardFilters(machines) {
   return {
     keyword,
     locationFilter,
+    shiftFilter,
+    shiftOptions,
+    showShiftFilter,
+    productivityShift,
     locationOptions,
     filteredMachines,
     rankingMachines,

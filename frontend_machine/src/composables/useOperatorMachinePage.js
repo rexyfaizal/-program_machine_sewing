@@ -11,6 +11,7 @@ import {
   searchProcessesByStyle,
   startMachineOperatorLossEvent,
 } from "../api/machineApi";
+import { getGM3CurrentShift } from "../utils/gm3Shift";
 
 export function useOperatorMachinePage(uuidSource) {
   const loading = ref(false);
@@ -408,18 +409,19 @@ export function useOperatorMachinePage(uuidSource) {
   }
 
   function getCurrentShift() {
-    const now = new Date();
-    const hour = now.getHours();
+    const current = getGM3CurrentShift(new Date());
 
-    if (hour >= 7 && hour < 15) {
-      return { shiftCode: "SHIFT_1", shiftName: "Shift 1" };
-    }
-
-    if (hour >= 15 && hour < 23) {
-      return { shiftCode: "SHIFT_2", shiftName: "Shift 2" };
-    }
-
-    return { shiftCode: "SHIFT_3", shiftName: "Shift 3" };
+    return {
+      shiftCode: current.shiftCode === "ALL" ? "SHIFT_1" : current.shiftCode,
+      shiftName:
+        current.shiftCode === "SHIFT_1"
+          ? "Shift 1"
+          : current.shiftCode === "SHIFT_2"
+            ? "Shift 2"
+            : current.shiftCode === "SHIFT_3"
+              ? "Shift 3"
+              : "Shift 1",
+    };
   }
 
   function startLossTimer() {

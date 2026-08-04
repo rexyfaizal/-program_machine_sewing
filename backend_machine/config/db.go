@@ -25,7 +25,11 @@ func ConnectDB() (*sql.DB, error) {
 	port := GetEnv("DB_PORT", "1433")
 	user := GetEnv("DB_USER", "sa")
 	password := GetEnv("DB_PASSWORD", "satu1")
-	database := GetEnv("DB_NAME", "sewingiot")
+
+	// Project ini selalu pakai sewingiot.
+	// Jangan baca DB_NAME global (bisa "lectra" dari User env project lain).
+	// Override khusus project ini hanya lewat SEWINGIOT_DB_NAME.
+	database := GetEnv("SEWINGIOT_DB_NAME", "sewingiot")
 
 	q := url.Values{}
 	q.Add("database", database)
@@ -37,6 +41,8 @@ func ConnectDB() (*sql.DB, error) {
 		Host:     fmt.Sprintf("%s:%s", server, port),
 		RawQuery: q.Encode(),
 	}
+
+	fmt.Printf("Connecting SQL Server %s:%s database=%s user=%s\n", server, port, database, user)
 
 	db, err := sql.Open("sqlserver", u.String())
 	if err != nil {

@@ -34,6 +34,18 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  shiftValue: {
+    type: String,
+    default: "CURRENT",
+  },
+  shiftOptions: {
+    type: Array,
+    default: () => [],
+  },
+  showShiftFilter: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -42,6 +54,7 @@ const emit = defineEmits([
   "update:endDate",
   "update:keyword",
   "update:locationValue",
+  "update:shiftValue",
   "dateChange",
   "download",
 ]);
@@ -71,6 +84,12 @@ function updateKeyword(event) {
 
 function updateLocation(event) {
   emit("update:locationValue", event.target.value);
+  emit("dateChange");
+}
+
+function updateShift(event) {
+  emit("update:shiftValue", event.target.value);
+  emit("dateChange");
 }
 </script>
 
@@ -109,6 +128,20 @@ function updateLocation(event) {
           :value="location"
         >
           {{ location }}
+        </option>
+      </select>
+    </label>
+
+    <label v-if="props.showShiftFilter" class="table-filter area-filter">
+      <span>Shift</span>
+
+      <select :value="props.shiftValue" @change="updateShift">
+        <option
+          v-for="shift in props.shiftOptions"
+          :key="shift.value"
+          :value="shift.value"
+        >
+          {{ shift.label }}
         </option>
       </select>
     </label>

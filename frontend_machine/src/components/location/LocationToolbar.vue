@@ -12,6 +12,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  isAdmin: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -19,6 +23,7 @@ const emit = defineEmits([
   "update:selectedDate",
   "factoryChange",
   "refresh",
+  "openShiftConfig",
 ]);
 
 function selectFactory(factory) {
@@ -59,6 +64,15 @@ function updateDate(event) {
             @input="updateDate"
           />
         </label>
+
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="shift-btn"
+          @click="emit('openShiftConfig')"
+        >
+          Atur Shift
+        </button>
 
         <button type="button" class="refresh-btn" @click="emit('refresh')">
           Refresh
@@ -185,6 +199,24 @@ function updateDate(event) {
   font-weight: 900;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.shift-btn {
+  height: 42px;
+  min-width: 110px;
+  padding: 0 16px;
+  border: 1px solid #0f766e;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.22);
+}
+
+.shift-btn:hover {
+  background: linear-gradient(135deg, #0f766e, #115e59);
 }
 
 .refresh-btn:hover {

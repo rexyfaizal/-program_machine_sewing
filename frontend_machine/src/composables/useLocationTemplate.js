@@ -1,11 +1,15 @@
 import { computed, onMounted, ref } from "vue";
 import {
+  getMachineOperatorReport,
   getMachineSettings,
   getProductivity,
+  getLineShiftConfig,
+  saveLineShiftConfig,
   saveMachineSetting,
 } from "../api/machineApi";
 import { getInitialAdminMode } from "../utils/adminMode";
 import { WORK_SECONDS } from "../utils/format";
+import { buildLineShiftConfigMap } from "../utils/gm3Shift";
 
 export function useLocationTemplate() {
   const selectedFactory = ref("GM1");
@@ -17,6 +21,7 @@ export function useLocationTemplate() {
 
   const machines = ref([]);
   const machineSettings = ref(new Map());
+  const activeOperatorMap = ref(new Map());
 
   const modalOpen = ref(false);
   const modalMode = ref("add");
@@ -27,6 +32,12 @@ export function useLocationTemplate() {
   const lineModalMode = ref("add");
   const oldLineName = ref("");
   const lineFormName = ref("");
+
+  const shiftModalOpen = ref(false);
+  const shiftModalSaving = ref(false);
+  const shiftConfigs = ref([]);
+  const shiftConfigMap = ref(new Map());
+  const shiftDefaults = ref([]);
 
   const draggingLine = ref("");
   const dragOverLine = ref("");
@@ -259,6 +270,8 @@ export function useLocationTemplate() {
       uuid: String(getVal(item, "uuid", "UUID") || ""),
       customName: String(getVal(item, "customName", "CustomName") || ""),
       location: String(getVal(item, "location", "Location") || ""),
+      pic: String(getVal(item, "pic", "PIC") || ""),
+      spv: String(getVal(item, "spv", "SPV") || ""),
     };
   }
 
@@ -284,6 +297,18 @@ export function useLocationTemplate() {
     );
 
     const setting = machineSettings.value.get(normalizeText(uuid));
+    const operator = activeOperatorMap.value.get(normalizeText(uuid));
+
+    const customName = String(setting?.customName || "").trim();
+    const baseMachineName = customName || backendName;
+    const operatorProcessName = String(operator?.processName || "").trim();
+    const operatorStyleName = String(operator?.styleName || "").trim();
+    const operatorName = String(operator?.operatorName || "").trim();
+    const operatorNik = String(operator?.operatorNik || "").trim();
+    const operatorLoggedIn = Boolean(operator);
+
+    // Sama dashboard: nama tampil = proses operator (jika login), fallback custom/backend.
+    const machineName = operatorProcessName || baseMachineName;
 
     const output = toNumber(getVal(row, "output", "Output") || 0);
     const procTime = getRowProcTime(row);
@@ -295,8 +320,14 @@ export function useLocationTemplate() {
       uuid,
       tableName: String(getVal(row, "tableName", "TableName") || ""),
       originalMachineName: originalName,
-      machineName: setting?.customName || backendName,
-      customName: setting?.customName || "",
+      machineName,
+      customName,
+      operatorProcessName,
+      operatorStyleName,
+      operatorName,
+      operatorNik,
+      operatorLoggedIn,
+      usingProcessName: Boolean(operatorProcessName),
 
       ip: String(getVal(row, "ip", "IP", "lastLoginIP", "LastLoginIP") || "-"),
 
@@ -321,6 +352,70 @@ export function useLocationTemplate() {
     };
   }
 
+  function buildActiveOperatorMap(reportData) {
+    const map = new Map();
+    const rows = Array.isArray(reportData)
+      ? reportData
+      : reportData?.rows ||
+        reportData?.Rows ||
+        reportData?.data ||
+        reportData?.items ||
+        [];
+
+    rows.forEach((row) => {
+      const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
+      if (!uuid) return;
+
+      const status = String(getVal(row, "status", "Status") || "")
+        .trim()
+        .toUpperCase();
+
+      if (status && !["ACTIVE", "OPEN"].includes(status)) {
+        return;
+      }
+
+      map.set(normalizeText(uuid), {
+        processName: String(
+          getVal(row, "processName", "ProcessName", "process_name") || ""
+        ).trim(),
+        styleName: String(
+          getVal(row, "styleName", "StyleName", "style_name") || ""
+        ).trim(),
+        operatorName: String(
+          getVal(row, "operatorName", "OperatorName", "operator_name") || ""
+        ).trim(),
+        operatorNik: String(
+          getVal(row, "operatorNik", "OperatorNik", "operator_nik") || ""
+        ).trim(),
+      });
+    });
+
+    return map;
+  }
+
+  function parseLineLayoutPayload(setting) {
+    const candidates = [
+      String(setting?.spv || "").trim(),
+      String(setting?.customName || "").trim(),
+    ];
+
+    for (const raw of candidates) {
+      if (!raw || !raw.startsWith("[")) continue;
+
+      try {
+        const parsed = JSON.parse(raw);
+
+        if (Array.isArray(parsed) && parsed.length) {
+          return parsed.map((x) => String(x).trim()).filter(Boolean);
+        }
+      } catch {
+        // coba kandidat berikutnya
+      }
+    }
+
+    return null;
+  }
+
   function applyLineLayoutFromSettings(settingsList) {
     const nextLayout = {};
 
@@ -328,20 +423,16 @@ export function useLocationTemplate() {
       nextLayout[factory] = [...defaultLineMap[factory]];
 
       const key = lineLayoutUuid(factory);
-      const setting = settingsList.find((x) => normalizeText(x.uuid) === normalizeText(key));
+      const setting = settingsList.find(
+        (x) => normalizeText(x.uuid) === normalizeText(key)
+      );
 
-      if (!setting?.customName) continue;
+      if (!setting) continue;
 
-      try {
-        const parsed = JSON.parse(setting.customName);
+      const parsed = parseLineLayoutPayload(setting);
 
-        if (Array.isArray(parsed) && parsed.length) {
-          nextLayout[factory] = parsed
-            .map((x) => String(x).trim())
-            .filter(Boolean);
-        }
-      } catch {
-        // Jika data layout line rusak, pakai default.
+      if (parsed?.length) {
+        nextLayout[factory] = parsed;
       }
     }
 
@@ -349,10 +440,16 @@ export function useLocationTemplate() {
   }
 
   async function saveLineLayout(factory) {
+    const lines = lineLayout.value[factory] || [];
+    const payload = JSON.stringify(lines);
+
+    // Simpan JSON layout di spv (panjang) + custom_name sebagai cadangan.
     await saveMachineSetting({
       uuid: lineLayoutUuid(factory),
-      customName: JSON.stringify(lineLayout.value[factory] || []),
+      customName: payload,
       location: "LINE_LAYOUT",
+      pic: "",
+      spv: payload,
     });
   }
 
@@ -372,14 +469,72 @@ export function useLocationTemplate() {
     applyLineLayoutFromSettings(normalized);
   }
 
+  async function loadShiftConfigs(factory = selectedFactory.value) {
+    try {
+      // Satu request saja (semua factory) lalu filter di client.
+      const data = await getLineShiftConfig("");
+      const allLines = Array.isArray(data?.lines) ? data.lines : [];
+      const factoryKey = String(factory || "").trim().toUpperCase();
+
+      shiftConfigs.value = allLines.filter(
+        (item) =>
+          String(item.factory || "").trim().toUpperCase() === factoryKey
+      );
+      shiftDefaults.value = Array.isArray(data?.defaults?.schedule)
+        ? data.defaults.schedule
+        : [];
+      shiftConfigMap.value = buildLineShiftConfigMap(allLines);
+    } catch (err) {
+      console.warn("Gagal load line shift config:", err);
+      shiftConfigs.value = [];
+      shiftConfigMap.value = new Map();
+    }
+  }
+
   async function loadData() {
     loading.value = true;
     errorMessage.value = "";
 
     try {
-      await loadMachineSettings();
+      // Settings wajib; shift config opsional (jangan blokir jika endpoint belum siap).
+      const [settingsResult] = await Promise.allSettled([
+        loadMachineSettings(),
+        loadShiftConfigs(selectedFactory.value),
+      ]);
 
-      const json = await getProductivity(selectedDate.value);
+      if (settingsResult.status === "rejected") {
+        throw settingsResult.reason;
+      }
+
+      const useShift =
+        selectedFactory.value === "GM3" ||
+        [...shiftConfigMap.value.values()].some(
+          (cfg) =>
+            String(cfg.factory || "").toUpperCase() ===
+              String(selectedFactory.value || "").toUpperCase() &&
+            cfg.enabled
+        );
+
+      const [productivityResult, operatorResult] = await Promise.allSettled([
+        getProductivity(
+          selectedDate.value,
+          useShift ? { shift: "CURRENT" } : {}
+        ),
+        getMachineOperatorReport(selectedDate.value),
+      ]);
+
+      if (operatorResult.status === "fulfilled") {
+        activeOperatorMap.value = buildActiveOperatorMap(operatorResult.value);
+      } else {
+        console.warn("Gagal load operator report:", operatorResult.reason);
+        activeOperatorMap.value = new Map();
+      }
+
+      if (productivityResult.status === "rejected") {
+        throw productivityResult.reason;
+      }
+
+      const json = productivityResult.value;
       const rows = Array.isArray(json)
         ? json
         : json.rows || json.Rows || json.data || json.items || [];
@@ -391,9 +546,47 @@ export function useLocationTemplate() {
           String(a.machineName).localeCompare(String(b.machineName))
         );
     } catch (err) {
-      errorMessage.value = `Gagal mengambil data: ${err.message}`;
+      const msg = String(err?.message || err || "");
+      if (/failed to fetch/i.test(msg)) {
+        errorMessage.value =
+          "Gagal mengambil data: backend tidak aktif atau timeout. Pastikan server :5000 jalan, lalu Refresh.";
+      } else {
+        errorMessage.value = `Gagal mengambil data: ${msg}`;
+      }
     } finally {
       loading.value = false;
+    }
+  }
+
+  function openShiftConfigModal() {
+    if (!isAdmin.value) {
+      showNotice("Akses atur shift hanya untuk admin.");
+      return;
+    }
+    shiftModalOpen.value = true;
+  }
+
+  function closeShiftConfigModal() {
+    shiftModalOpen.value = false;
+  }
+
+  async function saveShiftConfig(payload) {
+    if (!isAdmin.value) {
+      showNotice("Akses simpan shift hanya untuk admin.");
+      return;
+    }
+
+    shiftModalSaving.value = true;
+    try {
+      await saveLineShiftConfig(payload);
+      await loadShiftConfigs(selectedFactory.value);
+      shiftModalOpen.value = false;
+      showNotice("Konfigurasi shift berhasil disimpan.");
+      await loadData();
+    } catch (err) {
+      showNotice(`Gagal simpan shift: ${err.message}`);
+    } finally {
+      shiftModalSaving.value = false;
     }
   }
 
@@ -490,6 +683,9 @@ export function useLocationTemplate() {
           normalizeText(line) === normalizeText(oldName) ? name : line
         );
 
+        // Simpan layout dulu supaya gagal lebih awal sebelum ubah mesin.
+        await saveLineLayout(factory);
+
         const affectedMachines = machines.value.filter((m) =>
           isSameLocation(m.location, factory, oldName)
         );
@@ -502,7 +698,6 @@ export function useLocationTemplate() {
           });
         }
 
-        await saveLineLayout(factory);
         showNotice("Nama line berhasil diubah.");
       }
 
@@ -785,6 +980,10 @@ export function useLocationTemplate() {
     oldLineName,
     lineFormName,
 
+    shiftModalOpen,
+    shiftModalSaving,
+    shiftConfigs,
+
     draggingLine,
     dragOverLine,
 
@@ -804,6 +1003,10 @@ export function useLocationTemplate() {
     closeLineModal,
     saveLine,
     deleteLine,
+
+    openShiftConfigModal,
+    closeShiftConfigModal,
+    saveShiftConfig,
 
     onLineDragStart,
     onLineDragEnter,

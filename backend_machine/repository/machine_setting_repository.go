@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"log"
 	"strings"
 
 	"backend_machine/models"
@@ -100,4 +101,74 @@ func (r *Repository) DeleteMachineSetting(ctx context.Context, uuid string) erro
 	)
 
 	return err
+}
+
+// EnsureMachineSettingSchema melebarkan kolom teks agar layout line (JSON)
+// dan nama mesin panjang tidak kena truncation.
+func (r *Repository) EnsureMachineSettingSchema(ctx context.Context) error {
+	query := `
+IF OBJECT_ID(N'dbo.machine_setting_manual', N'U') IS NULL
+BEGIN
+	CREATE TABLE dbo.machine_setting_manual (
+		uuid NVARCHAR(100) NOT NULL PRIMARY KEY,
+		custom_name NVARCHAR(MAX) NULL,
+		location NVARCHAR(255) NULL,
+		pic NVARCHAR(255) NULL,
+		spv NVARCHAR(MAX) NULL,
+		updated_at DATETIME2 NOT NULL CONSTRAINT DF_machine_setting_manual_updated_at DEFAULT SYSDATETIME()
+	);
+END
+ELSE
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'dbo'
+		  AND TABLE_NAME = 'machine_setting_manual'
+		  AND COLUMN_NAME = 'custom_name'
+		  AND DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar')
+		  AND CHARACTER_MAXIMUM_LENGTH > 0
+		  AND CHARACTER_MAXIMUM_LENGTH < 2000
+	)
+	BEGIN
+		ALTER TABLE dbo.machine_setting_manual ALTER COLUMN custom_name NVARCHAR(MAX) NULL;
+	END
+
+	IF EXISTS (
+		SELECT 1
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'dbo'
+		  AND TABLE_NAME = 'machine_setting_manual'
+		  AND COLUMN_NAME = 'spv'
+		  AND DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar')
+		  AND CHARACTER_MAXIMUM_LENGTH > 0
+		  AND CHARACTER_MAXIMUM_LENGTH < 2000
+	)
+	BEGIN
+		ALTER TABLE dbo.machine_setting_manual ALTER COLUMN spv NVARCHAR(MAX) NULL;
+	END
+
+	IF EXISTS (
+		SELECT 1
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'dbo'
+		  AND TABLE_NAME = 'machine_setting_manual'
+		  AND COLUMN_NAME = 'location'
+		  AND DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar')
+		  AND CHARACTER_MAXIMUM_LENGTH > 0
+		  AND CHARACTER_MAXIMUM_LENGTH <= 100
+	)
+	BEGIN
+		ALTER TABLE dbo.machine_setting_manual ALTER COLUMN location NVARCHAR(255) NULL;
+	END
+END
+`
+
+	_, err := r.DB.ExecContext(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	log.Println("Schema machine_setting_manual siap (custom_name/spv long text).")
+	return nil
 }

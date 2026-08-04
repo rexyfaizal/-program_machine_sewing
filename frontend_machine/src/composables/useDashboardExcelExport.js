@@ -1,5 +1,6 @@
 import { ref, watch } from "vue";
 import {
+  getLineShiftConfig,
   getMachineOperatorReport,
   getProductivity,
 } from "../api/machineApi";
@@ -20,12 +21,18 @@ import {
   safeFileName,
   writeWorkbook,
 } from "../utils/dashboardExportExcel";
+import {
+  buildLineShiftConfigMap,
+  factoryHasEnabledShift,
+} from "../utils/gm3Shift";
 
 export function useDashboardExcelExport({
   selectedDate,
   locationFilter,
   machineSettings,
   showNotice,
+  productivityShift,
+  shiftConfigMap,
 }) {
   const rangeExporting = ref(false);
   const startDate = ref(selectedDate.value || "");
@@ -51,6 +58,21 @@ export function useDashboardExcelExport({
   function getManualSettingByUuid(uuid) {
     const key = normalizeText(uuid);
     return machineSettings?.value?.get(key) || null;
+  }
+
+  function getLocationByUuid(uuid) {
+    return getManualSettingByUuid(uuid)?.location || "";
+  }
+
+  function resolveExportShiftParam(configMap) {
+    const area = String(locationFilter?.value || "").trim().toUpperCase();
+    if (!area || area === "ALL") return "";
+
+    if (!factoryHasEnabledShift(area, configMap)) {
+      return "";
+    }
+
+    return String(productivityShift?.value || "ALL").trim();
   }
 
   async function downloadExcel() {
@@ -83,10 +105,28 @@ export function useDashboardExcelExport({
     );
 
     try {
+      let configMap =
+        shiftConfigMap?.value instanceof Map
+          ? shiftConfigMap.value
+          : new Map();
+
+      if (!configMap.size) {
+        try {
+          const data = await getLineShiftConfig("");
+          configMap = buildLineShiftConfigMap(
+            Array.isArray(data?.lines) ? data.lines : []
+          );
+        } catch (err) {
+          console.warn("Gagal load shift config untuk export:", err);
+        }
+      }
+
+      const shiftParam = resolveExportShiftParam(configMap);
+
       const results = await Promise.all(
         dates.map(async (dateText) => {
           const [productivityResult, operatorResult] = await Promise.allSettled([
-            getProductivity(dateText),
+            getProductivity(dateText, { shift: shiftParam }),
             getMachineOperatorReport(dateText),
           ]);
 
@@ -96,7 +136,12 @@ export function useDashboardExcelExport({
 
           const operatorMap =
             operatorResult.status === "fulfilled"
-              ? buildOperatorExportMap(operatorResult.value)
+              ? buildOperatorExportMap(operatorResult.value, {
+                  workDate: dateText,
+                  shiftCode: shiftParam || "ALL",
+                  shiftConfigMap: configMap,
+                  getLocationByUuid,
+                })
               : new Map();
 
           const rows = extractRows(productivityResult.value);
@@ -106,7 +151,9 @@ export function useDashboardExcelExport({
               row,
               dateText,
               operatorMap,
-              getManualSettingByUuid
+              getManualSettingByUuid,
+              shiftParam,
+              configMap
             )
           );
         })
@@ -125,11 +172,12 @@ export function useDashboardExcelExport({
       const summaryBaseRows = buildRangeSummaryBaseRows(
         items,
         range.start,
-        range.end
+        range.end,
+        shiftParam
       );
 
       const summaryRows = buildRangeSummaryRows(summaryBaseRows);
-      const detailRows = buildRangeDetailRows(items);
+      const detailRows = buildRangeDetailRows(items, shiftParam);
       const badPriorityRows = buildBadPriorityRows(
         summaryBaseRows,
         locationFilter.value
@@ -146,9 +194,13 @@ export function useDashboardExcelExport({
           ? "all-gm"
           : safeFileName(locationFilter.value);
 
+      const shiftSuffix = shiftParam
+        ? `-${safeFileName(shiftParam)}`
+        : "";
+
       writeWorkbook(
         workbook,
-        `productivity-range-${locationSuffix}-${range.start}_${range.end}.xlsx`
+        `productivity-range-${locationSuffix}${shiftSuffix}-${range.start}_${range.end}.xlsx`
       );
 
       showNotice("Export Excel berhasil dibuat.", "ok");

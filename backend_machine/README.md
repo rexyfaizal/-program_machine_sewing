@@ -35,5 +35,6 @@ $env:DB_SERVER="10.5.0.106"
 $env:DB_PORT="1433"
 $env:DB_USER="sa"
 $env:DB_PASSWORD="satu1"
-$env:DB_NAME="sewingiot"
+# Database project ini dikunci ke sewingiot di config/db.go
+# (abaikan User env DB_NAME=lectra). Override opsional: SEWINGIOT_DB_NAME
 ```
