@@ -3,9 +3,8 @@ import {
   downTimeSec,
   formatHour,
   getDisplayMachineName,
-  getOperatorName,
+  getOperatorDisplayRows,
   getOperatorNote,
-  getOperatorSubText,
   isUsingProcessName,
   statusClass,
 } from "../../utils/machineTableFormat";
@@ -113,17 +112,24 @@ function editMachine(machine) {
             </td>
 
             <td class="operator-cell">
-              <strong v-if="getOperatorName(m)" class="operator-name">
-                {{ getOperatorName(m) }}
-              </strong>
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-op-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">
+                    {{ op.label }}
+                  </strong>
+                  <small v-if="op.subText" class="operator-sub">
+                    {{ op.subText }}
+                  </small>
+                </div>
+              </template>
 
               <strong v-else class="operator-empty">
                 Not logged in
               </strong>
-
-              <small v-if="getOperatorSubText(m)" class="operator-sub">
-                {{ getOperatorSubText(m) }}
-              </small>
             </td>
 
             <td class="note-cell">
@@ -209,17 +215,24 @@ function editMachine(machine) {
             </td>
 
             <td class="operator-cell">
-              <strong v-if="getOperatorName(m)" class="operator-name">
-                {{ getOperatorName(m) }}
-              </strong>
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-user-op-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">
+                    {{ op.label }}
+                  </strong>
+                  <small v-if="op.subText" class="operator-sub">
+                    {{ op.subText }}
+                  </small>
+                </div>
+              </template>
 
               <strong v-else class="operator-empty">
                 Not logged in
               </strong>
-
-              <small v-if="getOperatorSubText(m)" class="operator-sub">
-                {{ getOperatorSubText(m) }}
-              </small>
             </td>
 
             <td class="note-cell">

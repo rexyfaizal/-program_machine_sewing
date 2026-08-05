@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"backend_machine/models"
 )
@@ -66,85 +65,7 @@ func (r *Repository) LoginMachineOperator(ctx context.Context, input models.Mach
 	}
 
 	if err == nil {
-		today := time.Now().Format("2006-01-02")
-		activeSessionDate := strings.TrimSpace(active.SessionDate)
-
-		// =====================================================
-		// AUTO_LOGOUT_DAY_CHANGE
-		// Jika session aktif berasal dari tanggal sebelumnya,
-		// maka session lama ditutup otomatis dan dibuat session baru.
-		// =====================================================
-		if activeSessionDate != "" && activeSessionDate != today {
-			closeDayChangeQuery := `
-				UPDATE dbo.machine_operator_sessions
-				SET
-					logout_time = SYSDATETIME(),
-					status = 'AUTO_LOGOUT_DAY_CHANGE',
-					updated_at = SYSDATETIME()
-				WHERE id = @id
-				  AND status = 'ACTIVE'
-				  AND logout_time IS NULL;
-
-				UPDATE dbo.machine_operator_loss_events
-				SET
-					end_time = SYSDATETIME(),
-					status = 'CLOSED',
-					updated_at = SYSDATETIME()
-				WHERE session_id = @id
-				  AND status = 'ACTIVE'
-				  AND end_time IS NULL;
-
-				INSERT INTO dbo.machine_operator_notes (
-					session_id,
-					session_date,
-					uuid,
-					operator_nik,
-					operator_name,
-					reason_code,
-					reason_name,
-					note,
-					created_at
-				)
-				SELECT
-					@id,
-					CAST(@session_date AS DATE),
-					@uuid,
-					@operator_nik,
-					@operator_name,
-					'AUTO_LOGOUT_DAY_CHANGE',
-					'Auto Logout Ganti Hari',
-					CONCAT(
-						'Session ditutup otomatis karena sudah berganti hari. ',
-						'Session lama tanggal ',
-						@session_date,
-						', scan baru tanggal ',
-						@today,
-						'.'
-					),
-					SYSDATETIME()
-				WHERE NOT EXISTS (
-					SELECT 1
-					FROM dbo.machine_operator_notes n
-					WHERE n.session_id = @id
-					  AND n.reason_code = 'AUTO_LOGOUT_DAY_CHANGE'
-				);
-			`
-
-			if _, err := tx.ExecContext(
-				ctx,
-				closeDayChangeQuery,
-				sql.Named("id", active.ID),
-				sql.Named("session_date", active.SessionDate),
-				sql.Named("uuid", active.UUID),
-				sql.Named("operator_nik", active.OperatorNIK),
-				sql.Named("operator_name", active.OperatorName),
-				sql.Named("today", today),
-			); err != nil {
-				return models.MachineOperatorLoginResponse{}, err
-			}
-
-			// Setelah session lama ditutup, lanjut ke insert session baru di bawah.
-		} else if strings.EqualFold(strings.TrimSpace(active.OperatorNIK), input.OperatorNIK) {
+		if strings.EqualFold(strings.TrimSpace(active.OperatorNIK), input.OperatorNIK) {
 			if err := tx.Commit(); err != nil {
 				return models.MachineOperatorLoginResponse{}, err
 			}
@@ -155,9 +76,10 @@ func (r *Repository) LoginMachineOperator(ctx context.Context, input models.Mach
 				IsExisting: true,
 				Session:    active,
 			}, nil
-		} else {
-			// Operator berbeda scan di mesin yang sama.
-			// Session lama ditutup sebagai AUTO_LOGOUT_REPLACED.
+		}
+
+		// Operator berbeda scan di mesin yang sama.
+		// Session lama ditutup sebagai AUTO_LOGOUT_REPLACED.
 			closeOldQuery := `
 				UPDATE dbo.machine_operator_sessions
 				SET
@@ -224,7 +146,6 @@ func (r *Repository) LoginMachineOperator(ctx context.Context, input models.Mach
 			); err != nil {
 				return models.MachineOperatorLoginResponse{}, err
 			}
-		}
 	}
 
 	insertQuery := `

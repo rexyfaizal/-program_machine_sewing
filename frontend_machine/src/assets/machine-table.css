@@ -219,10 +219,16 @@
 }
 
 .machine-table-panel .operator-cell {
-  min-width: 150px;
-  max-width: 220px;
+  min-width: 180px;
+  max-width: 280px;
   white-space: normal;
   line-height: 1.35;
+}
+
+.machine-table-panel .operator-item + .operator-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
 }
 
 .machine-table-panel .operator-name {

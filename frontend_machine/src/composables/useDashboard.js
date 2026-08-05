@@ -5,6 +5,7 @@ import {
   getLineShiftConfig,
   getProductivity,
 } from "../api/machineApi";
+import { isAutoLogoutText } from "../utils/dashboardExportExcel";
 import { buildLineShiftConfigMap } from "../utils/gm3Shift";
 
 const WORK_SECONDS_PER_DAY = 28800;
@@ -141,6 +142,51 @@ export function useDashboard() {
     return formatDurationFromMs(Date.now() - start.getTime());
   }
 
+  function formatSessionUsageDuration(loginTime, logoutTime, status) {
+    const start = parseDateTime(loginTime);
+
+    if (!start) return "";
+
+    const statusUpper = String(status || "").toUpperCase();
+    const end = parseDateTime(logoutTime);
+    const isActive = ["ACTIVE", "OPEN"].includes(statusUpper) && !end;
+
+    if (isActive) {
+      return formatDurationFromMs(Date.now() - start.getTime());
+    }
+
+    if (!end) return "";
+
+    return formatDurationFromMs(end.getTime() - start.getTime());
+  }
+
+  function buildOperatorSessionSubText(item) {
+    const loginClock = String(item?.operatorLoginClock || "").trim();
+    const logoutClock = String(item?.operatorLogoutClock || "").trim();
+    const usageDuration = String(item?.operatorUsageDuration || "").trim();
+    const statusUpper = String(item?.status || "").toUpperCase();
+    const isActive =
+      ["ACTIVE", "OPEN"].includes(statusUpper) && !item?.logoutTime;
+
+    if (loginClock && logoutClock && usageDuration) {
+      return `Login ${loginClock}–${logoutClock} · Pakai ${usageDuration}`;
+    }
+
+    if (loginClock && isActive && usageDuration) {
+      return `Login ${loginClock} · Aktif ${usageDuration}`;
+    }
+
+    if (loginClock && usageDuration) {
+      return `Login ${loginClock} · Pakai ${usageDuration}`;
+    }
+
+    if (loginClock) {
+      return `Login ${loginClock}`;
+    }
+
+    return "";
+  }
+
   function normalizeMacState(row) {
     const value = String(
       getVal(row, "macState", "MacState", "mac_state", "Macstate", "macstate") ??
@@ -224,6 +270,17 @@ export function useDashboard() {
 
     const rawStatus = String(getVal(row, "status", "Status") || "").trim();
     const status = rawStatus.toUpperCase();
+
+    // Sembunyikan semua note Auto Logout di dashboard.
+    if (
+      isAutoLogoutText(reasonCode) ||
+      isAutoLogoutText(reasonName) ||
+      isAutoLogoutText(note) ||
+      isAutoLogoutText(rawStatus) ||
+      String(status || "").includes("AUTO_LOGOUT")
+    ) {
+      return null;
+    }
 
     let durationSeconds = toNumber(
       getVal(
@@ -329,7 +386,7 @@ export function useDashboard() {
       getVal(row, "notes", "Notes", "lastNotes", "LastNotes") || []
     )
       .map(normalizeOperatorNote)
-      .filter((note) => note.reasonName || note.note || note.text);
+      .filter((note) => note && (note.reasonName || note.note || note.text));
 
     const activeLossReasonCode = String(
       getVal(
@@ -397,16 +454,19 @@ export function useDashboard() {
         : operatorName || operatorNik || "";
 
     const loginClock = formatClock(loginTime);
-    const activeDuration = formatActiveDuration(loginTime);
+    const logoutClock = formatClock(logoutTime);
+    const usageDuration = formatSessionUsageDuration(
+      loginTime,
+      logoutTime,
+      status
+    );
+    const activeDuration = ["ACTIVE", "OPEN"].includes(
+      String(status || "").toUpperCase()
+    )
+      ? formatActiveDuration(loginTime)
+      : usageDuration;
 
-    const operatorSubText =
-      loginClock && activeDuration
-        ? `Login ${loginClock} · Aktif ${activeDuration}`
-        : loginClock
-          ? `Login ${loginClock}`
-          : "";
-
-    return {
+    const sessionItem = {
       id: Number(getVal(row, "id", "ID", "sessionId", "SessionID") || 0),
       uuid,
       operatorNik,
@@ -424,28 +484,68 @@ export function useDashboard() {
       operatorNote: notes.map((note) => note.text).join(" | "),
       operatorNotes: notes.map((note) => note.text).join(" | "),
       operatorLoginClock: loginClock,
+      operatorLogoutClock: logoutClock,
+      operatorUsageDuration: usageDuration,
       operatorActiveDuration: activeDuration,
-      operatorSubText,
-      operatorLoginText: operatorSubText,
-      operatorActiveText: activeDuration,
     };
+
+    sessionItem.operatorSubText = buildOperatorSessionSubText(sessionItem);
+    sessionItem.operatorLoginText = sessionItem.operatorSubText;
+    sessionItem.operatorActiveText = usageDuration || activeDuration;
+
+    return sessionItem;
   }
 
+  function pickPrimaryOperatorSession(sessions) {
+    if (!Array.isArray(sessions) || !sessions.length) return null;
+
+    const active = sessions.find((item) =>
+      ["ACTIVE", "OPEN"].includes(String(item.status || "").toUpperCase())
+    );
+
+    if (active) return active;
+
+    return sessions[sessions.length - 1];
+  }
+
+  function buildOperatorDisplayRows(sessions) {
+    return (Array.isArray(sessions) ? sessions : [])
+      .filter((item) => item?.operatorLabel)
+      .map((item) => ({
+        label: item.operatorLabel,
+        subText: item.operatorSubText || "",
+        processName: item.processName || "",
+        styleName: item.styleName || "",
+        status: item.status || "",
+        note: item.operatorNote || "",
+      }));
+  }
+
+  // Map uuid -> daftar session hari itu (semua operator / shift).
   function buildActiveOperatorMap(data) {
     const map = new Map();
 
     extractRows(data)
       .map(normalizeOperatorSession)
-      .filter((item) => item?.uuid)
+      .filter((item) => item?.uuid && item?.operatorLabel)
       .forEach((item) => {
-        const status = String(item.status || "").toUpperCase();
+        const key = normalizeText(item.uuid);
 
-        if (status && !["ACTIVE", "OPEN"].includes(status)) {
-          return;
+        if (!map.has(key)) {
+          map.set(key, []);
         }
 
-        map.set(normalizeText(item.uuid), item);
+        map.get(key).push(item);
       });
+
+    map.forEach((sessions, key) => {
+      sessions.sort((a, b) => {
+        const timeA = parseDateTime(a.loginTime)?.getTime() || 0;
+        const timeB = parseDateTime(b.loginTime)?.getTime() || 0;
+        return timeA - timeB || Number(a.id || 0) - Number(b.id || 0);
+      });
+      map.set(key, sessions);
+    });
 
     return map;
   }
@@ -483,7 +583,10 @@ export function useDashboard() {
     const normalized = rows.map((row) => {
       const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
       const setting = machineSettings.value.get(normalizeText(uuid)) || null;
-      const operator = activeOperatorMap.value.get(normalizeText(uuid)) || null;
+      const operatorSessions =
+        activeOperatorMap.value.get(normalizeText(uuid)) || [];
+      const operator = pickPrimaryOperatorSession(operatorSessions);
+      const operatorDisplayRows = buildOperatorDisplayRows(operatorSessions);
 
       const backendName = String(
         getVal(
@@ -668,8 +771,23 @@ export function useDashboard() {
         operatorLoginText: operator?.operatorLoginText || "",
         operatorActiveText: operator?.operatorActiveText || "",
         operatorSubText: operator?.operatorSubText || "",
-        operatorNote: operator?.operatorNote || "",
-        operatorNotes: operator?.operatorNotes || "",
+        operatorNote:
+          operatorSessions
+            .map((item) => item.operatorNote)
+            .filter(Boolean)
+            .join(" | ") ||
+          operator?.operatorNote ||
+          "",
+        operatorNotes:
+          operatorSessions
+            .map((item) => item.operatorNotes)
+            .filter(Boolean)
+            .join(" | ") ||
+          operator?.operatorNotes ||
+          "",
+        operatorSessions,
+        operatorDisplayRows,
+        operatorCount: operatorDisplayRows.length,
       };
     });
 

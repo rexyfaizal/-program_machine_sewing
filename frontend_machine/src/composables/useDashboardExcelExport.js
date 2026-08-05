@@ -127,7 +127,7 @@ export function useDashboardExcelExport({
         dates.map(async (dateText) => {
           const [productivityResult, operatorResult] = await Promise.allSettled([
             getProductivity(dateText, { shift: shiftParam }),
-            getMachineOperatorReport(dateText),
+            getMachineOperatorReport(dateText, { withStats: true }),
           ]);
 
           if (productivityResult.status === "rejected") {

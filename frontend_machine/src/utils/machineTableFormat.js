@@ -49,3 +49,20 @@ export function getOperatorName(machine) {
 export function getOperatorSubText(machine) {
   return machine?.operatorSubText || "";
 }
+
+export function getOperatorDisplayRows(machine) {
+  if (Array.isArray(machine?.operatorDisplayRows) && machine.operatorDisplayRows.length) {
+    return machine.operatorDisplayRows;
+  }
+
+  const name = getOperatorName(machine);
+  if (!name) return [];
+
+  return [
+    {
+      label: name,
+      subText: getOperatorSubText(machine),
+      note: getOperatorNote(machine),
+    },
+  ];
+}

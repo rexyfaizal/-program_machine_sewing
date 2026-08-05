@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"backend_machine/models"
+	"backend_machine/utils"
 )
 
 func formatDurationText(seconds int64) string {
@@ -21,7 +24,128 @@ func formatDurationText(seconds int64) string {
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secs)
 }
 
-func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string) ([]models.MachineOperatorReportItem, error) {
+func parseNaiveDateTime(value string) (time.Time, bool) {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return time.Time{}, false
+	}
+
+	raw = strings.Replace(raw, "T", " ", 1)
+	if idx := strings.Index(raw, "."); idx >= 0 {
+		raw = raw[:idx]
+	}
+	if idx := strings.IndexAny(raw, "+Z"); idx >= 0 {
+		raw = strings.TrimSpace(raw[:idx])
+	}
+
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	}
+
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t, true
+		}
+	}
+
+	return time.Time{}, false
+}
+
+func naiveNowUTC() time.Time {
+	now := time.Now()
+	return time.Date(
+		now.Year(), now.Month(), now.Day(),
+		now.Hour(), now.Minute(), now.Second(),
+		0, time.UTC,
+	)
+}
+
+func (r *Repository) enrichOperatorReportSessionStats(
+	ctx context.Context,
+	report []models.MachineOperatorReportItem,
+) {
+	if len(report) == 0 {
+		return
+	}
+
+	machines, err := r.GetMachines(ctx)
+	if err != nil {
+		log.Printf("operator report stats: gagal ambil machines: %v", err)
+		return
+	}
+
+	tableByUUID := make(map[string]string, len(machines))
+	for _, m := range machines {
+		uuid := strings.ToLower(strings.TrimSpace(m.UUID))
+		if uuid == "" {
+			continue
+		}
+		tableByUUID[uuid] = strings.TrimSpace(m.TableName)
+	}
+
+	for i := range report {
+		item := &report[i]
+		uuid := strings.TrimSpace(item.UUID)
+		loginAt, okLogin := parseNaiveDateTime(item.LoginTime)
+		if !okLogin || uuid == "" {
+			item.HasSessionStats = true
+			continue
+		}
+
+		endAt, okLogout := parseNaiveDateTime(item.LogoutTime)
+		statusUpper := strings.ToUpper(strings.TrimSpace(item.Status))
+		if !okLogout || statusUpper == "ACTIVE" || statusUpper == "OPEN" {
+			endAt = naiveNowUTC()
+		}
+
+		if !endAt.After(loginAt) {
+			item.HasSessionStats = true
+			continue
+		}
+
+		runtimeSec, err := r.GetRuntimeSec(ctx, uuid, "", loginAt, endAt)
+		if err != nil {
+			log.Printf("operator report stats runtime uuid=%s: %v", uuid, err)
+			runtimeSec = 0
+		}
+
+		procSec := int64(0)
+		tableName := tableByUUID[strings.ToLower(uuid)]
+		if tableName != "" {
+			ps, err := r.GetProductionStats(ctx, tableName, loginAt, endAt)
+			if err != nil {
+				log.Printf("operator report stats proc uuid=%s table=%s: %v", uuid, tableName, err)
+			} else {
+				procSec = ps.ProcSec
+			}
+		}
+
+		lossSec := runtimeSec - procSec
+		if lossSec < 0 {
+			lossSec = 0
+		}
+
+		pct := 0.0
+		if runtimeSec > 0 {
+			pct = float64(procSec) / float64(runtimeSec) * 100
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		pct = utils.Round2(pct)
+
+		item.HasSessionStats = true
+		item.RuntimeSec = runtimeSec
+		item.ProcSec = procSec
+		item.LossTimeSec = lossSec
+		item.ProductivityPct = pct
+		item.ProductivityStatus = utils.StatusFromPct(pct)
+	}
+}
+
+func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, withStats bool) ([]models.MachineOperatorReportItem, error) {
 	date = strings.TrimSpace(date)
 	if date == "" {
 		return nil, fmt.Errorf("date wajib diisi")
@@ -282,6 +406,10 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string) 
 		if report[i].Notes == nil {
 			report[i].Notes = make([]models.MachineOperatorNote, 0)
 		}
+	}
+
+	if withStats {
+		r.enrichOperatorReportSessionStats(ctx, report)
 	}
 
 	return report, nil

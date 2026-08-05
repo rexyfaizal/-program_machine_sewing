@@ -81,6 +81,14 @@ type MachineOperatorReportItem struct {
 	ActiveLossDurationText    string `json:"activeLossDurationText,omitempty"`
 	ActiveLossStatus          string `json:"activeLossStatus,omitempty"`
 
+	// Stats mesin pada jendela login–logout session (untuk export Excel).
+	HasSessionStats        bool    `json:"hasSessionStats"`
+	RuntimeSec             int64   `json:"runtimeSec"`
+	ProcSec                int64   `json:"procSec"`
+	LossTimeSec            int64   `json:"lossTimeSec"`
+	ProductivityPct        float64 `json:"productivityPct"`
+	ProductivityStatus     string  `json:"productivityStatus"`
+
 	Notes []MachineOperatorNote `json:"notes"`
 }
 

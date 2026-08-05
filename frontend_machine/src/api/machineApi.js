@@ -331,16 +331,24 @@ export async function getActiveMachineOperatorLossEvent(uuid) {
   return await readResponse(res);
 }
 
-export async function getMachineOperatorReport(date) {
+export async function getMachineOperatorReport(date, options = {}) {
   const d = String(date || "").trim();
 
   if (!d) {
     throw new Error("Tanggal report wajib diisi.");
   }
 
-  const res = await fetch(
-    `/api/machine-operator/report?date=${encodeURIComponent(d)}`
-  );
+  const withStats =
+    options?.withStats === true ||
+    options?.withStats === 1 ||
+    String(options?.withStats || "").trim() === "1";
+
+  const params = new URLSearchParams({ date: d });
+  if (withStats) {
+    params.set("withStats", "1");
+  }
+
+  const res = await fetch(`/api/machine-operator/report?${params.toString()}`);
 
   return await readResponse(res);
 }

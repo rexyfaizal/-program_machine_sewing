@@ -127,6 +127,57 @@ export function formatExportTime(value) {
     .replace(":", ".");
 }
 
+export function formatExportUsageDuration(loginTime, logoutTime, status) {
+  const start = parseExportDateTime(loginTime);
+
+  if (!start) return "";
+
+  const statusUpper = String(status || "").toUpperCase();
+  const end = parseExportDateTime(logoutTime);
+  const isActive = ["ACTIVE", "OPEN"].includes(statusUpper) && !end;
+  const endMs = isActive ? Date.now() : end?.getTime();
+
+  if (!endMs || endMs < start.getTime()) return "";
+
+  const totalSeconds = Math.max(0, Math.floor((endMs - start.getTime()) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}j ${minutes}m`;
+  }
+
+  return `${minutes}m`;
+}
+
+/** Teks pemakaian operator seperti dashboard: Login 06.12–13.30 · Pakai 7j 18m */
+export function formatOperatorUsageText(loginTime, logoutTime, status) {
+  const loginClock = formatExportTime(loginTime);
+  const logoutClock = formatExportTime(logoutTime);
+  const usage = formatExportUsageDuration(loginTime, logoutTime, status);
+  const statusUpper = String(status || "").toUpperCase();
+  const isActive =
+    ["ACTIVE", "OPEN"].includes(statusUpper) && !String(logoutTime || "").trim();
+
+  if (loginClock && logoutClock && usage) {
+    return `Login ${loginClock}–${logoutClock} · Pakai ${usage}`;
+  }
+
+  if (loginClock && isActive && usage) {
+    return `Login ${loginClock} · Aktif ${usage}`;
+  }
+
+  if (loginClock && usage) {
+    return `Login ${loginClock} · Pakai ${usage}`;
+  }
+
+  if (loginClock) {
+    return `Login ${loginClock}`;
+  }
+
+  return "";
+}
+
 export function isAutoLogoutText(value) {
   const text = String(value || "")
     .trim()
@@ -458,6 +509,16 @@ export function buildOperatorExportMap(reportData, options = {}) {
         ? `${operatorNik} - ${operatorName}`
         : operatorName || operatorNik || "";
 
+    const loginTime = String(
+      getVal(row, "loginTime", "LoginTime", "login_time") || ""
+    ).trim();
+
+    const logoutTime = String(
+      getVal(row, "logoutTime", "LogoutTime", "logout_time") || ""
+    ).trim();
+
+    const usageText = formatOperatorUsageText(loginTime, logoutTime, rowStatus);
+
     const notes = rawNotes.map(normalizeExportNote).filter(Boolean);
 
     const activeLossReasonCode = String(
@@ -523,7 +584,8 @@ export function buildOperatorExportMap(reportData, options = {}) {
     if (
       !notes.length &&
       operator &&
-      !isAutoLogoutText(rowStatus) &&
+      !isAutoLogoutText(operator) &&
+      !isAutoLogoutText(operatorName) &&
       (!filterByShift || sessionInShift(row, schedule))
     ) {
       notes.push("");
@@ -541,7 +603,7 @@ export function buildOperatorExportMap(reportData, options = {}) {
         return;
       }
 
-      const rowKey = `${operator}||${processName}||${styleName}||${cleanNote}`;
+      const rowKey = `${operator}||${loginTime}||${processName}||${styleName}||${cleanNote}`;
 
       if (current.rowKeySet.has(rowKey)) {
         return;
@@ -555,6 +617,44 @@ export function buildOperatorExportMap(reportData, options = {}) {
         note: cleanNote,
         processName,
         styleName,
+        loginTime,
+        logoutTime,
+        usageText,
+        hasSessionStats: Boolean(
+          getVal(row, "hasSessionStats", "HasSessionStats")
+        ),
+        runtimeSec: toNumber(
+          getVal(row, "runtimeSec", "RuntimeSec", "runtime_sec") || 0
+        ),
+        procSec: toNumber(
+          getVal(row, "procSec", "ProcSec", "proc_sec") || 0
+        ),
+        lossTimeSec: toNumber(
+          getVal(
+            row,
+            "lossTimeSec",
+            "LossTimeSec",
+            "loss_time_sec",
+            "lossSec",
+            "LossSec"
+          ) || 0
+        ),
+        productivityPct: toNumber(
+          getVal(
+            row,
+            "productivityPct",
+            "ProductivityPct",
+            "productivity_pct"
+          ) || 0
+        ),
+        productivityStatus: String(
+          getVal(
+            row,
+            "productivityStatus",
+            "ProductivityStatus",
+            "productivity_status"
+          ) || ""
+        ).trim(),
       });
     });
   });
@@ -869,13 +969,18 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
         Style: fallbackStyle,
         "Operator NIK": "",
         "Operator Name": "",
+        "Waktu Pemakaian": "",
         "Operator Note": "",
       },
     ];
   }
 
-  // Urutkan: NIK → Name → Note.
+  // Urutkan: login → NIK → Name → Note.
   const sortedRows = rows.slice().sort((a, b) => {
+    const timeA = parseExportDateTime(a?.loginTime)?.getTime() || 0;
+    const timeB = parseExportDateTime(b?.loginTime)?.getTime() || 0;
+    if (timeA !== timeB) return timeA - timeB;
+
     const left = resolveOperatorNikName(a);
     const right = resolveOperatorNikName(b);
 
@@ -888,28 +993,53 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     return String(a?.note || "").localeCompare(String(b?.note || ""));
   });
 
-  // Pola seperti gambar:
-  // - Baris pertama tiap operator: isi NIK + Name + Note
-  // - Baris note berikutnya: NIK/Name kosong, Note tetap terisi
-  let lastOperatorKey = "";
+  // Pola:
+  // - Baris pertama tiap session operator: NIK + Name + Waktu Pemakaian + Note
+  // - Baris note berikutnya: NIK/Name/Waktu kosong, Note tetap terisi
+  let lastSessionKey = "";
 
   return sortedRows.map((item) => {
     const { operatorNik, operatorName } = resolveOperatorNikName(item);
     const processName = String(item?.processName || "").trim();
     const styleName = String(item?.styleName || "").trim();
-    const operatorKey = `${operatorNik}||${operatorName}`;
-    const isFirstOfOperator = operatorKey !== lastOperatorKey;
+    const loginTime = String(item?.loginTime || "").trim();
+    const usageText = String(item?.usageText || "").trim();
+    const sessionKey = `${operatorNik}||${operatorName}||${loginTime}||${usageText}`;
+    const isFirstOfSession = sessionKey !== lastSessionKey;
 
-    if (isFirstOfOperator) {
-      lastOperatorKey = operatorKey;
+    if (isFirstOfSession) {
+      lastSessionKey = sessionKey;
     }
+
+    const hasSessionStats = Boolean(item?.hasSessionStats);
+    const sessionPowerOn = hasSessionStats
+      ? formatSeconds(item.runtimeSec)
+      : baseRow["Power On Duration"];
+    const sessionRunning = hasSessionStats
+      ? formatSeconds(item.procSec)
+      : baseRow["Running Time"];
+    const sessionLoss = hasSessionStats
+      ? formatSeconds(item.lossTimeSec)
+      : baseRow["Loss Time"];
+    const sessionProductivity = hasSessionStats
+      ? Number(item.productivityPct || 0)
+      : baseRow.Produktivitas;
+    const sessionStatus = hasSessionStats
+      ? String(item.productivityStatus || statusFromProductivity(item.productivityPct)).trim()
+      : baseRow.Status;
 
     return {
       ...baseRow,
-      Mesin: isFirstOfOperator ? processName || fallbackMesin : "",
-      Style: isFirstOfOperator ? styleName || fallbackStyle : "",
-      "Operator NIK": isFirstOfOperator ? operatorNik : "",
-      "Operator Name": isFirstOfOperator ? operatorName : "",
+      Mesin: isFirstOfSession ? processName || fallbackMesin : "",
+      Style: isFirstOfSession ? styleName || fallbackStyle : "",
+      "Power On Duration": isFirstOfSession ? sessionPowerOn : "",
+      "Running Time": isFirstOfSession ? sessionRunning : "",
+      "Loss Time": isFirstOfSession ? sessionLoss : "",
+      Produktivitas: isFirstOfSession ? sessionProductivity : "",
+      Status: isFirstOfSession ? sessionStatus : "",
+      "Operator NIK": isFirstOfSession ? operatorNik : "",
+      "Operator Name": isFirstOfSession ? operatorName : "",
+      "Waktu Pemakaian": isFirstOfSession ? usageText : "",
       "Operator Note": String(item?.note || "").trim(),
     };
   });
@@ -1021,6 +1151,9 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
       const note = String(operatorRow.note || "").trim();
       const processName = String(operatorRow.processName || "").trim();
       const styleName = String(operatorRow.styleName || "").trim();
+      const loginTime = String(operatorRow.loginTime || "").trim();
+      const logoutTime = String(operatorRow.logoutTime || "").trim();
+      const usageText = String(operatorRow.usageText || "").trim();
 
       if (
         isAutoLogoutText(operator) ||
@@ -1030,7 +1163,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         return;
       }
 
-      const rowKey = `${operatorNik}||${operatorName}||${processName}||${styleName}||${note}`;
+      const rowKey = `${operatorNik}||${operatorName}||${loginTime}||${processName}||${styleName}||${note}`;
 
       if (current.operatorRowKeySet.has(rowKey)) {
         return;
@@ -1044,6 +1177,15 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         note,
         processName,
         styleName,
+        loginTime,
+        logoutTime,
+        usageText,
+        hasSessionStats: Boolean(operatorRow.hasSessionStats),
+        runtimeSec: toNumber(operatorRow.runtimeSec || 0),
+        procSec: toNumber(operatorRow.procSec || 0),
+        lossTimeSec: toNumber(operatorRow.lossTimeSec || 0),
+        productivityPct: toNumber(operatorRow.productivityPct || 0),
+        productivityStatus: String(operatorRow.productivityStatus || "").trim(),
       });
     });
   });
@@ -1132,6 +1274,7 @@ export function buildBadPriorityRows(summaryBaseRows, selectedLocation) {
         Rekomendasi: "Semua mesin tidak berstatus BAD pada periode ini.",
         "Operator NIK": "",
         "Operator Name": "",
+        "Waktu Pemakaian": "",
         "Operator Note": "",
       },
     ];
@@ -1169,25 +1312,25 @@ export function buildBadPriorityRows(summaryBaseRows, selectedLocation) {
 export function createRangeWorkbook(summaryRows, detailRows, badPriorityRows) {
   const workbook = XLSX.utils.book_new();
 
-  const summaryCols = 14;
-  const detailCols = 15;
-  const badCols = 15;
+  const summaryCols = 15;
+  const detailCols = 16;
+  const badCols = 16;
 
   const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
   setWorksheetWidth(summarySheet, [
-    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 50,
+    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 36, 50,
   ]);
   setAutoFilter(summarySheet, summaryRows.length, summaryCols);
 
   const detailSheet = XLSX.utils.json_to_sheet(detailRows);
   setWorksheetWidth(detailSheet, [
-    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 50,
+    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 36, 50,
   ]);
   setAutoFilter(detailSheet, detailRows.length, detailCols);
 
   const badSheet = XLSX.utils.json_to_sheet(badPriorityRows);
   setWorksheetWidth(badSheet, [
-    8, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 40, 14, 28, 50,
+    8, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 40, 14, 28, 36, 50,
   ]);
   setAutoFilter(badSheet, badPriorityRows.length, badCols);
 

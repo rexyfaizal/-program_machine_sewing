@@ -163,10 +163,11 @@ func (h *Handler) MachineOperatorActive(w http.ResponseWriter, r *http.Request) 
 
 // MachineOperatorReport godoc
 // @Summary Report operator mesin harian
-// @Description Mengambil session operator dan note berdasarkan tanggal
+// @Description Mengambil session operator dan note berdasarkan tanggal. withStats=1 menambah Power On/Running/Loss per jendela login–logout (untuk export Excel).
 // @Tags Machine Operator
 // @Produce json
 // @Param date query string true "Tanggal format YYYY-MM-DD"
+// @Param withStats query string false "1 = hitung stats per session"
 // @Success 200 {array} models.MachineOperatorReportItem
 // @Failure 400 {string} string
 // @Failure 500 {string} string
@@ -177,7 +178,15 @@ func (h *Handler) MachineOperatorReport(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ctx, cancel := contextWithTimeout(r, 60*time.Second)
+	withStats := strings.TrimSpace(r.URL.Query().Get("withStats")) == "1" ||
+		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("withStats")), "true")
+
+	timeout := 60 * time.Second
+	if withStats {
+		timeout = 180 * time.Second
+	}
+
+	ctx, cancel := contextWithTimeout(r, timeout)
 	defer cancel()
 
 	date := strings.TrimSpace(r.URL.Query().Get("date"))
@@ -185,7 +194,7 @@ func (h *Handler) MachineOperatorReport(w http.ResponseWriter, r *http.Request) 
 		date = time.Now().Format("2006-01-02")
 	}
 
-	data, err := h.Repo.GetMachineOperatorReport(ctx, date)
+	data, err := h.Repo.GetMachineOperatorReport(ctx, date, withStats)
 	if err != nil {
 		http.Error(w, "Gagal ambil report operator: "+err.Error(), http.StatusInternalServerError)
 		return
