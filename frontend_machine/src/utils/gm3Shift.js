@@ -341,6 +341,21 @@ export function factoryHasEnabledShift(factory, configMap) {
   return f === "GM3";
 }
 
+/** True jika ada minimal satu line di factory yang disetel Hari Penuh. */
+export function factoryHasFullDayLine(factory, configMap) {
+  const f = String(factory || "").trim().toUpperCase();
+  if (!f || !(configMap instanceof Map)) return false;
+
+  for (const cfg of configMap.values()) {
+    if (String(cfg.factory || "").toUpperCase() !== f) continue;
+    if (!cfg.enabled || !Array.isArray(cfg.schedule) || !cfg.schedule.length) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function buildShiftOptionsFromConfigMap(factory, configMap) {
   const f = String(factory || "").trim().toUpperCase();
   const labels = new Map();
@@ -359,16 +374,24 @@ export function buildShiftOptionsFromConfigMap(factory, configMap) {
     }
   }
 
-  if (!labels.size && f === "GM3") {
-    return GM3_SHIFT_OPTIONS;
+  const options = labels.size
+    ? [{ value: "CURRENT", label: "Current Shift" }]
+    : [];
+
+  if (labels.size) {
+    ["SHIFT_1", "SHIFT_2", "SHIFT_3"].forEach((code) => {
+      if (labels.has(code)) {
+        options.push({ value: code, label: labels.get(code) });
+      }
+    });
+    options.push({ value: "ALL", label: "All Shifts" });
+  } else if (f === "GM3") {
+    options.push(...GM3_SHIFT_OPTIONS);
   }
 
-  const options = [{ value: "CURRENT", label: "Current Shift" }];
-  ["SHIFT_1", "SHIFT_2", "SHIFT_3"].forEach((code) => {
-    if (labels.has(code)) {
-      options.push({ value: code, label: labels.get(code) });
-    }
-  });
-  options.push({ value: "ALL", label: "All Shifts" });
+  if (!options.length || factoryHasFullDayLine(f, configMap)) {
+    options.push({ value: "NORMAL", label: "Normal (Hari Penuh)" });
+  }
+
   return options;
 }

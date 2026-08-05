@@ -18,7 +18,7 @@ func (r *Repository) RunMachineOperatorWorkEndAutoLogout(ctx context.Context) (i
 
 		UPDATE s
 		SET
-			s.logout_time = DATEADD(HOUR, 9, s.login_time),
+			s.logout_time = DATEADD(HOUR, 10, s.login_time),
 			s.status = 'AUTO_LOGOUT_WORK_END',
 			s.updated_at = SYSDATETIME()
 		OUTPUT
@@ -34,7 +34,7 @@ func (r *Repository) RunMachineOperatorWorkEndAutoLogout(ctx context.Context) (i
 			s.status = 'ACTIVE'
 			AND s.logout_time IS NULL
 			AND s.login_time IS NOT NULL
-			AND DATEDIFF(MINUTE, s.login_time, SYSDATETIME()) >= 540;
+			AND DATEDIFF(MINUTE, s.login_time, SYSDATETIME()) >= 600;
 
 		UPDATE e
 		SET
@@ -71,7 +71,7 @@ func (r *Repository) RunMachineOperatorWorkEndAutoLogout(ctx context.Context) (i
 			c.operator_name,
 			'AUTO_LOGOUT_WORK_END',
 			'Auto Logout Selesai Jam Kerja',
-			'Session ditutup otomatis karena operator sudah login selama 9 jam.',
+			'Session ditutup otomatis karena operator sudah login selama 10 jam.',
 			SYSDATETIME()
 		FROM @closed c
 		WHERE NOT EXISTS (

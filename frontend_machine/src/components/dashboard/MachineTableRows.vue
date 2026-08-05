@@ -120,6 +120,13 @@ function editMachine(machine) {
                 >
                   <strong class="operator-name">
                     {{ op.label }}
+                    <span
+                      v-if="op.shiftTag"
+                      class="operator-shift-tag"
+                      :class="`shift-tag-${String(op.shiftTagCode || 'NORMAL').toLowerCase()}`"
+                    >
+                      | {{ op.shiftTag }}
+                    </span>
                   </strong>
                   <small v-if="op.subText" class="operator-sub">
                     {{ op.subText }}
@@ -223,6 +230,13 @@ function editMachine(machine) {
                 >
                   <strong class="operator-name">
                     {{ op.label }}
+                    <span
+                      v-if="op.shiftTag"
+                      class="operator-shift-tag"
+                      :class="`shift-tag-${String(op.shiftTagCode || 'NORMAL').toLowerCase()}`"
+                    >
+                      | {{ op.shiftTag }}
+                    </span>
                   </strong>
                   <small v-if="op.subText" class="operator-sub">
                     {{ op.subText }}

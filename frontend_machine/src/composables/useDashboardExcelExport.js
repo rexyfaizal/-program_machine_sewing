@@ -72,7 +72,7 @@ export function useDashboardExcelExport({
       return "";
     }
 
-    return String(productivityShift?.value || "ALL").trim();
+    return String(productivityShift?.value || "").trim();
   }
 
   async function downloadExcel() {

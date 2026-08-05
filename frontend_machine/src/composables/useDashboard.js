@@ -6,7 +6,12 @@ import {
   getProductivity,
 } from "../api/machineApi";
 import { isAutoLogoutText } from "../utils/dashboardExportExcel";
-import { buildLineShiftConfigMap } from "../utils/gm3Shift";
+import {
+  buildLineShiftConfigMap,
+  formatLocalDate,
+  getGM3ShiftWindow,
+  resolveLineShiftForLocation,
+} from "../utils/gm3Shift";
 
 const WORK_SECONDS_PER_DAY = 28800;
 
@@ -18,10 +23,165 @@ export function useDashboard() {
   const machineSettings = ref(new Map());
   const activeOperatorMap = ref(new Map());
   const shiftConfigMap = ref(new Map());
+  const loadedDashboardDate = ref("");
+  const loadedDashboardShift = ref("");
 
   let dashboardRequestSeq = 0;
   let inFlightRequest = null;
   let inFlightDate = "";
+
+  function isLoadedDateToday() {
+    const loaded = String(loadedDashboardDate.value || "").trim();
+    if (!loaded) return true;
+    return loaded === formatLocalDate(new Date());
+  }
+
+  // Window jam shift terpilih untuk sebuah mesin. null = tanpa filter shift.
+  function getShiftWindowForLocation(location) {
+    const shiftCode = String(loadedDashboardShift.value || "")
+      .trim()
+      .toUpperCase();
+
+    if (!["SHIFT_1", "SHIFT_2", "SHIFT_3", "CURRENT"].includes(shiftCode)) {
+      return null;
+    }
+
+    const lineShift = resolveLineShiftForLocation(location, shiftConfigMap.value);
+    if (!lineShift.useShift) return null;
+
+    return getGM3ShiftWindow(
+      loadedDashboardDate.value,
+      shiftCode,
+      lineShift.schedule
+    );
+  }
+
+  // True jika rentang [start, end) overlap dengan window shift.
+  function overlapsShiftWindow(startValue, endValue, isActive, window) {
+    const start = parseDateTime(startValue);
+    if (!start) return false;
+
+    const end = isActive ? new Date() : parseDateTime(endValue);
+
+    return (
+      start.getTime() < window.end.getTime() &&
+      (!end || end.getTime() > window.start.getTime())
+    );
+  }
+
+  function getSessionBounds(item) {
+    const start = parseDateTime(item?.loginTime);
+    if (!start) return null;
+
+    const status = String(item?.status || "").toUpperCase();
+    const isActive =
+      ["ACTIVE", "OPEN"].includes(status) &&
+      !String(item?.logoutTime || "").trim();
+    const end = isActive ? new Date() : parseDateTime(item?.logoutTime);
+
+    if (!end || end.getTime() <= start.getTime()) return null;
+
+    return { start, end, isActive };
+  }
+
+  // Durasi overlap session vs window dalam detik. 0 = tidak overlap / terlalu singkat.
+  function getOverlapSeconds(bounds, window) {
+    if (!bounds || !window) return 0;
+
+    const startMs = Math.max(bounds.start.getTime(), window.start.getTime());
+    const endMs = Math.min(bounds.end.getTime(), window.end.getTime());
+    if (endMs <= startMs) return 0;
+
+    return Math.floor((endMs - startMs) / 1000);
+  }
+
+  // Session dimiliki 1 shift saja: yang overlap terbesar. Minimal 1 menit.
+  function resolveSessionOwnerShiftCode(item, location) {
+    const bounds = getSessionBounds(item);
+    if (!bounds) return null;
+
+    const durationSec = Math.floor(
+      (bounds.end.getTime() - bounds.start.getTime()) / 1000
+    );
+    // Session sangat singkat (0 menit / < 1 menit) tidak dimasukkan.
+    if (durationSec < 60) return null;
+
+    const lineShift = resolveLineShiftForLocation(
+      location,
+      shiftConfigMap.value
+    );
+    if (!lineShift.useShift) return null;
+
+    const workDate = String(loadedDashboardDate.value || "").trim();
+    if (!workDate) return null;
+
+    let bestCode = null;
+    let bestOverlap = 0;
+
+    for (const code of ["SHIFT_1", "SHIFT_2", "SHIFT_3"]) {
+      const window = getGM3ShiftWindow(workDate, code, lineShift.schedule);
+      const overlap = getOverlapSeconds(bounds, window);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestCode = code;
+      }
+    }
+
+    return bestOverlap > 0 ? bestCode : null;
+  }
+
+  // Label shift mengikuti filter dashboard / jam sistem (bukan jam login).
+  function resolveCurrentShiftCodeFromSchedule(schedule, now = new Date()) {
+    const today = formatLocalDate(now);
+    const yesterdayDate = new Date(now.getTime());
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = formatLocalDate(yesterdayDate);
+
+    for (const dateText of [today, yesterday]) {
+      for (const code of ["SHIFT_1", "SHIFT_2", "SHIFT_3"]) {
+        const window = getGM3ShiftWindow(dateText, code, schedule);
+        if (
+          window &&
+          now.getTime() >= window.start.getTime() &&
+          now.getTime() < window.end.getTime()
+        ) {
+          return code;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function resolveOperatorShiftTag(location) {
+    const lineShift = resolveLineShiftForLocation(
+      location,
+      shiftConfigMap.value
+    );
+
+    if (!lineShift.useShift) {
+      return { label: "Normal", code: "NORMAL" };
+    }
+
+    const selected = String(loadedDashboardShift.value || "")
+      .trim()
+      .toUpperCase();
+
+    let code = selected;
+
+    if (!code || code === "CURRENT") {
+      code =
+        resolveCurrentShiftCodeFromSchedule(lineShift.schedule) || "ALL";
+    }
+
+    if (code === "SHIFT_1") return { label: "Shift 1", code: "SHIFT_1" };
+    if (code === "SHIFT_2") return { label: "Shift 2", code: "SHIFT_2" };
+    if (code === "SHIFT_3") return { label: "Shift 3", code: "SHIFT_3" };
+    if (code === "ALL") return { label: "All Shifts", code: "ALL" };
+    if (code === "NORMAL") return { label: "Normal", code: "NORMAL" };
+
+    return { label: "Normal", code: "NORMAL" };
+  }
 
   function setLastUpdate() {
     lastUpdate.value = new Date().toLocaleString("id-ID", {
@@ -508,17 +668,88 @@ export function useDashboard() {
     return sessions[sessions.length - 1];
   }
 
-  function buildOperatorDisplayRows(sessions) {
-    return (Array.isArray(sessions) ? sessions : [])
-      .filter((item) => item?.operatorLabel)
-      .map((item) => ({
-        label: item.operatorLabel,
-        subText: item.operatorSubText || "",
-        processName: item.processName || "",
-        styleName: item.styleName || "",
-        status: item.status || "",
-        note: item.operatorNote || "",
-      }));
+  // Filter session operator sesuai window shift (jika ada).
+  function filterOperatorSessionsForShift(sessions, location) {
+    let list = (Array.isArray(sessions) ? sessions : []).filter(
+      (item) => item?.operatorLabel
+    );
+
+    const selectedShift = String(loadedDashboardShift.value || "")
+      .trim()
+      .toUpperCase();
+    const isCurrentShift = selectedShift === "CURRENT";
+
+    // Current Shift: hanya operator yang masih ACTIVE (hindari session selesai yang rancu).
+    if (isCurrentShift) {
+      list = list.filter((item) => {
+        const status = String(item.status || "").toUpperCase();
+        return (
+          ["ACTIVE", "OPEN"].includes(status) &&
+          !String(item.logoutTime || "").trim()
+        );
+      });
+    }
+
+    const window = getShiftWindowForLocation(location);
+
+    if (window) {
+      // Shift spesifik / Current: session hanya masuk ke 1 shift (overlap terbesar).
+      // Session < 1 menit tidak ditampilkan.
+      const targetCode = String(window.shiftCode || "").toUpperCase();
+
+      return list.filter((item) => {
+        const ownerCode = resolveSessionOwnerShiftCode(item, location);
+        return ownerCode && ownerCode === targetCode;
+      });
+    }
+
+    // Tanpa window: hari ini operator aktif saja, tanggal lampau semua session.
+    if (isLoadedDateToday()) {
+      return list.filter((item) =>
+        ["ACTIVE", "OPEN"].includes(String(item.status || "").toUpperCase())
+      );
+    }
+
+    return list;
+  }
+
+  // Note yang ditampilkan dibatasi window shift terpilih.
+  function resolveNoteTextForShift(item, window) {
+    if (!window) {
+      return item.operatorNote || "";
+    }
+
+    const notes = Array.isArray(item.notes) ? item.notes : [];
+    const filtered = notes.filter((note) => {
+      const status = String(note.status || "").toUpperCase();
+      const isActive = ["ACTIVE", "OPEN"].includes(status);
+
+      return overlapsShiftWindow(
+        note.createdAt,
+        note.endTime,
+        isActive,
+        window
+      );
+    });
+
+    return filtered.map((note) => note.text).join(" | ");
+  }
+
+  function buildOperatorDisplayRows(sessions, location) {
+    const list = filterOperatorSessionsForShift(sessions, location);
+    const window = getShiftWindowForLocation(location);
+    const shiftTag = resolveOperatorShiftTag(location);
+
+    return list.map((item) => ({
+      label: item.operatorLabel,
+      shiftTag: shiftTag.label,
+      shiftTagCode: shiftTag.code,
+      subText: item.operatorSubText || "",
+      processName: item.processName || "",
+      styleName: item.styleName || "",
+      status: item.status || "",
+      note: resolveNoteTextForShift(item, window),
+    }));
   }
 
   // Map uuid -> daftar session hari itu (semua operator / shift).
@@ -583,10 +814,19 @@ export function useDashboard() {
     const normalized = rows.map((row) => {
       const uuid = String(getVal(row, "uuid", "UUID") || "").trim();
       const setting = machineSettings.value.get(normalizeText(uuid)) || null;
+      const locationFromApi = String(getVal(row, "location", "Location") || "");
+      const location = setting?.location || locationFromApi || "-";
       const operatorSessions =
         activeOperatorMap.value.get(normalizeText(uuid)) || [];
-      const operator = pickPrimaryOperatorSession(operatorSessions);
-      const operatorDisplayRows = buildOperatorDisplayRows(operatorSessions);
+      const displaySessions = filterOperatorSessionsForShift(
+        operatorSessions,
+        location
+      );
+      const operator = pickPrimaryOperatorSession(displaySessions);
+      const operatorDisplayRows = buildOperatorDisplayRows(
+        operatorSessions,
+        location
+      );
 
       const backendName = String(
         getVal(
@@ -668,9 +908,6 @@ export function useDashboard() {
 
       const productivity =
         runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
-
-      const locationFromApi = String(getVal(row, "location", "Location") || "");
-      const location = setting?.location || locationFromApi || "-";
 
       const output = toNumber(getVal(row, "output", "Output") || 0);
       const cycles = toNumber(getVal(row, "cycles", "Cycles") || 0);
@@ -772,20 +1009,16 @@ export function useDashboard() {
         operatorActiveText: operator?.operatorActiveText || "",
         operatorSubText: operator?.operatorSubText || "",
         operatorNote:
-          operatorSessions
-            .map((item) => item.operatorNote)
+          displaySessions
+            .map((item) => resolveNoteTextForShift(item, getShiftWindowForLocation(location)))
             .filter(Boolean)
-            .join(" | ") ||
-          operator?.operatorNote ||
-          "",
+            .join(" | ") || "",
         operatorNotes:
-          operatorSessions
-            .map((item) => item.operatorNotes)
+          displaySessions
+            .map((item) => resolveNoteTextForShift(item, getShiftWindowForLocation(location)))
             .filter(Boolean)
-            .join(" | ") ||
-          operator?.operatorNotes ||
-          "",
-        operatorSessions,
+            .join(" | ") || "",
+        operatorSessions: displaySessions,
         operatorDisplayRows,
         operatorCount: operatorDisplayRows.length,
       };
@@ -811,6 +1044,8 @@ export function useDashboard() {
     loading.value = true;
     errorMessage.value = "";
     inFlightDate = requestKey;
+    loadedDashboardDate.value = requestDate;
+    loadedDashboardShift.value = requestShift;
 
     const request = (async () => {
       const [settingsResult, operatorResult, productivityResult, shiftConfigResult] =

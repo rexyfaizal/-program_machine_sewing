@@ -3,8 +3,10 @@ import { getLocationGroup } from "../utils/dashboardExportExcel";
 import {
   GM3_SHIFT_OPTIONS,
   buildShiftOptionsFromConfigMap,
-  factoryHasEnabledShift,
+  resolveLineShiftForLocation,
 } from "../utils/gm3Shift";
+
+const SPECIFIC_SHIFT_CODES = ["SHIFT_1", "SHIFT_2", "SHIFT_3"];
 
 export function useDashboardFilters(machines, shiftConfigMap = null) {
   const keyword = ref("");
@@ -37,13 +39,13 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
 
   const showShiftFilter = computed(() => {
     const area = String(locationFilter.value || "").trim().toUpperCase();
-    if (!area || area === "ALL") return false;
-    return factoryHasEnabledShift(area, configMap.value);
+    return Boolean(area && area !== "ALL");
   });
 
   const shiftOptions = computed(() => {
     const area = String(locationFilter.value || "").trim().toUpperCase();
     if (!area || area === "ALL") return GM3_SHIFT_OPTIONS;
+
     return buildShiftOptionsFromConfigMap(area, configMap.value);
   });
 
@@ -52,7 +54,15 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
       return "";
     }
 
-    return String(shiftFilter.value || "CURRENT").trim();
+    const selected = String(shiftFilter.value || "").trim().toUpperCase();
+    const validOption = shiftOptions.value.some(
+      (option) => String(option.value || "").toUpperCase() === selected
+    );
+    const resolved = validOption
+      ? selected
+      : String(shiftOptions.value[0]?.value || "NORMAL").toUpperCase();
+
+    return resolved === "NORMAL" ? "" : resolved;
   });
 
   watch(
@@ -73,6 +83,31 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
     }
   });
 
+  watch(
+    shiftOptions,
+    (options) => {
+      if (!showShiftFilter.value) return;
+
+      const selected = String(shiftFilter.value || "").trim().toUpperCase();
+      const isValid = options.some(
+        (option) => String(option.value || "").toUpperCase() === selected
+      );
+
+      if (!isValid) {
+        shiftFilter.value = String(options[0]?.value || "NORMAL");
+      }
+    },
+    { immediate: true }
+  );
+
+  // Shift 1/2/3 spesifik tidak berlaku untuk line "Hari Penuh".
+  // Current Shift tetap menampilkan line Normal (Hari Penuh).
+  const hideFullDayLines = computed(() =>
+    SPECIFIC_SHIFT_CODES.includes(
+      String(productivityShift.value || "").trim().toUpperCase()
+    )
+  );
+
   const filteredMachines = computed(() => {
     const key = keyword.value.toLowerCase().trim();
     const selectedLocation = String(locationFilter.value || "ALL").trim();
@@ -82,6 +117,11 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
 
       if (selectedLocation !== "ALL" && locationGroup !== selectedLocation) {
         return false;
+      }
+
+      if (hideFullDayLines.value) {
+        const lineShift = resolveLineShiftForLocation(m.location, configMap.value);
+        if (!lineShift.useShift) return false;
       }
 
       if (!key) return true;

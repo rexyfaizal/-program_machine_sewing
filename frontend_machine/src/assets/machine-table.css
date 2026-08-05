@@ -239,6 +239,40 @@
   white-space: normal;
 }
 
+.machine-table-panel .operator-shift-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #64748b;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.machine-table-panel .operator-shift-tag.shift-tag-shift_1 {
+  background: #2563eb;
+}
+
+.machine-table-panel .operator-shift-tag.shift-tag-shift_2 {
+  background: #059669;
+}
+
+.machine-table-panel .operator-shift-tag.shift-tag-shift_3 {
+  background: #7c3aed;
+}
+
+.machine-table-panel .operator-shift-tag.shift-tag-normal {
+  background: #64748b;
+}
+
+.machine-table-panel .operator-shift-tag.shift-tag-all {
+  background: #ea580c;
+}
+
 .machine-table-panel .operator-empty {
   display: block;
   color: #94a3b8;
