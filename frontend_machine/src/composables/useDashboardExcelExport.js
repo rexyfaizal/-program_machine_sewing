@@ -5,7 +5,6 @@ import {
   getProductivity,
 } from "../api/machineApi";
 import {
-  buildBadPriorityRows,
   buildOperatorExportMap,
   buildRangeDetailRows,
   buildRangeSummaryBaseRows,
@@ -178,16 +177,8 @@ export function useDashboardExcelExport({
 
       const summaryRows = buildRangeSummaryRows(summaryBaseRows);
       const detailRows = buildRangeDetailRows(items, shiftParam);
-      const badPriorityRows = buildBadPriorityRows(
-        summaryBaseRows,
-        locationFilter.value
-      );
 
-      const workbook = createRangeWorkbook(
-        summaryRows,
-        detailRows,
-        badPriorityRows
-      );
+      const workbook = createRangeWorkbook(summaryRows, detailRows);
 
       const locationSuffix =
         locationFilter.value === "ALL"

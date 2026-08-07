@@ -9,7 +9,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "open-mechanic-rfid"]);
 
 const activePageModel = computed({
   get: () => props.modelValue,
@@ -17,6 +17,15 @@ const activePageModel = computed({
 });
 
 const headerInfo = computed(() => {
+  if (activePageModel.value === "mechanic") {
+    return {
+      kicker: "DASHBOARD MEKANIK",
+      title: "Monitoring Mesin Rusak",
+      statusTitle: "Mechanic View",
+      statusText: "Repair Queue",
+    };
+  }
+
   if (activePageModel.value === "master-ie") {
     return {
       kicker: "MASTER IE",
@@ -53,10 +62,11 @@ const headerInfo = computed(() => {
 });
 
 const isMasterIePage = computed(() => activePageModel.value === "master-ie");
+const isMechanicPage = computed(() => activePageModel.value === "mechanic");
 </script>
 
 <template>
-  <header class="app-header" :class="{ 'compact-master': isMasterIePage }">
+  <header class="app-header" :class="{ 'compact-master': isMasterIePage || isMechanicPage }">
     <section class="brand-card">
       <div class="left-area">
         <div class="nav-holder">
@@ -83,7 +93,7 @@ const isMasterIePage = computed(() => activePageModel.value === "master-ie");
       </div>
     </section>
 
-    <section v-if="!isMasterIePage" class="legend-card">
+    <section v-if="!isMasterIePage && !isMechanicPage" class="legend-card">
       <div class="legend-title">Kategori Produktivitas</div>
 
       <div class="legend-list">
@@ -107,7 +117,7 @@ const isMasterIePage = computed(() => activePageModel.value === "master-ie");
       </div>
     </section>
 
-    <section v-else class="legend-card master-card">
+    <section v-else-if="isMasterIePage" class="legend-card master-card">
       <div class="legend-title">Master Data IE</div>
 
       <div class="master-info-list">
@@ -129,6 +139,16 @@ const isMasterIePage = computed(() => activePageModel.value === "master-ie");
           <small>Autocomplete saat scan QR</small>
         </div>
       </div>
+    </section>
+
+    <section v-else class="legend-card mechanic-action-card">
+      <button
+        type="button"
+        class="mechanic-register-btn"
+        @click="emit('open-mechanic-rfid')"
+      >
+        Daftar Kartu ID Mekanik
+      </button>
     </section>
   </header>
 </template>
@@ -409,6 +429,28 @@ const isMasterIePage = computed(() => activePageModel.value === "master-ie");
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 244, 0.9)),
     radial-gradient(circle at top left, rgba(34, 197, 94, 0.14), transparent 36%);
+}
+
+.mechanic-action-card {
+  display: grid;
+  place-items: center;
+}
+
+.mechanic-register-btn {
+  height: 44px;
+  border: 1px solid #1d4ed8;
+  border-radius: 12px;
+  padding: 0 18px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.mechanic-register-btn:hover {
+  background: #1d4ed8;
 }
 
 .master-info-list {

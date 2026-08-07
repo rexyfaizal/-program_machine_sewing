@@ -52,9 +52,18 @@ function editMachine(machine) {
           <th>Operator Note</th>
           <th class="center">Produktivitas</th>
           <th>Status</th>
-          <th class="center">Power On Duration</th>
-          <th class="center">Running Time</th>
-          <th class="center">Loss Time</th>
+          <th class="center">
+            Power On Duration
+            <small class="th-sub">mesin nyala</small>
+          </th>
+          <th class="center">
+            Running Time
+            <small class="th-sub">mesin jalan</small>
+          </th>
+          <th class="center">
+            Loss Time
+            <small class="th-sub">waktu terbuang</small>
+          </th>
           <th>Output</th>
           <th>Abnormal</th>
           <th>Avg / Max CT</th>
@@ -70,9 +79,18 @@ function editMachine(machine) {
           <th>Location</th>
           <th>Operator</th>
           <th>Operator Note</th>
-          <th class="center">Power On Duration</th>
-          <th class="center">Running Time</th>
-          <th class="center">Loss Time</th>
+          <th class="center">
+            Power On Duration
+            <small class="th-sub">mesin nyala</small>
+          </th>
+          <th class="center">
+            Running Time
+            <small class="th-sub">mesin jalan</small>
+          </th>
+          <th class="center">
+            Loss Time
+            <small class="th-sub">waktu terbuang</small>
+          </th>
           <th class="center">Produktivitas</th>
           <th class="center">Status</th>
         </tr>

@@ -106,12 +106,17 @@ func main() {
 		if err := repo.EnsureLineShiftConfigSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema line_shift_config:", err)
 		}
+		if err := repo.EnsureMechanicClaimSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema mechanic claim:", err)
+		}
 		cancel()
 	}
 
 	api := handlers.New(repo)
 
-	startLogsMachineScheduler(repo, 1*time.Minute)
+	// Dimatikan sementara: tidak ada API/UI yang membaca dbo.logs_machine.
+	// Scheduler ini tiap 1 menit hitung ulang semua mesin + MERGE, membebani SQL.
+	//startLogsMachineScheduler(repo, 1*time.Minute)
 	startMachineOperatorWorkEndAutoLogoutScheduler(repo, 5*time.Minute)
 	//startMachineOperatorAutoLogoutScheduler(repo, 5*time.Minute)
 
@@ -145,6 +150,12 @@ func main() {
 	mux.HandleFunc("/api/machine-operator/loss-event/start", api.MachineOperatorLossEventStart)
 	mux.HandleFunc("/api/machine-operator/loss-event/finish", api.MachineOperatorLossEventFinish)
 	mux.HandleFunc("/api/machine-operator/loss-event/active", api.MachineOperatorLossEventActive)
+
+	mux.HandleFunc("/api/mechanic/identify", api.MechanicIdentify)
+	mux.HandleFunc("/api/mechanic/rfid/register", api.MechanicRFIDRegister)
+	mux.HandleFunc("/api/mechanic/broken-machines", api.MechanicBrokenList)
+	mux.HandleFunc("/api/mechanic/claim", api.MechanicClaim)
+	mux.HandleFunc("/api/mechanic/done", api.MechanicDone)
 
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)

@@ -477,3 +477,103 @@ export async function importProcessStyles(rows) {
 
   return await readResponse(res);
 }
+
+export async function identifyMechanic(code) {
+  const value = String(code || "").trim();
+  if (!value) {
+    throw new Error("NIK / kartu RFID wajib diisi.");
+  }
+
+  const res = await fetch("/api/mechanic/identify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code: value, nik: value }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function registerMechanicRFID(payload) {
+  const nik = String(payload?.nik || "").trim();
+  const rfidNo = String(payload?.rfidNo || "").trim();
+
+  if (!nik) {
+    throw new Error("NIK mekanik wajib diisi.");
+  }
+  if (!rfidNo) {
+    throw new Error("Nomor kartu RFID wajib diisi.");
+  }
+
+  const res = await fetch("/api/mechanic/rfid/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ nik, rfidNo }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getMechanicBrokenMachines(options = {}) {
+  const params = new URLSearchParams();
+  const status = String(options.status || "ALL").trim();
+  const location = String(options.location || "").trim();
+
+  if (status) params.set("status", status);
+  if (location) params.set("location", location);
+
+  const query = params.toString();
+  const res = await fetch(
+    `/api/mechanic/broken-machines${query ? `?${query}` : ""}`
+  );
+
+  return await readResponse(res);
+}
+
+export async function claimMechanicBrokenMachine(payload) {
+  if (!payload?.id) {
+    throw new Error("ID tiket wajib diisi.");
+  }
+  if (!payload?.mechanicNik) {
+    throw new Error("NIK mekanik wajib diisi.");
+  }
+
+  const res = await fetch("/api/mechanic/claim", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: Number(payload.id || 0),
+      mechanicNik: String(payload.mechanicNik || "").trim(),
+      mechanicName: String(payload.mechanicName || "").trim(),
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function doneMechanicBrokenMachine(payload) {
+  if (!payload?.id) {
+    throw new Error("ID tiket wajib diisi.");
+  }
+  if (!payload?.mechanicNik) {
+    throw new Error("NIK mekanik wajib diisi.");
+  }
+
+  const res = await fetch("/api/mechanic/done", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: Number(payload.id || 0),
+      mechanicNik: String(payload.mechanicNik || "").trim(),
+    }),
+  });
+
+  return await readResponse(res);
+}

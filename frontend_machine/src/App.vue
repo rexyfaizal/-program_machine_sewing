@@ -8,7 +8,9 @@ import ProcessDetailPage from "./pages/ProcessDetailPage.vue";
 import LocationTemplatePage from "./pages/LocationTemplatePage.vue";
 import OperatorPicSpvPage from "./pages/OperatorPicSpvPage.vue";
 import { getInitialAdminMode } from "./utils/adminMode";
+import { isMechanicUnlocked } from "./utils/mechanicAccess";
 import ProcessStyleMasterPage from "./pages/ProcessStyleMasterPage.vue";
+import MechanicDashboardPage from "./pages/MechanicDashboardPage.vue";
 
 const STORAGE_KEY = "machineDashboardActivePage";
 
@@ -18,6 +20,7 @@ const selectedDate = ref(todayLocal());
 const globalSocketStatus = ref("offline");
 const globalIsAdmin = ref(false);
 const operatorUuid = ref("");
+const mechanicRegisterSignal = ref(0);
 
 function todayLocal() {
   const d = new Date();
@@ -68,6 +71,11 @@ function backToDashboard() {
   changePage("dashboard");
 }
 
+function openMechanicRegisterFromHeader() {
+  if (activePage.value !== "mechanic") return;
+  mechanicRegisterSignal.value += 1;
+}
+
 function openMachineDetail(machine) {
   if (!machine?.uuid) return;
 
@@ -99,13 +107,23 @@ onMounted(async () => {
 
   const savedPage = localStorage.getItem(STORAGE_KEY);
 
-  if (["dashboard", "detail", "location", "master-ie"].includes(savedPage)) {
+  if (savedPage === "mechanic" && !isMechanicUnlocked()) {
+    activePage.value = "dashboard";
+    return;
+  }
+
+  if (["dashboard", "detail", "location", "master-ie", "mechanic"].includes(savedPage)) {
     activePage.value = savedPage;
   }
 });
 
 watch(activePage, (newPage) => {
-  if (["dashboard", "detail", "location", "master-ie"].includes(newPage)) {
+  if (newPage === "mechanic" && !isMechanicUnlocked()) {
+    activePage.value = "dashboard";
+    return;
+  }
+
+  if (["dashboard", "detail", "location", "master-ie", "mechanic"].includes(newPage)) {
     localStorage.setItem(STORAGE_KEY, newPage);
   }
 });
@@ -125,7 +143,10 @@ watch(activePage, (newPage) => {
     />
 
     <div class="shell">
-      <AppHeader v-model="activePage" />
+      <AppHeader
+        v-model="activePage"
+        @open-mechanic-rfid="openMechanicRegisterFromHeader"
+      />
 
       <DashboardPage
         v-if="activePage === 'dashboard'"
@@ -146,6 +167,11 @@ watch(activePage, (newPage) => {
       
       <ProcessStyleMasterPage
         v-else-if="activePage === 'master-ie'"
+      />
+
+      <MechanicDashboardPage
+        v-else-if="activePage === 'mechanic'"
+        :register-signal="mechanicRegisterSignal"
       />
     </div>
   </main>

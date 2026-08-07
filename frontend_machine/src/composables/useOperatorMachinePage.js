@@ -55,6 +55,7 @@ export function useOperatorMachinePage(uuidSource) {
   let styleSearchTimer = null;
   let processSearchTimer = null;
   let lossTickTimer = null;
+  let lossSyncTimer = null;
 
   let employeeSearchSeq = 0;
 
@@ -443,6 +444,23 @@ export function useOperatorMachinePage(uuidSource) {
     }
   }
 
+  function startLossSyncPolling() {
+    if (lossSyncTimer) return;
+
+    lossSyncTimer = setInterval(() => {
+      if (!activeSession.value?.id) return;
+      // Sync status loss (terutama jika mekanik sudah Selesai).
+      loadActiveLossEvent({ silent: true });
+    }, 5000);
+  }
+
+  function stopLossSyncPolling() {
+    if (lossSyncTimer) {
+      clearInterval(lossSyncTimer);
+      lossSyncTimer = null;
+    }
+  }
+
   function setActiveLossEvent(event) {
     activeLossEvent.value = event;
 
@@ -647,7 +665,7 @@ export function useOperatorMachinePage(uuidSource) {
     };
   }
 
-  async function loadActiveLossEvent() {
+  async function loadActiveLossEvent({ silent = false } = {}) {
     const uuid = getUuid();
 
     if (!uuid || !activeSession.value?.id) {
@@ -655,7 +673,9 @@ export function useOperatorMachinePage(uuidSource) {
       return;
     }
 
-    lossEventError.value = "";
+    if (!silent) {
+      lossEventError.value = "";
+    }
 
     try {
       const data = await getActiveMachineOperatorLossEvent(uuid);
@@ -666,7 +686,19 @@ export function useOperatorMachinePage(uuidSource) {
         getVal(data, "hasActiveEvent", "HasActiveEvent");
 
       if (hasValue(hasActiveRaw) && !normalizeBoolean(hasActiveRaw)) {
-        setActiveLossEvent(null);
+        // Mekanik/sistem sudah menutup event — bersihkan kartu lokal.
+        if (activeLossEvent.value) {
+          const oldEvent = activeLossEvent.value;
+          setActiveLossEvent(null);
+          otherNote.value = "";
+          successMessage.value =
+            `${oldEvent.reasonLabel || "Loss event"} sudah selesai. Silakan lanjut kerja.`;
+          if (activeSession.value) {
+            saveSessionCache(activeSession.value);
+          }
+        } else {
+          setActiveLossEvent(null);
+        }
         return;
       }
 
@@ -686,7 +718,9 @@ export function useOperatorMachinePage(uuidSource) {
       setActiveLossEvent(null);
     } catch (err) {
       console.warn("Gagal cek loss event aktif:", err);
-      lossEventError.value = err.message;
+      if (!silent) {
+        lossEventError.value = err.message;
+      }
     }
   }
 
@@ -1270,29 +1304,70 @@ export function useOperatorMachinePage(uuidSource) {
         Number(finishedEvent.durationSeconds || activeLossDurationSeconds.value || 0)
       );
 
+      const alreadyClosed = String(
+        getVal(root, "message", "Message") || getVal(data, "message", "Message") || ""
+      )
+        .toLowerCase()
+        .includes("sudah tidak aktif");
+
       setActiveLossEvent(null);
       otherNote.value = "";
 
       activeNotes.value = [
         {
           id: finishedEvent.id || Date.now(),
-          reasonCode: finishedEvent.reasonCode,
-          reasonName: finishedEvent.reasonLabel,
-          note: `Selesai. Durasi ${durationText}`,
+          reasonCode: finishedEvent.reasonCode || oldEvent.reasonCode,
+          reasonName: finishedEvent.reasonLabel || oldEvent.reasonLabel,
+          note: alreadyClosed
+            ? "Sudah ditutup (mekanik/sistem)."
+            : `Selesai. Durasi ${durationText}`,
           createdAt: finishedEvent.endTime || new Date().toISOString(),
         },
         ...activeNotes.value,
       ].slice(0, 5);
 
-      successMessage.value = `${
-        finishedEvent.reasonLabel || "Loss event"
-      } selesai. Durasi ${durationText}.`;
+      successMessage.value = alreadyClosed
+        ? "Loss event sudah selesai sebelumnya. Silakan lanjut kerja."
+        : `${finishedEvent.reasonLabel || oldEvent.reasonLabel || "Loss event"} selesai. Durasi ${durationText}.`;
 
       if (activeSession.value) {
         saveSessionCache(activeSession.value);
       }
     } catch (err) {
-      errorMessage.value = `Gagal selesai loss event: ${err.message}`;
+      const msg = String(err?.message || "").toLowerCase();
+
+      // Event sudah ditutup mekanik, tapi UI operator masih cache lama.
+      if (
+        msg.includes("tidak ada loss event aktif") ||
+        msg.includes("sudah tidak aktif") ||
+        msg.includes("not found")
+      ) {
+        const oldEvent = activeLossEvent.value;
+        setActiveLossEvent(null);
+        otherNote.value = "";
+
+        if (oldEvent) {
+          activeNotes.value = [
+            {
+              id: oldEvent.id || Date.now(),
+              reasonCode: oldEvent.reasonCode,
+              reasonName: oldEvent.reasonLabel,
+              note: "Sudah ditutup mekanik/sistem.",
+              createdAt: new Date().toISOString(),
+            },
+            ...activeNotes.value,
+          ].slice(0, 5);
+        }
+
+        successMessage.value =
+          "Loss event sudah selesai oleh mekanik. Silakan lanjut kerja.";
+
+        if (activeSession.value) {
+          saveSessionCache(activeSession.value);
+        }
+      } else {
+        errorMessage.value = `Gagal selesai loss event: ${err.message}`;
+      }
     } finally {
       noteSaving.value = false;
       lossEventLoading.value = false;
@@ -1305,6 +1380,7 @@ export function useOperatorMachinePage(uuidSource) {
 
   onMounted(() => {
     loadData();
+    startLossSyncPolling();
   });
 
   onBeforeUnmount(() => {
@@ -1313,6 +1389,7 @@ export function useOperatorMachinePage(uuidSource) {
     if (processSearchTimer) clearTimeout(processSearchTimer);
 
     stopLossTimer();
+    stopLossSyncPolling();
 
     employeeSearchSeq++;
   });

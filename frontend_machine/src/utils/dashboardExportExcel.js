@@ -111,6 +111,69 @@ export function parseExportDateTime(value) {
   return d;
 }
 
+/**
+ * Keterangan shift per session operator untuk export Excel.
+ * - Normal: line Hari Penuh
+ * - Shift 1/2/3: overlap terbesar vs jadwal line
+ * - "" : session invalid / < 1 menit (skip dari export)
+ */
+export function resolveExportOperatorShiftTag({
+  loginTime,
+  logoutTime,
+  status,
+  location,
+  workDate,
+  shiftConfigMap,
+}) {
+  const lineShift = resolveLineShiftForLocation(
+    location,
+    shiftConfigMap || new Map()
+  );
+
+  const start = parseExportDateTime(loginTime);
+  if (!start) return "";
+
+  const statusUpper = String(status || "").toUpperCase();
+  const logout = parseExportDateTime(logoutTime);
+  const isActive =
+    ["ACTIVE", "OPEN"].includes(statusUpper) && !logout;
+  const end = isActive ? new Date() : logout;
+
+  if (!end || end.getTime() <= start.getTime()) return "";
+
+  const durationSec = Math.floor((end.getTime() - start.getTime()) / 1000);
+  if (durationSec < 60) return "";
+
+  if (!lineShift.useShift) {
+    return "Normal";
+  }
+
+  const dateText = String(workDate || "").trim();
+  if (!dateText) return "";
+
+  let bestCode = null;
+  let bestOverlap = 0;
+
+  for (const code of ["SHIFT_1", "SHIFT_2", "SHIFT_3"]) {
+    const window = getGM3ShiftWindow(dateText, code, lineShift.schedule);
+    if (!window) continue;
+
+    const startMs = Math.max(start.getTime(), window.start.getTime());
+    const endMs = Math.min(end.getTime(), window.end.getTime());
+    const overlap =
+      endMs > startMs ? Math.floor((endMs - startMs) / 1000) : 0;
+
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      bestCode = code;
+    }
+  }
+
+  if (!bestCode || bestOverlap <= 0) return "Normal";
+
+  return `Shift ${bestCode.replace("SHIFT_", "")}`;
+}
+
 export function formatExportTime(value) {
   const d = parseExportDateTime(value);
 
@@ -335,6 +398,251 @@ export function normalizeExportNote(row) {
   return body;
 }
 
+export function classifyExportLossCategory(reasonCode, reasonName) {
+  const code = String(reasonCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  const name = String(reasonName || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, " ");
+
+  if (code === "MACHINE_BROKEN" || name.includes("MESIN RUSAK")) {
+    return "mesinRusak";
+  }
+  if (
+    code === "WAIT_HANCA" ||
+    name.includes("TUNGGU HANCA") ||
+    name.includes("HANCA")
+  ) {
+    return "tungguHanca";
+  }
+  if (code === "TOILET" || name.includes("TOILET")) {
+    return "toilet";
+  }
+  if (
+    code === "PRAYER" ||
+    name.includes("SOLAT") ||
+    name.includes("SHOLAT")
+  ) {
+    return "solat";
+  }
+  if (code === "OTHER" || name === "OTHER" || name.includes("OTHER")) {
+    return "other";
+  }
+
+  return "";
+}
+
+export function resolveExportNoteDurationSeconds(row) {
+  let durationSeconds = toNumber(
+    getVal(
+      row,
+      "durationSeconds",
+      "DurationSeconds",
+      "duration_sec",
+      "duration"
+    ) || 0
+  );
+
+  if (durationSeconds > 0) return durationSeconds;
+
+  const createdAt = String(
+    getVal(
+      row,
+      "createdAt",
+      "CreatedAt",
+      "created_at",
+      "startTime",
+      "StartTime",
+      "start_time"
+    ) || ""
+  ).trim();
+
+  const endTime = String(
+    getVal(row, "endTime", "EndTime", "end_time") || ""
+  ).trim();
+
+  const status = String(getVal(row, "status", "Status") || "")
+    .trim()
+    .toUpperCase();
+
+  const start = parseExportDateTime(createdAt);
+  if (!start) return 0;
+
+  const end = parseExportDateTime(endTime);
+  const isActive = ["ACTIVE", "OPEN"].includes(status) && !end;
+  const endMs = isActive ? Date.now() : end?.getTime();
+
+  if (!endMs || endMs < start.getTime()) return 0;
+
+  return Math.max(0, Math.floor((endMs - start.getTime()) / 1000));
+}
+
+export function extractExportNoteFreeText(row) {
+  const reasonName = String(
+    getVal(
+      row,
+      "reasonName",
+      "ReasonName",
+      "reasonLabel",
+      "ReasonLabel",
+      "reason_name",
+      "reason_label"
+    ) || ""
+  ).trim();
+
+  const note = String(getVal(row, "note", "Note") || "").trim();
+  const durationSeconds = resolveExportNoteDurationSeconds(row);
+  const durationText =
+    String(
+      getVal(row, "durationText", "DurationText", "duration_text") || ""
+    ).trim() || formatExportDuration(durationSeconds);
+
+  let freeNote = note;
+  const freeUpper = freeNote.toUpperCase();
+  const reasonUpper = reasonName.toUpperCase();
+
+  if (
+    !freeNote ||
+    isSystemDurationNote(freeNote, durationText) ||
+    isAutoLogoutText(freeNote) ||
+    freeUpper === reasonUpper ||
+    freeUpper === `${reasonUpper} - SELESAI` ||
+    freeUpper === `${reasonUpper} SELESAI` ||
+    /^[A-Z0-9 \-_/]+ - SELESAI$/.test(freeUpper) ||
+    /^SELESAI(\s+\d{2}:\d{2}:\d{2})?$/.test(freeUpper) ||
+    /^SEDANG BERJALAN(\s+\d{2}:\d{2}:\d{2})?$/.test(freeUpper)
+  ) {
+    return "";
+  }
+
+  freeNote = freeNote
+    .replace(/\s*-\s*Selesai\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+    .replace(/\s+Selesai\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+    .replace(/\s*-\s*Sedang berjalan\s+\d{2}:\d{2}:\d{2}\s*$/i, "")
+    .trim();
+
+  if (
+    !freeNote ||
+    freeNote.toUpperCase() === reasonUpper ||
+    isSystemDurationNote(freeNote, durationText)
+  ) {
+    return "";
+  }
+
+  return freeNote;
+}
+
+export function buildExportLossBreakdown(noteRows) {
+  const totals = {
+    mesinRusakSec: 0,
+    tungguHancaSec: 0,
+    toiletSec: 0,
+    solatSec: 0,
+    otherSec: 0,
+  };
+  const otherRemarks = [];
+
+  (Array.isArray(noteRows) ? noteRows : []).forEach((row) => {
+    if (!row) return;
+
+    const reasonCode = String(
+      getVal(row, "reasonCode", "ReasonCode", "reason_code") || ""
+    ).trim();
+
+    const reasonName = String(
+      getVal(
+        row,
+        "reasonName",
+        "ReasonName",
+        "reasonLabel",
+        "ReasonLabel",
+        "reason_name",
+        "reason_label"
+      ) || ""
+    ).trim();
+
+    const note = String(getVal(row, "note", "Note") || "").trim();
+    const status = String(getVal(row, "status", "Status") || "").trim();
+
+    if (
+      isAutoLogoutText(status) ||
+      isAutoLogoutText(reasonCode) ||
+      isAutoLogoutText(reasonName) ||
+      isAutoLogoutText(note)
+    ) {
+      return;
+    }
+
+    const category = classifyExportLossCategory(reasonCode, reasonName);
+    if (!category) return;
+
+    const durationSeconds = resolveExportNoteDurationSeconds(row);
+    totals[`${category}Sec`] += durationSeconds;
+
+    if (category === "other") {
+      const freeNote = extractExportNoteFreeText(row);
+      if (freeNote) otherRemarks.push(freeNote);
+    }
+  });
+
+  return {
+    ...totals,
+    remarksOther: [...new Set(otherRemarks)].join(" | "),
+  };
+}
+
+export function formatLossPercent(seconds, powerOnSeconds) {
+  const sec = Math.max(0, Number(seconds || 0));
+  const powerOn = Math.max(0, Number(powerOnSeconds || 0));
+
+  if (powerOn <= 0) return "";
+
+  const pct = Math.round((sec / powerOn) * 100);
+  return `${pct}%`;
+}
+
+export function emptyExportLossColumns() {
+  return {
+    "MESIN RUSAK": "",
+    "% Mesin Rusak": "",
+    "TUNGGU HANCA": "",
+    "% Tunggu Hanca": "",
+    TOILET: "",
+    "% Toilet": "",
+    SOLAT: "",
+    "% Solat": "",
+    OTHER: "",
+    "% Other": "",
+    "REMARKS OTHER": "",
+  };
+}
+
+export function buildExportLossColumns(lossBreakdown, powerOnSeconds) {
+  const loss = lossBreakdown || {};
+  const mesinRusakSec = toNumber(loss.mesinRusakSec || 0);
+  const tungguHancaSec = toNumber(loss.tungguHancaSec || 0);
+  const toiletSec = toNumber(loss.toiletSec || 0);
+  const solatSec = toNumber(loss.solatSec || 0);
+  const otherSec = toNumber(loss.otherSec || 0);
+
+  return {
+    "MESIN RUSAK": formatSeconds(mesinRusakSec),
+    "% Mesin Rusak": formatLossPercent(mesinRusakSec, powerOnSeconds),
+    "TUNGGU HANCA": formatSeconds(tungguHancaSec),
+    "% Tunggu Hanca": formatLossPercent(tungguHancaSec, powerOnSeconds),
+    TOILET: formatSeconds(toiletSec),
+    "% Toilet": formatLossPercent(toiletSec, powerOnSeconds),
+    SOLAT: formatSeconds(solatSec),
+    "% Solat": formatLossPercent(solatSec, powerOnSeconds),
+    OTHER: formatSeconds(otherSec),
+    "% Other": formatLossPercent(otherSec, powerOnSeconds),
+    "REMARKS OTHER": String(loss.remarksOther || "").trim(),
+  };
+}
+
 /**
  * Bangun map operator per UUID mesin.
  * options.workDate + options.shiftCode → filter note/session hanya yang overlap shift.
@@ -519,7 +827,23 @@ export function buildOperatorExportMap(reportData, options = {}) {
 
     const usageText = formatOperatorUsageText(loginTime, logoutTime, rowStatus);
 
+    const locationForShift = getLocationByUuid(uuid);
+    const shiftTag = resolveExportOperatorShiftTag({
+      loginTime,
+      logoutTime,
+      status: rowStatus,
+      location: locationForShift,
+      workDate,
+      shiftConfigMap,
+    });
+
+    // Session sangat singkat (< 1 menit) tidak diexport.
+    if (!shiftTag) {
+      return;
+    }
+
     const notes = rawNotes.map(normalizeExportNote).filter(Boolean);
+    const lossSourceRows = [...rawNotes];
 
     const activeLossReasonCode = String(
       getVal(
@@ -557,28 +881,33 @@ export function buildOperatorExportMap(reportData, options = {}) {
       ) || 0
     );
 
-    if (
+    const activeLossInShift =
+      !filterByShift ||
+      isDateInShiftWindow(
+        activeLossStartTime,
+        workDate,
+        shiftCode,
+        schedule
+      );
+
+    const activeLossRow =
       activeLossReasonLabel &&
       !isAutoLogoutText(activeLossReasonLabel) &&
       !isAutoLogoutText(rowStatus) &&
-      !notes.length &&
-      (!filterByShift ||
-        isDateInShiftWindow(
-          activeLossStartTime,
-          workDate,
-          shiftCode,
-          schedule
-        ))
-    ) {
-      notes.push(
-        normalizeExportNote({
-          reasonCode: activeLossReasonCode,
-          reasonName: activeLossReasonLabel,
-          createdAt: activeLossStartTime,
-          durationSeconds: activeLossDurationSeconds,
-          status: "ACTIVE",
-        })
-      );
+      activeLossInShift
+        ? {
+            reasonCode: activeLossReasonCode,
+            reasonName: activeLossReasonLabel,
+            createdAt: activeLossStartTime,
+            durationSeconds: activeLossDurationSeconds,
+            status: "ACTIVE",
+          }
+        : null;
+
+    // Active loss hanya ditambah jika belum ada note lain (hindari double-count).
+    if (activeLossRow && !notes.length) {
+      lossSourceRows.push(activeLossRow);
+      notes.push(normalizeExportNote(activeLossRow));
     }
 
     if (
@@ -595,6 +924,8 @@ export function buildOperatorExportMap(reportData, options = {}) {
     if (!notes.length) {
       return;
     }
+
+    const lossBreakdown = buildExportLossBreakdown(lossSourceRows);
 
     notes.forEach((note) => {
       const cleanNote = String(note || "").trim();
@@ -620,6 +951,8 @@ export function buildOperatorExportMap(reportData, options = {}) {
         loginTime,
         logoutTime,
         usageText,
+        shiftTag,
+        lossBreakdown,
         hasSessionStats: Boolean(
           getVal(row, "hasSessionStats", "HasSessionStats")
         ),
@@ -950,6 +1283,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
   const fallbackStyle = String(
     options.fallbackStyle || baseRow.Style || ""
   ).trim();
+  const fallbackPowerOnSec = toNumber(options.fallbackPowerOnSec || 0);
 
   let rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
     isUsefulOperatorRow
@@ -969,8 +1303,10 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
         Style: fallbackStyle,
         "Operator NIK": "",
         "Operator Name": "",
+        "Keterangan Shift": "",
         "Waktu Pemakaian": "",
         "Operator Note": "",
+        ...emptyExportLossColumns(),
       },
     ];
   }
@@ -1004,6 +1340,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     const styleName = String(item?.styleName || "").trim();
     const loginTime = String(item?.loginTime || "").trim();
     const usageText = String(item?.usageText || "").trim();
+    const shiftTag = String(item?.shiftTag || "").trim();
     const sessionKey = `${operatorNik}||${operatorName}||${loginTime}||${usageText}`;
     const isFirstOfSession = sessionKey !== lastSessionKey;
 
@@ -1028,6 +1365,14 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       ? String(item.productivityStatus || statusFromProductivity(item.productivityPct)).trim()
       : baseRow.Status;
 
+    const powerOnSec = hasSessionStats
+      ? toNumber(item.runtimeSec || 0)
+      : fallbackPowerOnSec;
+
+    const lossColumns = isFirstOfSession
+      ? buildExportLossColumns(item?.lossBreakdown, powerOnSec)
+      : emptyExportLossColumns();
+
     return {
       ...baseRow,
       Mesin: isFirstOfSession ? processName || fallbackMesin : "",
@@ -1039,8 +1384,10 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       Status: isFirstOfSession ? sessionStatus : "",
       "Operator NIK": isFirstOfSession ? operatorNik : "",
       "Operator Name": isFirstOfSession ? operatorName : "",
+      "Keterangan Shift": isFirstOfSession ? shiftTag : "",
       "Waktu Pemakaian": isFirstOfSession ? usageText : "",
       "Operator Note": String(item?.note || "").trim(),
+      ...lossColumns,
     };
   });
 }
@@ -1089,6 +1436,7 @@ export function buildRangeDetailRows(items, shiftCode = "") {
       return expandOperatorRows(baseRow, item.operatorRows, {
         fallbackMesin: item.originalMesin || item.mesin,
         fallbackStyle: item.styleName || "",
+        fallbackPowerOnSec: item.runtime,
       });
     });
 }
@@ -1180,6 +1528,8 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         loginTime,
         logoutTime,
         usageText,
+        shiftTag: String(operatorRow.shiftTag || "").trim(),
+        lossBreakdown: operatorRow.lossBreakdown || null,
         hasSessionStats: Boolean(operatorRow.hasSessionStats),
         runtimeSec: toNumber(operatorRow.runtimeSec || 0),
         procSec: toNumber(operatorRow.procSec || 0),
@@ -1248,95 +1598,36 @@ export function buildRangeSummaryRows(summaryBaseRows) {
     return expandOperatorRows(baseRow, item.operatorRows, {
       fallbackMesin: item.originalMesin || item.mesin,
       fallbackStyle: item.styleName || "",
+      fallbackPowerOnSec: item.totalPowerOn,
     });
   });
 }
 
-export function buildBadPriorityRows(summaryBaseRows, selectedLocation) {
-  const badRows = summaryBaseRows
-    .filter((row) => row.status === "BAD")
-    .sort((a, b) => Number(a.productivity || 0) - Number(b.productivity || 0));
-
-  if (!badRows.length) {
-    return [
-      {
-        Rank: "",
-        Shift: "",
-        Area: selectedLocation === "ALL" ? "All GM" : selectedLocation,
-        Location: "",
-        Mesin: "Tidak ada mesin BAD",
-        Style: "",
-        "Power On Duration": "",
-        "Running Time": "",
-        "Loss Time": "",
-        Produktivitas: "",
-        Status: "",
-        Rekomendasi: "Semua mesin tidak berstatus BAD pada periode ini.",
-        "Operator NIK": "",
-        "Operator Name": "",
-        "Waktu Pemakaian": "",
-        "Operator Note": "",
-      },
-    ];
-  }
-
-  return badRows.flatMap((row, index) => {
-    let rekomendasi = "Cek penyebab running time rendah.";
-
-    if (Number(row.__lossSec || 0) > 14400) {
-      rekomendasi = "Loss time tinggi. Cek idle, operator, dan kondisi mesin.";
-    }
-
-    const baseRow = {
-      Rank: index + 1,
-      Shift: row.shift,
-      Area: row.area,
-      Location: row.location,
-      Mesin: row.mesin,
-      Style: row.styleName || "",
-      "Power On Duration": formatSeconds(row.totalPowerOn),
-      "Running Time": formatSeconds(row.totalRunning),
-      "Loss Time": formatSeconds(row.totalLoss),
-      Produktivitas: row.productivity,
-      Status: row.status,
-      Rekomendasi: rekomendasi,
-    };
-
-    return expandOperatorRows(baseRow, row.operatorRows, {
-      fallbackMesin: row.originalMesin || row.mesin,
-      fallbackStyle: row.styleName || "",
-    });
-  });
-}
-
-export function createRangeWorkbook(summaryRows, detailRows, badPriorityRows) {
+export function createRangeWorkbook(summaryRows, detailRows) {
   const workbook = XLSX.utils.book_new();
 
-  const summaryCols = 15;
-  const detailCols = 16;
-  const badCols = 16;
+  // Base 16/17 + 11 kolom loss breakdown (waktu + % + remarks other)
+  const summaryCols = 27;
+  const detailCols = 28;
+
+  const lossColWidths = [14, 12, 14, 12, 12, 10, 12, 10, 12, 10, 28];
 
   const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
   setWorksheetWidth(summarySheet, [
-    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 36, 50,
+    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    ...lossColWidths,
   ]);
   setAutoFilter(summarySheet, summaryRows.length, summaryCols);
 
   const detailSheet = XLSX.utils.json_to_sheet(detailRows);
   setWorksheetWidth(detailSheet, [
-    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 36, 50,
+    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    ...lossColWidths,
   ]);
   setAutoFilter(detailSheet, detailRows.length, detailCols);
 
-  const badSheet = XLSX.utils.json_to_sheet(badPriorityRows);
-  setWorksheetWidth(badSheet, [
-    8, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 40, 14, 28, 36, 50,
-  ]);
-  setAutoFilter(badSheet, badPriorityRows.length, badCols);
-
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Range Summary");
   XLSX.utils.book_append_sheet(workbook, detailSheet, "Daily Detail");
-  XLSX.utils.book_append_sheet(workbook, badSheet, "BAD Priority");
 
   return workbook;
 }

@@ -358,6 +358,18 @@ func ResolveGM3WorkDate(now time.Time) time.Time {
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location())
 }
 
+// ResolveGM3WorkWindow mengembalikan rentang waktu hari kerja GM3 aktif.
+// Dari 06:00 work_date sampai 04:30 hari kalender berikutnya.
+func ResolveGM3WorkWindow(now time.Time) (time.Time, time.Time) {
+	workDate := ResolveGM3WorkDate(now)
+	loc := workDate.Location()
+
+	start := time.Date(workDate.Year(), workDate.Month(), workDate.Day(), 6, 0, 0, 0, loc)
+	end := start.Add(22*time.Hour + 30*time.Minute)
+
+	return start, end
+}
+
 // ResolveGM3CurrentShift mengembalikan shift aktif berdasarkan waktu sekarang.
 func ResolveGM3CurrentShift(now time.Time) (workDate time.Time, shiftCode string) {
 	workDate = ResolveGM3WorkDate(now)

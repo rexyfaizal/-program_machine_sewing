@@ -1,5 +1,9 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  isMechanicUnlocked,
+  unlockMechanicAccess,
+} from "../utils/mechanicAccess";
 
 const props = defineProps({
   modelValue: {
@@ -13,6 +17,11 @@ const emit = defineEmits(["update:modelValue"]);
 const isOpen = ref(false);
 const menuRef = ref(null);
 
+const passwordModalOpen = ref(false);
+const passwordInput = ref("");
+const passwordError = ref("");
+const passwordInputRef = ref(null);
+
 function toggleMenu() {
   isOpen.value = !isOpen.value;
 }
@@ -21,9 +30,42 @@ function closeMenu() {
   isOpen.value = false;
 }
 
+function closePasswordModal() {
+  passwordModalOpen.value = false;
+  passwordInput.value = "";
+  passwordError.value = "";
+}
+
+async function openPasswordModal() {
+  passwordModalOpen.value = true;
+  passwordInput.value = "";
+  passwordError.value = "";
+  closeMenu();
+
+  await nextTick();
+  passwordInputRef.value?.focus?.();
+}
+
 function selectMenu(page) {
+  if (page === "mechanic" && !isMechanicUnlocked()) {
+    openPasswordModal();
+    return;
+  }
+
   emit("update:modelValue", page);
   closeMenu();
+}
+
+function submitPassword() {
+  if (!unlockMechanicAccess(passwordInput.value)) {
+    passwordError.value = "Password salah";
+    passwordInput.value = "";
+    passwordInputRef.value?.focus?.();
+    return;
+  }
+
+  closePasswordModal();
+  emit("update:modelValue", "mechanic");
 }
 
 function handleClickOutside(event) {
@@ -37,6 +79,9 @@ function handleClickOutside(event) {
 function handleEsc(event) {
   if (event.key === "Escape") {
     closeMenu();
+    if (passwordModalOpen.value) {
+      closePasswordModal();
+    }
   }
 }
 
@@ -140,8 +185,62 @@ onBeforeUnmount(() => {
           <small>Input style dan proses</small>
         </span>
       </button>
+
+      <!-- Dashboard Mekanik -->
+      <button
+        class="menu-item"
+        :class="{ active: modelValue === 'mechanic' }"
+        @click="selectMenu('mechanic')"
+      >
+        <span class="menu-icon mechanic">
+          <span class="icon-mechanic">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+        </span>
+
+        <span>
+          <strong>Dashboard Mekanik</strong>
+          <small>Mesin rusak · Ambil · Selesai</small>
+        </span>
+      </button>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="passwordModalOpen"
+      class="password-backdrop"
+      @click.self="closePasswordModal"
+    >
+      <form class="password-modal" @submit.prevent="submitPassword">
+        <p class="password-kicker">DASHBOARD MEKANIK</p>
+        <h3>Masukkan Password</h3>
+        <p class="password-hint">Akses menu mekanik membutuhkan password.</p>
+
+        <label>
+          Password
+          <input
+            ref="passwordInputRef"
+            v-model="passwordInput"
+            type="password"
+            placeholder="Password"
+            autocomplete="current-password"
+          />
+        </label>
+
+        <p v-if="passwordError" class="password-error">{{ passwordError }}</p>
+
+        <div class="password-actions">
+          <button type="button" class="pwd-btn ghost" @click="closePasswordModal">
+            Batal
+          </button>
+          <button type="submit" class="pwd-btn primary">Masuk</button>
+        </div>
+      </form>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -244,6 +343,10 @@ onBeforeUnmount(() => {
 
 .menu-icon.master {
   background: #dcfce7;
+}
+
+.menu-icon.mechanic {
+  background: #ffedd5;
 }
 
 .menu-item:hover .menu-icon,
@@ -388,6 +491,56 @@ onBeforeUnmount(() => {
   background: #ffffff;
 }
 
+/* Icon Mekanik */
+.icon-mechanic {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.icon-mechanic i:nth-child(1) {
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: 14px;
+  height: 10px;
+  border: 2px solid #ea580c;
+  border-radius: 3px;
+}
+
+.icon-mechanic i:nth-child(2) {
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  width: 4px;
+  height: 6px;
+  background: #ea580c;
+  border-radius: 1px;
+}
+
+.icon-mechanic i:nth-child(3) {
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  width: 10px;
+  height: 2px;
+  background: #ea580c;
+  border-radius: 999px;
+}
+
+.menu-item:hover .icon-mechanic i:nth-child(1),
+.menu-item.active .icon-mechanic i:nth-child(1) {
+  border-color: #ffffff;
+}
+
+.menu-item:hover .icon-mechanic i:nth-child(2),
+.menu-item.active .icon-mechanic i:nth-child(2),
+.menu-item:hover .icon-mechanic i:nth-child(3),
+.menu-item.active .icon-mechanic i:nth-child(3) {
+  background: #ffffff;
+}
+
 .menu-item strong {
   display: block;
   font-size: 13px;
@@ -410,5 +563,96 @@ onBeforeUnmount(() => {
   .menu-dropdown {
     width: 280px;
   }
+}
+
+.password-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.password-modal {
+  width: min(400px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+}
+
+.password-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #c2410c;
+}
+
+.password-modal h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.password-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.password-modal label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+}
+
+.password-modal input {
+  height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+.password-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.pwd-btn {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pwd-btn.primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.pwd-btn.ghost {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 </style>

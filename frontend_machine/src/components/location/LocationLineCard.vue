@@ -201,14 +201,6 @@ function operatorLoginTitle(machine) {
               <strong>{{ machine.operatorStyleName }}</strong>
             </div>
 
-            <div
-              v-if="machine.usingProcessName && machine.customName"
-              class="tooltip-row"
-            >
-              <span>Mesin</span>
-              <strong>{{ machine.customName }}</strong>
-            </div>
-
             <div class="tooltip-row">
               <span>Power On Duration</span>
               <strong>{{ formatHour(machine.runtime) }}</strong>

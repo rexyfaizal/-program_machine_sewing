@@ -162,6 +162,16 @@
   white-space: nowrap;
 }
 
+.machine-table-panel th .th-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .machine-table-panel th + th {
   border-left: 1px solid rgba(255, 255, 255, 0.18);
 }

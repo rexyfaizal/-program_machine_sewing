@@ -317,7 +317,15 @@ func (r *Repository) FinishMachineOperatorLossEvent(ctx context.Context, input m
 	}
 
 	if closedID == 0 {
-		return models.MachineOperatorLossEventFinishResponse{}, ErrMachineOperatorLossEventNotFound
+		// Idempotent: event mungkin sudah ditutup mekanik / proses lain.
+		return models.MachineOperatorLossEventFinishResponse{
+			Status:  "ok",
+			Message: "Loss event sudah tidak aktif / sudah selesai",
+			Event: models.MachineOperatorLossEvent{
+				UUID:   input.UUID,
+				Status: "CLOSED",
+			},
+		}, nil
 	}
 
 	event, err := getMachineOperatorLossEventByIDTx(ctx, tx, closedID)
