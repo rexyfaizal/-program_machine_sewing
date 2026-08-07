@@ -59,6 +59,19 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  statusValue: {
+    type: String,
+    default: "ALL",
+  },
+  statusOptions: {
+    type: Array,
+    default: () => [
+      { value: "ALL", label: "All Status" },
+      { value: "GOOD", label: "GOOD" },
+      { value: "NORMAL", label: "NORMAL" },
+      { value: "BAD", label: "BAD" },
+    ],
+  },
 });
 
 const emit = defineEmits([
@@ -69,6 +82,7 @@ const emit = defineEmits([
   "update:keyword",
   "update:locationValue",
   "update:shiftValue",
+  "update:statusValue",
   "dateChange",
   "download",
 ]);
@@ -110,12 +124,15 @@ const {
       :shift-value="props.shiftValue"
       :shift-options="props.shiftOptions"
       :show-shift-filter="props.showShiftFilter"
+      :status-value="props.statusValue"
+      :status-options="props.statusOptions"
       @update:selected-date="emit('update:selectedDate', $event)"
       @update:start-date="emit('update:startDate', $event)"
       @update:end-date="emit('update:endDate', $event)"
       @update:keyword="emit('update:keyword', $event)"
       @update:location-value="emit('update:locationValue', $event)"
       @update:shift-value="emit('update:shiftValue', $event)"
+      @update:status-value="emit('update:statusValue', $event)"
       @date-change="emit('dateChange')"
       @download="emit('download')"
     />

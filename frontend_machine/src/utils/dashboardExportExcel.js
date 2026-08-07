@@ -1128,13 +1128,14 @@ export function normalizeRangeItem(
     ) || 0
   );
 
-  if (procTime > runtime) {
-    runtime = procTime;
-  }
-
   const lossTime = Math.max(0, runtime - procTime);
   const productivity =
     runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
+
+  const output = toNumber(getVal(row, "output", "Output") || 0);
+  const avgCT = toNumber(
+    getVal(row, "avgCycle", "AvgCycle", "avgCT", "AvgCT") || 0
+  );
 
   const backendName = String(
     getVal(
@@ -1212,6 +1213,8 @@ export function normalizeRangeItem(
     runtime,
     procTime,
     lossTime,
+    output,
+    avgCT,
     productivity: Number(productivity.toFixed(2)),
     status: statusFromProductivity(productivity),
   };
@@ -1226,6 +1229,18 @@ export function filterRangeItemsByLocation(items, selectedLocation) {
 
   return items.filter((item) => {
     return getLocationGroup(item.location) === selected;
+  });
+}
+
+export function filterRangeItemsByStatus(items, selectedStatus) {
+  const selected = String(selectedStatus || "ALL").trim().toUpperCase();
+
+  if (!selected || selected === "ALL") {
+    return items;
+  }
+
+  return items.filter((item) => {
+    return String(item.status || "").trim().toUpperCase() === selected;
   });
 }
 
@@ -1377,6 +1392,8 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       ...baseRow,
       Mesin: isFirstOfSession ? processName || fallbackMesin : "",
       Style: isFirstOfSession ? styleName || fallbackStyle : "",
+      Output: isFirstOfSession ? baseRow.Output : "",
+      "Cycle Time": isFirstOfSession ? baseRow["Cycle Time"] : "",
       "Power On Duration": isFirstOfSession ? sessionPowerOn : "",
       "Running Time": isFirstOfSession ? sessionRunning : "",
       "Loss Time": isFirstOfSession ? sessionLoss : "",
@@ -1426,6 +1443,9 @@ export function buildRangeDetailRows(items, shiftCode = "") {
         Location: item.location,
         Mesin: item.mesin,
         Style: item.styleName || "",
+        UUID: item.uuid || "",
+        Output: Number(item.output || 0),
+        "Cycle Time": Number(Number(item.avgCT || 0).toFixed(2)),
         "Power On Duration": formatSeconds(item.runtime),
         "Running Time": formatSeconds(item.procTime),
         "Loss Time": formatSeconds(item.lossTime),
@@ -1464,9 +1484,15 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         mesin: item.mesin,
         styleName: item.styleName || "",
         originalMesin: item.originalMesin || item.mesin,
+        uuid: String(item.uuid || "").trim(),
         totalPowerOn: 0,
         totalRunning: 0,
         totalLoss: 0,
+        totalOutput: 0,
+        weightedCycleSum: 0,
+        cycleWeight: 0,
+        cycleDaySum: 0,
+        cycleDayCount: 0,
         operatorRows: [],
         operatorRowKeySet: new Set(),
       });
@@ -1477,6 +1503,23 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
     current.totalPowerOn += Number(item.runtime || 0);
     current.totalRunning += Number(item.procTime || 0);
     current.totalLoss += Number(item.lossTime || 0);
+    current.totalOutput += Number(item.output || 0);
+
+    const dayOutput = Number(item.output || 0);
+    const dayAvgCT = Number(item.avgCT || 0);
+    if (dayAvgCT > 0) {
+      if (dayOutput > 0) {
+        current.weightedCycleSum += dayAvgCT * dayOutput;
+        current.cycleWeight += dayOutput;
+      } else {
+        current.cycleDaySum += dayAvgCT;
+        current.cycleDayCount += 1;
+      }
+    }
+
+    if (item.uuid) {
+      current.uuid = String(item.uuid).trim();
+    }
 
     // Update nama tampilan ke process/style terbaru (selaras dashboard).
     if (item.mesin && item.mesin !== item.originalMesin) {
@@ -1547,6 +1590,13 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
           ? Math.min((item.totalRunning / item.totalPowerOn) * 100, 100)
           : 0;
 
+      const avgCT =
+        item.cycleWeight > 0
+          ? item.weightedCycleSum / item.cycleWeight
+          : item.cycleDayCount > 0
+            ? item.cycleDaySum / item.cycleDayCount
+            : 0;
+
       return {
         periode: item.periode,
         shift: item.shift,
@@ -1555,9 +1605,12 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         mesin: item.mesin,
         styleName: item.styleName,
         originalMesin: item.originalMesin,
+        uuid: item.uuid,
         totalPowerOn: item.totalPowerOn,
         totalRunning: item.totalRunning,
         totalLoss: item.totalLoss,
+        totalOutput: item.totalOutput,
+        avgCT: Number(avgCT.toFixed(2)),
         productivity: Number(productivity.toFixed(2)),
         status: statusFromProductivity(productivity),
         operatorRows: item.operatorRows,
@@ -1588,6 +1641,9 @@ export function buildRangeSummaryRows(summaryBaseRows) {
       Location: item.location,
       Mesin: item.mesin,
       Style: item.styleName || "",
+      UUID: item.uuid || "",
+      Output: Number(item.totalOutput || 0),
+      "Cycle Time": Number(item.avgCT || 0),
       "Power On Duration": formatSeconds(item.totalPowerOn),
       "Running Time": formatSeconds(item.totalRunning),
       "Loss Time": formatSeconds(item.totalLoss),
@@ -1606,22 +1662,22 @@ export function buildRangeSummaryRows(summaryBaseRows) {
 export function createRangeWorkbook(summaryRows, detailRows) {
   const workbook = XLSX.utils.book_new();
 
-  // Base 16/17 + 11 kolom loss breakdown (waktu + % + remarks other)
-  const summaryCols = 27;
-  const detailCols = 28;
+  // Base 19/20 + 11 kolom loss breakdown (waktu + % + remarks other)
+  const summaryCols = 30;
+  const detailCols = 31;
 
   const lossColWidths = [14, 12, 14, 12, 12, 10, 12, 10, 12, 10, 28];
 
   const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
   setWorksheetWidth(summarySheet, [
-    24, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    24, 28, 10, 18, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
     ...lossColWidths,
   ]);
   setAutoFilter(summarySheet, summaryRows.length, summaryCols);
 
   const detailSheet = XLSX.utils.json_to_sheet(detailRows);
   setWorksheetWidth(detailSheet, [
-    12, 12, 28, 10, 18, 42, 24, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    12, 12, 28, 10, 18, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
     ...lossColWidths,
   ]);
   setAutoFilter(detailSheet, detailRows.length, detailCols);

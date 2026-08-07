@@ -12,6 +12,7 @@ import {
   createRangeWorkbook,
   extractRows,
   filterRangeItemsByLocation,
+  filterRangeItemsByStatus,
   formatExcelDate,
   getOrderedRange,
   getWeekdaysBetween,
@@ -28,6 +29,7 @@ import {
 export function useDashboardExcelExport({
   selectedDate,
   locationFilter,
+  statusFilter,
   machineSettings,
   showNotice,
   productivityShift,
@@ -65,13 +67,18 @@ export function useDashboardExcelExport({
 
   function resolveExportShiftParam(configMap) {
     const area = String(locationFilter?.value || "").trim().toUpperCase();
-    if (!area || area === "ALL") return "";
+    const shift = String(productivityShift?.value || "").trim();
+
+    // All GM: tetap ikut filter shift (default CURRENT) agar GM3 tidak ALL-shifts.
+    if (!area || area === "ALL") {
+      return shift || "CURRENT";
+    }
 
     if (!factoryHasEnabledShift(area, configMap)) {
       return "";
     }
 
-    return String(productivityShift?.value || "").trim();
+    return shift;
   }
 
   async function downloadExcel() {
@@ -158,13 +165,16 @@ export function useDashboardExcelExport({
         })
       );
 
-      const items = filterRangeItemsByLocation(
-        results.flat(),
-        locationFilter.value
+      const items = filterRangeItemsByStatus(
+        filterRangeItemsByLocation(results.flat(), locationFilter.value),
+        statusFilter?.value
       );
 
       if (!items.length) {
-        showNotice("Data export tidak ditemukan untuk filter area ini.", "error");
+        showNotice(
+          "Data export tidak ditemukan untuk filter area/status ini.",
+          "error"
+        );
         return;
       }
 
@@ -185,13 +195,21 @@ export function useDashboardExcelExport({
           ? "all-gm"
           : safeFileName(locationFilter.value);
 
+      const statusSelected = String(statusFilter?.value || "ALL")
+        .trim()
+        .toUpperCase();
+      const statusSuffix =
+        statusSelected && statusSelected !== "ALL"
+          ? `-${safeFileName(statusSelected)}`
+          : "";
+
       const shiftSuffix = shiftParam
         ? `-${safeFileName(shiftParam)}`
         : "";
 
       writeWorkbook(
         workbook,
-        `productivity-range-${locationSuffix}${shiftSuffix}-${range.start}_${range.end}.xlsx`
+        `productivity-range-${locationSuffix}${statusSuffix}${shiftSuffix}-${range.start}_${range.end}.xlsx`
       );
 
       showNotice("Export Excel berhasil dibuat.", "ok");

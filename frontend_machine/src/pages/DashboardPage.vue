@@ -64,6 +64,8 @@ const {
   keyword,
   locationFilter,
   shiftFilter,
+  statusFilter,
+  statusOptions,
   shiftOptions,
   showShiftFilter,
   productivityShift,
@@ -86,6 +88,7 @@ const {
 } = useDashboardExcelExport({
   selectedDate: localDate,
   locationFilter,
+  statusFilter,
   machineSettings,
   showNotice,
   productivityShift,
@@ -287,8 +290,10 @@ onUnmounted(() => {
       v-model:keyword="keyword"
       v-model:location-value="locationFilter"
       v-model:shift-value="shiftFilter"
+      v-model:status-value="statusFilter"
       :location-options="locationOptions"
       :shift-options="shiftOptions"
+      :status-options="statusOptions"
       :show-shift-filter="showShiftFilter"
       :machines="filteredMachines"
       :loading="loading || rangeExporting"

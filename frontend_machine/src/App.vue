@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 
 import GlobalStatusDots from "./components/GlobalStatusDots.vue";
 import AppHeader from "./components/AppHeader.vue";
@@ -8,11 +8,12 @@ import ProcessDetailPage from "./pages/ProcessDetailPage.vue";
 import LocationTemplatePage from "./pages/LocationTemplatePage.vue";
 import OperatorPicSpvPage from "./pages/OperatorPicSpvPage.vue";
 import { getInitialAdminMode } from "./utils/adminMode";
-import { isMechanicUnlocked } from "./utils/mechanicAccess";
 import ProcessStyleMasterPage from "./pages/ProcessStyleMasterPage.vue";
 import MechanicDashboardPage from "./pages/MechanicDashboardPage.vue";
 
 const STORAGE_KEY = "machineDashboardActivePage";
+const MECHANIC_PATH = "/mekanikggi";
+const MAIN_PAGES = ["dashboard", "detail", "location", "master-ie"];
 
 const activePage = ref("dashboard");
 const selectedDate = ref(todayLocal());
@@ -29,7 +30,39 @@ function todayLocal() {
   return local.toISOString().slice(0, 10);
 }
 
+function normalizePathname(pathname = window.location.pathname) {
+  const path = String(pathname || "/").replace(/\/+$/, "");
+  return path || "/";
+}
+
+function isMechanicPath(pathname = window.location.pathname) {
+  return normalizePathname(pathname) === MECHANIC_PATH;
+}
+
+function syncUrlForPage(page) {
+  if (page === "mechanic") {
+    if (!isMechanicPath()) {
+      window.history.pushState({}, "", MECHANIC_PATH);
+    }
+    return;
+  }
+
+  if (page === "operator-pic-spv") {
+    return;
+  }
+
+  if (isMechanicPath()) {
+    window.history.pushState({}, "", "/");
+  }
+}
+
 function readUrlRoute() {
+  if (isMechanicPath()) {
+    operatorUuid.value = "";
+    activePage.value = "mechanic";
+    return true;
+  }
+
   const params = new URLSearchParams(window.location.search);
   const page = params.get("page");
   const uuid = params.get("uuid");
@@ -50,9 +83,8 @@ function clearOperatorUrl() {
   params.delete("uuid");
 
   const query = params.toString();
-  const nextUrl = query
-    ? `${window.location.pathname}?${query}`
-    : window.location.pathname;
+  const basePath = activePage.value === "mechanic" ? MECHANIC_PATH : "/";
+  const nextUrl = query ? `${basePath}?${query}` : basePath;
 
   window.history.replaceState({}, "", nextUrl);
 }
@@ -62,8 +94,13 @@ function changePage(page) {
 
   if (page !== "operator-pic-spv") {
     operatorUuid.value = "";
-    localStorage.setItem(STORAGE_KEY, page);
     clearOperatorUrl();
+  }
+
+  syncUrlForPage(page);
+
+  if (MAIN_PAGES.includes(page)) {
+    localStorage.setItem(STORAGE_KEY, page);
   }
 }
 
@@ -96,34 +133,37 @@ function updateGlobalAdminMode(value) {
   globalIsAdmin.value = Boolean(value);
 }
 
+function handlePopState() {
+  if (readUrlRoute()) return;
+
+  const savedPage = localStorage.getItem(STORAGE_KEY);
+  activePage.value = MAIN_PAGES.includes(savedPage) ? savedPage : "dashboard";
+}
+
 onMounted(async () => {
   globalIsAdmin.value = await Promise.resolve(getInitialAdminMode());
+  window.addEventListener("popstate", handlePopState);
 
-  const isOperatorRoute = readUrlRoute();
-
-  if (isOperatorRoute) {
+  if (readUrlRoute()) {
     return;
   }
 
   const savedPage = localStorage.getItem(STORAGE_KEY);
-
-  if (savedPage === "mechanic" && !isMechanicUnlocked()) {
-    activePage.value = "dashboard";
-    return;
-  }
-
-  if (["dashboard", "detail", "location", "master-ie", "mechanic"].includes(savedPage)) {
+  if (MAIN_PAGES.includes(savedPage)) {
     activePage.value = savedPage;
+  } else {
+    activePage.value = "dashboard";
   }
 });
 
-watch(activePage, (newPage) => {
-  if (newPage === "mechanic" && !isMechanicUnlocked()) {
-    activePage.value = "dashboard";
-    return;
-  }
+onUnmounted(() => {
+  window.removeEventListener("popstate", handlePopState);
+});
 
-  if (["dashboard", "detail", "location", "master-ie", "mechanic"].includes(newPage)) {
+watch(activePage, (newPage) => {
+  syncUrlForPage(newPage);
+
+  if (MAIN_PAGES.includes(newPage)) {
     localStorage.setItem(STORAGE_KEY, newPage);
   }
 });
@@ -164,7 +204,7 @@ watch(activePage, (newPage) => {
         v-else-if="activePage === 'location'"
         @open-detail-machine="openMachineDetail"
       />
-      
+
       <ProcessStyleMasterPage
         v-else-if="activePage === 'master-ie'"
       />

@@ -2,6 +2,7 @@
 import {
   downTimeSec,
   formatHour,
+  formatMinute,
   getDisplayMachineName,
   getOperatorDisplayRows,
   getOperatorNote,
@@ -173,14 +174,17 @@ function editMachine(machine) {
 
             <td class="center time-cell">
               {{ formatHour(m.runtime) }}
+              <small>{{ formatMinute(m.runtime) }}</small>
             </td>
 
             <td class="center time-cell">
               {{ formatHour(m.procTime) }}
+              <small>{{ formatMinute(m.procTime) }}</small>
             </td>
 
             <td class="center time-cell">
               {{ formatHour(downTimeSec(m)) }}
+              <small>{{ formatMinute(downTimeSec(m)) }}</small>
             </td>
 
             <td class="right">
@@ -273,14 +277,17 @@ function editMachine(machine) {
 
             <td class="center time-cell">
               {{ formatHour(m.runtime) }}
+              <small>{{ formatMinute(m.runtime) }}</small>
             </td>
 
             <td class="center time-cell">
               {{ formatHour(m.procTime) }}
+              <small>{{ formatMinute(m.procTime) }}</small>
             </td>
 
             <td class="center time-cell">
               {{ formatHour(downTimeSec(m)) }}
+              <small>{{ formatMinute(downTimeSec(m)) }}</small>
             </td>
 
             <td class="center productivity-cell">

@@ -14,10 +14,10 @@ import (
 )
 
 func ConnectDB() (*sql.DB, error) {
-	server := GetEnv("DB_SERVER", "10.5.0.106")
+	server := GetEnv("DB_SERVER", "10.5.0.107")
 	port := GetEnv("DB_PORT", "1433")
 	user := GetEnv("DB_USER", "sa")
-	password := strings.TrimSpace(os.Getenv("DB_PASSWORD"))
+	password := GetEnv("DB_PASSWORD", "Satu1234!")
 	databaseName := GetEnv("DB_NAME", "sewingiot")
 	encrypt := GetEnv("DB_ENCRYPT", "disable")
 

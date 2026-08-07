@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue()],
+    appType: "spa",
     server: {
       host: "0.0.0.0",
       port,

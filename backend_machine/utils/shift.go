@@ -16,6 +16,7 @@ const (
 	Shift1       = "SHIFT_1"
 	Shift2       = "SHIFT_2"
 	Shift3       = "SHIFT_3"
+	ShiftNormal  = "NORMAL"
 
 	GM3BreakMinutes = 30
 )
@@ -67,6 +68,8 @@ func NormalizeShiftCode(shift string) string {
 		return Shift2
 	case Shift3, "3", "S3":
 		return Shift3
+	case ShiftNormal, "FULLDAY", "FULL_DAY", "HARI_PENUH", "FULL":
+		return ShiftNormal
 	default:
 		return ShiftALL
 	}
@@ -82,6 +85,8 @@ func ShiftDisplayName(code string) string {
 		return "Shift 3 (21:00-04:30)"
 	case ShiftCurrent:
 		return "Current Shift"
+	case ShiftNormal:
+		return "Normal (Hari Penuh)"
 	default:
 		return "All Shifts (06:00-04:30)"
 	}
@@ -91,6 +96,9 @@ func ShiftDisplayNameFromSchedule(code string, schedule []models.ShiftScheduleIt
 	normalized := NormalizeShiftCode(code)
 	if normalized == ShiftCurrent {
 		return "Current Shift"
+	}
+	if normalized == ShiftNormal {
+		return "Normal (Hari Penuh)"
 	}
 	if normalized == ShiftALL {
 		return "All Shifts"

@@ -7,6 +7,55 @@ import (
 	"time"
 )
 
+func formatNaiveDateTime(t time.Time) string {
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// GetRecordRunTimeSecSum = Power On apa adanya dari kolom RunTime.
+// Setara query:
+//
+//	SELECT SUM(ISNULL(RunTime, 0))
+//	FROM dbo.Record_RunTime
+//	WHERE UUID = @uuid
+//	  AND StartTime >= @start AND StartTime < @end
+func (r *Repository) GetRecordRunTimeSecSum(
+	ctx context.Context,
+	uuid string,
+	start, end time.Time,
+) (int64, error) {
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" {
+		return 0, nil
+	}
+
+	query := `
+DECLARE @start_time DATETIME2 = TRY_CONVERT(DATETIME2, @p_start_time);
+DECLARE @end_time DATETIME2 = TRY_CONVERT(DATETIME2, @p_end_time);
+
+SELECT CAST(ISNULL(SUM(ISNULL([RunTime], 0)), 0) AS BIGINT) AS total_runtime_detik
+FROM [dbo].[Record_RunTime]
+WHERE LOWER(LTRIM(RTRIM([UUID]))) = LOWER(LTRIM(RTRIM(@uuid)))
+  AND [StartTime] >= @start_time
+  AND [StartTime] < @end_time;
+`
+
+	var runtimeSec sql.NullInt64
+	err := r.DB.QueryRowContext(
+		ctx,
+		query,
+		sql.Named("uuid", uuid),
+		sql.Named("p_start_time", formatNaiveDateTime(start)),
+		sql.Named("p_end_time", formatNaiveDateTime(end)),
+	).Scan(&runtimeSec)
+	if err != nil {
+		return 0, err
+	}
+	if !runtimeSec.Valid || runtimeSec.Int64 < 0 {
+		return 0, nil
+	}
+	return runtimeSec.Int64, nil
+}
+
 // GetRuntimeSec menghitung Power On Duration seperti aplikasi bawaan:
 // StartTime → ShutTime (atau now jika masih ON / ShutTime kosong).
 // Tidak menambah waktu setelah ShutTime.

@@ -27,6 +27,13 @@ export function formatHour(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
+export function formatMinute(seconds) {
+  const totalSeconds = Math.max(0, Math.floor(toNumber(seconds)));
+  const minutes = Math.floor(totalSeconds / 60);
+
+  return `${minutes}m`;
+}
+
 export function getDisplayMachineName(machine) {
   return machine?.displayMachineName || machine?.machineName || "-";
 }

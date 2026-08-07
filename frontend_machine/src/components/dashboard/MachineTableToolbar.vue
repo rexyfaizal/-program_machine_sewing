@@ -46,6 +46,19 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  statusValue: {
+    type: String,
+    default: "ALL",
+  },
+  statusOptions: {
+    type: Array,
+    default: () => [
+      { value: "ALL", label: "All Status" },
+      { value: "GOOD", label: "GOOD" },
+      { value: "NORMAL", label: "NORMAL" },
+      { value: "BAD", label: "BAD" },
+    ],
+  },
 });
 
 const emit = defineEmits([
@@ -55,6 +68,7 @@ const emit = defineEmits([
   "update:keyword",
   "update:locationValue",
   "update:shiftValue",
+  "update:statusValue",
   "dateChange",
   "download",
 ]);
@@ -90,6 +104,10 @@ function updateLocation(event) {
 function updateShift(event) {
   emit("update:shiftValue", event.target.value);
   emit("dateChange");
+}
+
+function updateStatus(event) {
+  emit("update:statusValue", event.target.value);
 }
 </script>
 
@@ -142,6 +160,20 @@ function updateShift(event) {
           :value="shift.value"
         >
           {{ shift.label }}
+        </option>
+      </select>
+    </label>
+
+    <label class="table-filter area-filter">
+      <span>Status</span>
+
+      <select :value="props.statusValue" @change="updateStatus">
+        <option
+          v-for="status in props.statusOptions"
+          :key="status.value"
+          :value="status.value"
+        >
+          {{ status.label }}
         </option>
       </select>
     </label>

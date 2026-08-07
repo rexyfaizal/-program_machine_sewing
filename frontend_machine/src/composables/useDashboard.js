@@ -900,10 +900,6 @@ export function useDashboard() {
         ) || 0
       );
 
-      if (procTime > runtime) {
-        runtime = procTime;
-      }
-
       const lossTime = Math.max(0, runtime - procTime);
 
       const productivity =

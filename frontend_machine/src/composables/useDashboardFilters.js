@@ -8,10 +8,18 @@ import {
 
 const SPECIFIC_SHIFT_CODES = ["SHIFT_1", "SHIFT_2", "SHIFT_3"];
 
+export const STATUS_FILTER_OPTIONS = [
+  { value: "ALL", label: "All Status" },
+  { value: "GOOD", label: "GOOD" },
+  { value: "NORMAL", label: "NORMAL" },
+  { value: "BAD", label: "BAD" },
+];
+
 export function useDashboardFilters(machines, shiftConfigMap = null) {
   const keyword = ref("");
   const locationFilter = ref("ALL");
   const shiftFilter = ref("CURRENT");
+  const statusFilter = ref("ALL");
 
   const locationOptions = computed(() => {
     return [
@@ -37,10 +45,9 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
     return new Map();
   });
 
-  const showShiftFilter = computed(() => {
-    const area = String(locationFilter.value || "").trim().toUpperCase();
-    return Boolean(area && area !== "ALL");
-  });
+  // Shift filter selalu tampil, termasuk Area = All GM,
+  // supaya GM3 tetap dihitung per shift (default Current).
+  const showShiftFilter = computed(() => true);
 
   const shiftOptions = computed(() => {
     const area = String(locationFilter.value || "").trim().toUpperCase();
@@ -50,19 +57,15 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
   });
 
   const productivityShift = computed(() => {
-    if (!showShiftFilter.value) {
-      return "";
-    }
-
     const selected = String(shiftFilter.value || "").trim().toUpperCase();
     const validOption = shiftOptions.value.some(
       (option) => String(option.value || "").toUpperCase() === selected
     );
     const resolved = validOption
       ? selected
-      : String(shiftOptions.value[0]?.value || "NORMAL").toUpperCase();
+      : String(shiftOptions.value[0]?.value || "CURRENT").toUpperCase();
 
-    return resolved === "NORMAL" ? "" : resolved;
+    return resolved;
   });
 
   watch(
@@ -77,24 +80,16 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
     { immediate: true }
   );
 
-  watch(showShiftFilter, (show) => {
-    if (!show) {
-      shiftFilter.value = "CURRENT";
-    }
-  });
-
   watch(
     shiftOptions,
     (options) => {
-      if (!showShiftFilter.value) return;
-
       const selected = String(shiftFilter.value || "").trim().toUpperCase();
       const isValid = options.some(
         (option) => String(option.value || "").toUpperCase() === selected
       );
 
       if (!isValid) {
-        shiftFilter.value = String(options[0]?.value || "NORMAL");
+        shiftFilter.value = String(options[0]?.value || "CURRENT");
       }
     },
     { immediate: true }
@@ -111,11 +106,21 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
   const filteredMachines = computed(() => {
     const key = keyword.value.toLowerCase().trim();
     const selectedLocation = String(locationFilter.value || "ALL").trim();
+    const selectedStatus = String(statusFilter.value || "ALL")
+      .trim()
+      .toUpperCase();
 
     return machines.value.filter((m) => {
       const locationGroup = getLocationGroup(m.location);
 
       if (selectedLocation !== "ALL" && locationGroup !== selectedLocation) {
+        return false;
+      }
+
+      if (
+        selectedStatus !== "ALL" &&
+        String(m.status || "").trim().toUpperCase() !== selectedStatus
+      ) {
         return false;
       }
 
@@ -220,6 +225,8 @@ export function useDashboardFilters(machines, shiftConfigMap = null) {
     keyword,
     locationFilter,
     shiftFilter,
+    statusFilter,
+    statusOptions: STATUS_FILTER_OPTIONS,
     shiftOptions,
     showShiftFilter,
     productivityShift,

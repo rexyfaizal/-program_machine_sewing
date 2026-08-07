@@ -65,11 +65,27 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		var err error
 
 		useShift, segments, schedule := utils.ResolveShiftSegmentsForLocation(location, shiftConfigMap)
-		if useShift && shiftParam != "" {
-			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, shiftCode, segments, schedule)
+		rawShift := strings.ToUpper(strings.TrimSpace(shiftParam))
+		isFullDayNormal := rawShift == utils.ShiftNormal ||
+			rawShift == "FULLDAY" ||
+			rawShift == "FULL_DAY" ||
+			rawShift == "HARI_PENUH" ||
+			!useShift
+
+		if isFullDayNormal {
+			// Hari penuh / Normal / line tanpa multi-shift:
+			// Power On = SUM(RunTime) dari Record_RunTime.
+			row, err = h.Repo.GetMachineProductivity(ctx, m, date)
 		} else if useShift {
-			// Tanpa query shift: hitung ALL shifts untuk line yang pakai shift.
-			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, utils.ShiftALL, segments, schedule)
+			code := shiftCode
+			// Tanpa query shift (legacy): default CURRENT, bukan ALL.
+			if shiftParam == "" {
+				_, code = utils.ResolveRequestedShift(date, utils.ShiftCurrent, time.Now())
+			}
+			if code == "" || code == utils.ShiftCurrent {
+				code = utils.ShiftALL
+			}
+			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, code, segments, schedule)
 		} else {
 			row, err = h.Repo.GetMachineProductivity(ctx, m, date)
 		}

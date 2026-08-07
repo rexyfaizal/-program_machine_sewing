@@ -2,11 +2,11 @@ $ErrorActionPreference = 'Stop'
 
 $env:BOT_TOKEN='TOKEN_DARI_BOTFATHER'
 
-$env:DB_SERVER='10.5.0.99'
+$env:DB_SERVER='10.5.0.107'
 $env:DB_PORT='1433'
 $env:DB_USER='sa'
-$env:DB_PASSWORD='PASSWORD_SQL_SERVER'
-$env:DB_NAME='NAMA_DATABASE'
+$env:DB_PASSWORD='Satu1234!'
+$env:DB_NAME='sewingiot'
 $env:DB_ENCRYPT='disable'
 $env:DB_EMPLOYEE_TABLE='dbo.employee'
 

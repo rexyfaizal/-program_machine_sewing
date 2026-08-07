@@ -21,10 +21,10 @@ func GetEnv(key, def string) string {
 }
 
 func ConnectDB() (*sql.DB, error) {
-	server := GetEnv("DB_SERVER", "10.5.0.106")
+	server := GetEnv("DB_SERVER", "10.5.0.107")
 	port := GetEnv("DB_PORT", "1433")
 	user := GetEnv("DB_USER", "sa")
-	password := GetEnv("DB_PASSWORD", "satu1")
+	password := GetEnv("DB_PASSWORD", "Satu1234!")
 
 	// Project ini selalu pakai sewingiot.
 	// Jangan baca DB_NAME global (bisa "lectra" dari User env project lain).

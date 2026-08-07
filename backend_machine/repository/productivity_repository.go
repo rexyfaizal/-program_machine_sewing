@@ -11,7 +11,8 @@ import (
 )
 
 func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machine, date string) (models.ProductivityRow, error) {
-	day, err := time.Parse("2006-01-02", date)
+	// Hari penuh / Normal: window kalender lokal 00:00 → +1 hari.
+	day, err := time.ParseInLocation("2006-01-02", date, time.Local)
 	if err != nil {
 		return models.ProductivityRow{}, fmt.Errorf("format tanggal harus YYYY-MM-DD")
 	}
@@ -24,9 +25,8 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 		return models.ProductivityRow{}, err
 	}
 
-	// Runtime dihitung dari:
-	// StartTime → ShutTime (atau now jika masih ON), tanpa ekstra setelah ShutTime.
-	runtimeSec, err := r.GetRuntimeSec(ctx, m.UUID, m.MacState, start, end)
+	// Power On = SUM(RunTime) langsung dari DB (apa adanya).
+	runtimeSec, err := r.GetRecordRunTimeSecSum(ctx, m.UUID, start, end)
 	if err != nil {
 		log.Printf("runtime skip uuid=%s: %v", m.UUID, err)
 		runtimeSec = 0
@@ -39,9 +39,34 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 	}
 
 	row := buildProductivityRow(m, date, runtimeSec, ps, as)
-	row.MainSource = "process_time_runtime"
-	row.ShiftCode = ""
-	row.ShiftName = ""
+
+	// Jangan timpa Power On dengan ProcTime — tetap nilai kolom RunTime.
+	row.RuntimeSec = runtimeSec
+	if row.RuntimeSec < 0 {
+		row.RuntimeSec = 0
+	}
+	row.LossTimeSec = row.RuntimeSec - row.ProcSec
+	if row.LossTimeSec < 0 {
+		row.LossTimeSec = 0
+	}
+	row.RuntimeHours = utils.Round2(float64(row.RuntimeSec) / 3600)
+	row.LossTimeHours = utils.Round2(float64(row.LossTimeSec) / 3600)
+
+	productivityRaw := 0.0
+	if row.RuntimeSec > 0 {
+		productivityRaw = float64(row.ProcSec) / float64(row.RuntimeSec) * 100
+	}
+	if productivityRaw > 100 {
+		productivityRaw = 100
+	}
+	row.ProductivityRaw = utils.Round2(productivityRaw)
+	row.ProductivityPct = utils.Round2(productivityRaw)
+	row.Status = utils.StatusFromPct(row.ProductivityPct)
+	row.Category = row.Status
+
+	row.MainSource = "record_runtime_column"
+	row.ShiftCode = utils.ShiftNormal
+	row.ShiftName = utils.ShiftDisplayName(utils.ShiftNormal)
 
 	return row, nil
 }
@@ -133,10 +158,8 @@ func buildProductivityRow(
 		LastStart:         ps.LastProcess,
 	}
 
-	if row.ProcSec > row.RuntimeSec {
-		row.RuntimeSec = row.ProcSec
-	}
-
+	// Power On tetap dari Record_RunTime / query shift (jangan timpa dengan Running).
+	// Jika Running > Power On: Loss = 0, produktivitas di-cap 100%.
 	row.LossTimeSec = row.RuntimeSec - row.ProcSec
 	if row.LossTimeSec < 0 {
 		row.LossTimeSec = 0

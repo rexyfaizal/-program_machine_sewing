@@ -25,8 +25,8 @@ WITH src AS (
         TRY_CONVERT(int, FileStitches) AS FileStitchesInt,
         TRY_CONVERT(datetime2, StartTime) AS StartDT
     FROM dbo.[%s]
-    WHERE TRY_CONVERT(datetime2, StartTime) >= @start_time
-      AND TRY_CONVERT(datetime2, StartTime) < @end_time
+    WHERE TRY_CONVERT(datetime2, StartTime) >= TRY_CONVERT(datetime2, @start_time)
+      AND TRY_CONVERT(datetime2, StartTime) < TRY_CONVERT(datetime2, @end_time)
 ), agg AS (
     SELECT
         ISNULL(SUM(ISNULL(ProcTimeBig, 0)), 0) AS ProcSec,
@@ -78,8 +78,8 @@ FROM agg;
 	var last sql.NullTime
 
 	err := r.DB.QueryRowContext(ctx, query,
-		sql.Named("start_time", start),
-		sql.Named("end_time", end),
+		sql.Named("start_time", formatNaiveDateTime(start)),
+		sql.Named("end_time", formatNaiveDateTime(end)),
 	).Scan(
 		&ps.ProcSec,
 		&ps.OkProcSec,
