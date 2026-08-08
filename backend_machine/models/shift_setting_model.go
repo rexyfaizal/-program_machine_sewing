@@ -45,8 +45,11 @@ type FinalProductivityGroup struct {
 	ShiftName      string
 	PowerSeconds   int64
 	ProcessSeconds int64
-	LossSeconds    int64
-	Productivity   float64
+	// ProcessActualSeconds = process time langsung dari mUUID (tanpa iris runtime),
+	// dipakai hanya untuk tampilan Process Time.
+	ProcessActualSeconds int64
+	LossSeconds          int64
+	Productivity         float64
 	PeriodStart    string
 	PeriodEnd      string
 	BreakStart     string

@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "apexcharts": "^6.7.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.39",
+    "vue3-apexcharts": "^1.11.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

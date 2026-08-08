@@ -43,10 +43,6 @@ function barWidth(value) {
           <strong :title="m.machineName">
             {{ m.machineName || "-" }}
           </strong>
-
-          <small>
-            {{ m.ip || "-" }} · {{ m.mainSource || "process_time" }}
-          </small>
         </div>
 
         <div class="rank-bar-wrap">
@@ -86,18 +82,31 @@ function barWidth(value) {
 }
 
 .panel-head {
+  position: relative;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 14px;
   align-items: flex-start;
   margin-bottom: 18px;
 }
 
+.panel-head > div {
+  flex: 1;
+  text-align: center;
+}
+
 .panel-head h3 {
   margin: 0 0 4px;
   font-size: 20px;
-  color: #0f172a;
+  color: #2563eb;
   letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.panel-head span {
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 
 .panel-head p {
@@ -123,6 +132,22 @@ function barWidth(value) {
   gap: 10px;
   flex: 1;
   align-content: start;
+  max-height: 380px; /* kira-kira 5 baris, sisanya scroll */
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.rank-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rank-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.rank-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .rank-row {

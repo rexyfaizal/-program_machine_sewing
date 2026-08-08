@@ -79,6 +79,7 @@ func (r *Repository) QueryFinalProductivityGroups(
 			&g.ProcessSeconds,
 			&g.LossSeconds,
 			&productivity,
+			&g.ProcessActualSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -114,6 +115,7 @@ func AggregateFinalGroups(groups []models.FinalProductivityGroup) models.FinalPr
 	for _, g := range groups {
 		agg.PowerSeconds += g.PowerSeconds
 		agg.ProcessSeconds += g.ProcessSeconds
+		agg.ProcessActualSeconds += g.ProcessActualSeconds
 		if g.PeriodStart != "" && (agg.PeriodStart == "" || g.PeriodStart < agg.PeriodStart) {
 			agg.PeriodStart = g.PeriodStart
 		}
@@ -190,7 +192,12 @@ func (r *Repository) GetMachineProductivityFinal(
 
 	row := buildProductivityRow(m, workDate, agg.PowerSeconds, ps, as)
 	row.RuntimeSec = agg.PowerSeconds
-	row.ProcSec = agg.ProcessSeconds
+	// Process Time actual (langsung dari mUUID, tanpa iris runtime) untuk TAMPILAN.
+	row.ProcActualSec = agg.ProcessActualSeconds
+	row.ProcActualHours = utils.Round2(float64(agg.ProcessActualSeconds) / 3600)
+	// procSec = nilai yang dilihat user → pakai metode actual.
+	row.ProcSec = agg.ProcessActualSeconds
+	// Loss & Productivity TETAP metode lama (runtime-intersection): agg.LossSeconds & agg.Productivity.
 	row.LossTimeSec = agg.LossSeconds
 	if row.LossTimeSec < 0 {
 		row.LossTimeSec = 0

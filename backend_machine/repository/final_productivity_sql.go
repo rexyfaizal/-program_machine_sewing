@@ -396,6 +396,38 @@ CROSS APPLY
 WHERE b.overlap_end > a.overlap_start
 GROUP BY s.group_no;
 
+-- Process Time "actual": irisan segment shift x proses SAJA (tanpa dibatasi runtime).
+-- Dipakai HANYA untuk tampilan Process Time (mendekati aplikasi bawaan mesin).
+-- Power On / Loss / Productivity tetap dari #process_totals (metode runtime-intersection).
+DROP TABLE IF EXISTS #process_actual_totals;
+CREATE TABLE #process_actual_totals
+(
+    group_no INT PRIMARY KEY,
+    process_seconds BIGINT NOT NULL
+);
+
+INSERT INTO #process_actual_totals (group_no, process_seconds)
+SELECT
+    s.group_no,
+    SUM(DATEDIFF(SECOND, a.overlap_start, b.overlap_end))
+FROM #segments s
+INNER JOIN #process_intervals p
+    ON p.process_start < s.segment_end
+   AND p.process_end > s.segment_start
+   AND s.segment_start < @cutoff_time
+CROSS APPLY
+(
+    SELECT MAX(v) AS overlap_start
+    FROM (VALUES (s.segment_start), (p.process_start)) AS q(v)
+) a
+CROSS APPLY
+(
+    SELECT MIN(v) AS overlap_end
+    FROM (VALUES (s.segment_end), (p.process_end)) AS q(v)
+) b
+WHERE b.overlap_end > a.overlap_start
+GROUP BY s.group_no;
+
 ;WITH result AS
 (
     SELECT
@@ -406,10 +438,12 @@ GROUP BY s.group_no;
         g.break_start,
         g.break_end,
         ISNULL(pw.power_seconds, 0) AS power_seconds,
-        ISNULL(pr.process_seconds, 0) AS process_seconds
+        ISNULL(pr.process_seconds, 0) AS process_seconds,
+        ISNULL(pa.process_seconds, 0) AS process_actual_seconds
     FROM #groups g
     LEFT JOIN #power_totals pw ON pw.group_no = g.group_no
     LEFT JOIN #process_totals pr ON pr.group_no = g.group_no
+    LEFT JOIN #process_actual_totals pa ON pa.group_no = g.group_no
 ),
 final AS
 (
@@ -435,7 +469,8 @@ SELECT
     power_seconds,
     process_seconds,
     loss_seconds,
-    productivity
+    productivity,
+    process_actual_seconds
 FROM final
 ORDER BY group_no;
 `

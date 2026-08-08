@@ -33,10 +33,6 @@ function pct(value) {
           <strong :title="m.machineName">
             {{ m.machineName || "-" }}
           </strong>
-
-          <small>
-            {{ m.ip || "-" }} · Output {{ m.output || 0 }}
-          </small>
         </div>
 
         <div class="item-value">
@@ -68,17 +64,23 @@ function pct(value) {
 
 .panel-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 14px;
   align-items: flex-start;
   margin-bottom: 18px;
 }
 
+.panel-head > div {
+  flex: 1;
+  text-align: center;
+}
+
 .panel-head h3 {
   margin: 0 0 4px;
   font-size: 20px;
-  color: #0f172a;
+  color: #2563eb;
   letter-spacing: -0.02em;
+  text-align: center;
 }
 
 .panel-head p {
@@ -93,6 +95,22 @@ function pct(value) {
   gap: 10px;
   flex: 1;
   align-content: start;
+  max-height: 380px; /* kira-kira 5 baris, sisanya scroll */
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.attention-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.attention-list::-webkit-scrollbar-thumb {
+  background: #fca5a5;
+  border-radius: 999px;
+}
+
+.attention-list::-webkit-scrollbar-thumb:hover {
+  background: #f87171;
 }
 
 .attention-item {

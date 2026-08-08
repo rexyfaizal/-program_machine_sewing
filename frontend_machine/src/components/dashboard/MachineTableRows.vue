@@ -33,10 +33,14 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["edit"]);
+const emit = defineEmits(["edit", "chart"]);
 
 function editMachine(machine) {
   emit("edit", machine);
+}
+
+function chartMachine(machine) {
+  emit("chart", machine);
 }
 </script>
 
@@ -72,6 +76,7 @@ function editMachine(machine) {
           <th>Program Dominan</th>
           <th>UUID / Table</th>
           <th class="center">Action</th>
+          <th class="center">Grafik</th>
         </tr>
 
         <tr v-else>
@@ -94,6 +99,7 @@ function editMachine(machine) {
           </th>
           <th class="center">Produktivitas</th>
           <th class="center">Status</th>
+          <th class="center">Grafik</th>
         </tr>
       </thead>
 
@@ -221,6 +227,12 @@ function editMachine(machine) {
                 Edit
               </button>
             </td>
+
+            <td class="center">
+              <button class="btn-chart" type="button" @click="chartMachine(m)">
+                Grafik
+              </button>
+            </td>
           </template>
 
           <template v-else>
@@ -298,6 +310,12 @@ function editMachine(machine) {
               <span class="badge" :class="statusClass(m.status)">
                 {{ m.status || "BAD" }}
               </span>
+            </td>
+
+            <td class="center">
+              <button class="btn-chart" type="button" @click="chartMachine(m)">
+                Grafik
+              </button>
             </td>
           </template>
         </tr>

@@ -46,6 +46,9 @@ type ProductivityRow struct {
 
 	ProcSec    int64   `json:"procSec"`
 	ProcHours  float64 `json:"procHours"`
+	// ProcActualSec/Hours = process time langsung dari mUUID (tanpa iris runtime).
+	ProcActualSec   int64   `json:"procActualSec"`
+	ProcActualHours float64 `json:"procActualHours"`
 	OkProcSec  int64   `json:"okProcSec"`
 	Output     int64   `json:"output"`
 	Cycles     int64   `json:"cycles"`

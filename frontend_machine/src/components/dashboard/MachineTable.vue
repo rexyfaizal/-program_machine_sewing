@@ -76,6 +76,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   "edit",
+  "chart",
   "update:selectedDate",
   "update:startDate",
   "update:endDate",
@@ -144,6 +145,7 @@ const {
       :start-index="startIndex"
       :total-cols="totalCols"
       @edit="emit('edit', $event)"
+      @chart="emit('chart', $event)"
     />
 
     <MachineTablePagination

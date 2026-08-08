@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
-import ExecutiveSummary from "../components/dashboard/ExecutiveSummary.vue";
 import KpiCards from "../components/dashboard/KpiCards.vue";
 import RankingPanel from "../components/dashboard/RankingPanel.vue";
 import StatusDistribution from "../components/dashboard/StatusDistribution.vue";
@@ -9,6 +8,7 @@ import AttentionPanel from "../components/dashboard/AttentionPanel.vue";
 import MachineTable from "../components/dashboard/MachineTable.vue";
 import MachineEditModal from "../components/dashboard/MachineEditModal.vue";
 import MachineQrModal from "../components/dashboard/MachineQrModal.vue";
+import ProductivityChartModal from "../components/dashboard/ProductivityChartModal.vue";
 
 import {
   deleteMachineSetting,
@@ -36,7 +36,9 @@ const emit = defineEmits([
 
 const editModalOpen = ref(false);
 const qrModalOpen = ref(false);
+const chartModalOpen = ref(false);
 const selectedEditMachine = ref(null);
+const selectedChartMachine = ref(null);
 const notice = ref("");
 const noticeType = ref("ok");
 const isAdmin = ref(false);
@@ -73,10 +75,7 @@ const {
   filteredMachines,
   rankingMachines,
   attentionMachines,
-  bestMachine,
-  worstMachine,
   summary,
-  executiveMessage,
   donutStyle,
 } = useDashboardFilters(machines, shiftConfigMap);
 
@@ -149,6 +148,16 @@ function openEditModal(machine) {
 function closeEditModal() {
   editModalOpen.value = false;
   selectedEditMachine.value = null;
+}
+
+function openChartModal(machine) {
+  selectedChartMachine.value = machine;
+  chartModalOpen.value = true;
+}
+
+function closeChartModal() {
+  chartModalOpen.value = false;
+  selectedChartMachine.value = null;
 }
 
 function openQrModal() {
@@ -242,12 +251,6 @@ onUnmounted(() => {
       {{ notice }}
     </div>
 
-    <ExecutiveSummary
-      :message="executiveMessage"
-      :best-machine="bestMachine"
-      :worst-machine="worstMachine"
-    />
-
     <KpiCards :summary="summary" />
 
     <section class="content-grid" :class="{ 'user-view': !isAdmin }">
@@ -302,6 +305,7 @@ onUnmounted(() => {
       @date-change="refreshDashboardByDate"
       @download="downloadExcel"
       @edit="openEditModal"
+      @chart="openChartModal"
     />
 
     <MachineEditModal
@@ -318,6 +322,15 @@ onUnmounted(() => {
       :show="qrModalOpen"
       :machines="machines"
       @close="closeQrModal"
+    />
+
+    <ProductivityChartModal
+      :show="chartModalOpen"
+      :machine="selectedChartMachine"
+      :start-date="startDate"
+      :end-date="endDate"
+      :shift="productivityShift"
+      @close="closeChartModal"
     />
   </section>
 </template>
