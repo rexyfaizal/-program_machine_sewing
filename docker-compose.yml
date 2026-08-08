@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend_machine
+    container_name: sewing_backend
+    environment:
+      SEWINGIOT_DB_SERVER: "${SEWINGIOT_DB_SERVER:-10.5.0.107}"
+      SEWINGIOT_DB_NAME: "${SEWINGIOT_DB_NAME:-sewingiot}"
+      DB_PORT: "${DB_PORT:-1433}"
+      DB_USER: "${DB_USER:-sa}"
+      DB_PASSWORD: "${DB_PASSWORD:-Satu1234!}"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "5500"
+    ports:
+      - "5500:5500"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend_machine
+    container_name: sewing_frontend
+    depends_on:
+      - backend
+    ports:
+      - "5175:80"
+    restart: unless-stopped

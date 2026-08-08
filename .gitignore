@@ -5,6 +5,10 @@ frontend_machine/.vite/
 frontend_machine/.cache/
 
 # Environment rahasia
+/.env
+/.env.*
+!/.env.example
+
 frontend_machine/.env
 frontend_machine/.env.*
 !frontend_machine/.env.example

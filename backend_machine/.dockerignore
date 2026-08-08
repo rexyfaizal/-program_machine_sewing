@@ -1,0 +1,10 @@
+# Rahasia & artefak lokal jangan masuk image
+.env
+.env.*
+!.env.example
+bin/
+tmp/
+*.exe
+*.out
+coverage.out
+*.log
