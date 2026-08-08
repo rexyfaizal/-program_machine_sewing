@@ -10,6 +10,9 @@ services:
       DB_PASSWORD: "${DB_PASSWORD:-Satu1234!}"
       APP_HOST: "0.0.0.0"
       APP_PORT: "5500"
+      # Origin yang boleh akses WebSocket/CORS. "*" = semua (tool internal).
+      # Bisa dibatasi, contoh: "http://10.5.0.107:5175,http://103.24.148.59:5175"
+      APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-*}"
     ports:
       - "5500:5500"
     restart: unless-stopped

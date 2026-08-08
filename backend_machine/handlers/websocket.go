@@ -6,37 +6,65 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+// defaultWSOrigins dipakai kalau APP_ALLOWED_ORIGINS tidak diset.
+var defaultWSOrigins = []string{
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
+	"http://localhost:5174",
+	"http://127.0.0.1:5174",
+	"http://10.5.0.8:5173",
+	"http://10.5.0.8:5174",
+	"http://10.5.0.8:5000",
+	"http://localhost:5000",
+	"http://127.0.0.1:5000",
+}
+
+// isOriginAllowed membaca daftar dari env APP_ALLOWED_ORIGINS (dipisah koma).
+// Nilai "*" mengizinkan semua origin (cocok untuk tool internal).
+func isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return true
+	}
+
+	raw := strings.TrimSpace(os.Getenv("APP_ALLOWED_ORIGINS"))
+	var list []string
+	if raw == "" {
+		list = defaultWSOrigins
+	} else {
+		list = strings.Split(raw, ",")
+	}
+
+	for _, o := range list {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		if o == "*" {
+			return true
+		}
+		if strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
+}
+
 var productivityUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 
-		log.Println("WebSocket Origin:", origin)
-
-		allowedOrigins := map[string]bool{
-			"http://localhost:5173": true,
-			"http://127.0.0.1:5173": true,
-			"http://localhost:5174": true,
-			"http://127.0.0.1:5174": true,
-
-			"http://10.5.0.8:5173": true,
-			"http://10.5.0.8:5174": true,
-			"http://10.5.0.8:5000": true,
-
-			"http://localhost:5000": true,
-			"http://127.0.0.1:5000": true,
+		allowed := isOriginAllowed(origin)
+		if !allowed {
+			log.Println("WebSocket Origin ditolak:", origin)
 		}
-
-		if origin == "" {
-			return true
-		}
-
-		return allowedOrigins[origin]
+		return allowed
 	},
 }
 
