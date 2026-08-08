@@ -81,7 +81,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	_ = godotenv.Load()
+	// Overload agar .env project menang atas User env lama (mis. DB_SERVER=10.5.0.106).
+	_ = godotenv.Overload()
 
 	appHost := getEnv("APP_HOST", "0.0.0.0")
 	appPort := getEnv("APP_PORT", "5000")
@@ -105,6 +106,9 @@ func main() {
 		}
 		if err := repo.EnsureLineShiftConfigSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema line_shift_config:", err)
+		}
+		if err := repo.EnsureShiftSettingSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema shift_setting:", err)
 		}
 		if err := repo.EnsureMechanicClaimSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema mechanic claim:", err)
@@ -140,6 +144,7 @@ func main() {
 	mux.HandleFunc("/api/process/detail", api.ProcessDetail)
 	mux.HandleFunc("/api/machine-settings", api.MachineSettings)
 	mux.HandleFunc("/api/line-shift-config", api.LineShiftConfig)
+	mux.HandleFunc("/api/shift-settings", api.ShiftSettings)
 	mux.HandleFunc("/api/employees/search", api.EmployeeSearch)
 
 	mux.HandleFunc("/api/machine-operator/login", api.MachineOperatorLogin)

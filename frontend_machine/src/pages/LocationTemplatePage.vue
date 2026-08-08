@@ -25,6 +25,8 @@ const {
   shiftModalOpen,
   shiftModalSaving,
   shiftConfigs,
+  shiftSettings,
+  shiftDefaults,
   draggingLine,
   dragOverLine,
   form,
@@ -129,6 +131,8 @@ function openDetailMachine(machine) {
       :factory="selectedFactory"
       :lines="activeLines"
       :saved-configs="shiftConfigs"
+      :saved-shifts="shiftSettings"
+      :defaults="shiftDefaults"
       :saving="shiftModalSaving"
       @close="closeShiftConfigModal"
       @save="saveShiftConfig"

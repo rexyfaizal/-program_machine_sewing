@@ -13,13 +13,14 @@ async function readResponse(res) {
 
   if (!res.ok) {
     const message =
+      (typeof data === "string" && data.trim()) ||
       data?.message ||
       data?.error ||
       data?.Message ||
       text ||
       `HTTP ${res.status}`;
 
-    throw new Error(message);
+    throw new Error(String(message).trim());
   }
 
   return data;
@@ -177,6 +178,47 @@ export async function saveLineShiftConfig(payload) {
     body: JSON.stringify({
       factory,
       lines: Array.isArray(payload?.lines) ? payload.lines : [],
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getShiftSettings(area = "") {
+  const areaText = String(area || "").trim();
+  if (!areaText) {
+    throw new Error("Area wajib diisi.");
+  }
+
+  const params = new URLSearchParams();
+  params.set("area", areaText);
+
+  const res = await fetch(`/api/shift-settings?${params.toString()}`);
+  return await readResponse(res);
+}
+
+export async function saveShiftSettings(payload) {
+  const area = String(payload?.area || payload?.factory || "").trim();
+  if (!area) {
+    throw new Error("Area wajib diisi.");
+  }
+
+  const res = await fetch("/api/shift-settings", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      area,
+      shifts: Array.isArray(payload?.shifts) ? payload.shifts : [],
+      lines: Array.isArray(payload?.lines)
+        ? payload.lines.map((line) => ({
+            lineName: line.lineName,
+            enabled: Boolean(line.enabled),
+            custom: Boolean(line.custom),
+            shifts: Array.isArray(line.shifts) ? line.shifts : [],
+          }))
+        : [],
     }),
   });
 

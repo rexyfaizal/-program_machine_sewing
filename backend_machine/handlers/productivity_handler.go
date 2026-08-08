@@ -65,6 +65,7 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		var err error
 
 		useShift, segments, schedule := utils.ResolveShiftSegmentsForLocation(location, shiftConfigMap)
+		area, lineName := utils.ParseLocationParts(location)
 		rawShift := strings.ToUpper(strings.TrimSpace(shiftParam))
 		isFullDayNormal := rawShift == utils.ShiftNormal ||
 			rawShift == "FULLDAY" ||
@@ -72,13 +73,36 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 			rawShift == "HARI_PENUH" ||
 			!useShift
 
+		hasShiftSetting := false
+		if area != "" {
+			hasShiftSetting, err = h.Repo.HasActiveShiftSettings(ctx, area, workDate)
+			if err != nil {
+				log.Printf("shift_setting skip area=%s: %v", area, err)
+				hasShiftSetting = false
+				err = nil
+			}
+		}
+
 		if isFullDayNormal {
-			// Hari penuh / Normal / line tanpa multi-shift:
-			// Power On = SUM(RunTime) dari Record_RunTime.
-			row, err = h.Repo.GetMachineProductivity(ctx, m, date)
-		} else if useShift {
+			// Mode NORMAL (hari penuh) — rumus FINAL.
+			row, err = h.Repo.GetMachineProductivityFinal(ctx, m, date, "NORMAL", area, lineName, "")
+		} else if useShift && hasShiftSetting {
+			// Mode SHIFT — jadwal dari dbo.shift_setting (line override → default area).
 			code := shiftCode
-			// Tanpa query shift (legacy): default CURRENT, bukan ALL.
+			if shiftParam == "" {
+				_, code = utils.ResolveRequestedShift(date, utils.ShiftCurrent, time.Now())
+			}
+			if code == "" || code == utils.ShiftCurrent {
+				code = utils.ShiftALL
+			}
+			selected := code
+			if code == utils.ShiftALL {
+				selected = ""
+			}
+			row, err = h.Repo.GetMachineProductivityFinal(ctx, m, workDate, "SHIFT", area, lineName, selected)
+		} else if useShift {
+			// Fallback legacy (belum ada shift_setting).
+			code := shiftCode
 			if shiftParam == "" {
 				_, code = utils.ResolveRequestedShift(date, utils.ShiftCurrent, time.Now())
 			}
@@ -87,7 +111,7 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 			}
 			row, err = h.Repo.GetMachineProductivityByShift(ctx, m, workDate, code, segments, schedule)
 		} else {
-			row, err = h.Repo.GetMachineProductivity(ctx, m, date)
+			row, err = h.Repo.GetMachineProductivityFinal(ctx, m, date, "NORMAL", area, lineName, "")
 		}
 
 		if err != nil {

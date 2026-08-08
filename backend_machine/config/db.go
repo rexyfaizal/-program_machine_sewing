@@ -21,7 +21,12 @@ func GetEnv(key, def string) string {
 }
 
 func ConnectDB() (*sql.DB, error) {
-	server := GetEnv("DB_SERVER", "10.5.0.107")
+	// Prioritas: SEWINGIOT_DB_SERVER (khusus project) > DB_SERVER > default.
+	// Hindari User env lama (mis. 10.5.0.106) mengalahkan server produksi project.
+	server := GetEnv("SEWINGIOT_DB_SERVER", "")
+	if server == "" {
+		server = GetEnv("DB_SERVER", "10.5.0.107")
+	}
 	port := GetEnv("DB_PORT", "1433")
 	user := GetEnv("DB_USER", "sa")
 	password := GetEnv("DB_PASSWORD", "Satu1234!")

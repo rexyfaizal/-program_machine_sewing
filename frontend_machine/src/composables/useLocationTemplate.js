@@ -4,7 +4,8 @@ import {
   getMachineSettings,
   getProductivity,
   getLineShiftConfig,
-  saveLineShiftConfig,
+  getShiftSettings,
+  saveShiftSettings,
   saveMachineSetting,
 } from "../api/machineApi";
 import { getInitialAdminMode } from "../utils/adminMode";
@@ -36,6 +37,7 @@ export function useLocationTemplate() {
   const shiftModalOpen = ref(false);
   const shiftModalSaving = ref(false);
   const shiftConfigs = ref([]);
+  const shiftSettings = ref([]);
   const shiftConfigMap = ref(new Map());
   const shiftDefaults = ref([]);
 
@@ -470,24 +472,40 @@ export function useLocationTemplate() {
   }
 
   async function loadShiftConfigs(factory = selectedFactory.value) {
-    try {
-      // Satu request saja (semua factory) lalu filter di client.
-      const data = await getLineShiftConfig("");
-      const allLines = Array.isArray(data?.lines) ? data.lines : [];
-      const factoryKey = String(factory || "").trim().toUpperCase();
+    const factoryKey = String(factory || "").trim().toUpperCase();
 
-      shiftConfigs.value = allLines.filter(
-        (item) =>
-          String(item.factory || "").trim().toUpperCase() === factoryKey
-      );
-      shiftDefaults.value = Array.isArray(data?.defaults?.schedule)
-        ? data.defaults.schedule
-        : [];
+    try {
+      // Map global untuk cek line enabled (dashboard filter).
+      const allData = await getLineShiftConfig("");
+      const allLines = Array.isArray(allData?.lines) ? allData.lines : [];
       shiftConfigMap.value = buildLineShiftConfigMap(allLines);
+      shiftDefaults.value = Array.isArray(allData?.defaults?.schedule)
+        ? allData.defaults.schedule
+        : [];
     } catch (err) {
       console.warn("Gagal load line shift config:", err);
-      shiftConfigs.value = [];
       shiftConfigMap.value = new Map();
+    }
+
+    if (!factoryKey) {
+      shiftConfigs.value = [];
+      shiftSettings.value = [];
+      return;
+    }
+
+    try {
+      // Jadwal area + toggle line dari shift_setting (sumber hitung FINAL).
+      const data = await getShiftSettings(factoryKey);
+      shiftSettings.value = Array.isArray(data?.shifts) ? data.shifts : [];
+      shiftConfigs.value = Array.isArray(data?.lines) ? data.lines : [];
+      if (Array.isArray(data?.defaults?.schedule) && data.defaults.schedule.length) {
+        shiftDefaults.value = data.defaults.schedule;
+      }
+    } catch (err) {
+      console.warn("Gagal load shift settings:", err);
+      shiftSettings.value = [];
+      shiftConfigs.value = [];
+      throw err;
     }
   }
 
@@ -497,13 +515,17 @@ export function useLocationTemplate() {
 
     try {
       // Settings wajib; shift config opsional (jangan blokir jika endpoint belum siap).
-      const [settingsResult] = await Promise.allSettled([
+      const [settingsResult, shiftResult] = await Promise.allSettled([
         loadMachineSettings(),
         loadShiftConfigs(selectedFactory.value),
       ]);
 
       if (settingsResult.status === "rejected") {
         throw settingsResult.reason;
+      }
+
+      if (shiftResult.status === "rejected") {
+        console.warn("Gagal load shift settings saat loadData:", shiftResult.reason);
       }
 
       const useShift =
@@ -558,12 +580,24 @@ export function useLocationTemplate() {
     }
   }
 
-  function openShiftConfigModal() {
+  async function openShiftConfigModal() {
     if (!isAdmin.value) {
       showNotice("Akses atur shift hanya untuk admin.");
       return;
     }
-    shiftModalOpen.value = true;
+    try {
+      await loadShiftConfigs(selectedFactory.value);
+      shiftModalOpen.value = true;
+    } catch (err) {
+      const msg = String(err?.message || err || "");
+      if (/404|not found/i.test(msg)) {
+        showNotice(
+          "API /api/shift-settings belum aktif. Restart backend (go run .) lalu coba lagi."
+        );
+      } else {
+        showNotice(`Gagal load shift: ${msg}`);
+      }
+    }
   }
 
   function closeShiftConfigModal() {
@@ -578,13 +612,20 @@ export function useLocationTemplate() {
 
     shiftModalSaving.value = true;
     try {
-      await saveLineShiftConfig(payload);
+      await saveShiftSettings(payload);
       await loadShiftConfigs(selectedFactory.value);
       shiftModalOpen.value = false;
-      showNotice("Konfigurasi shift berhasil disimpan.");
+      showNotice("Konfigurasi shift berhasil disimpan ke database.");
       await loadData();
     } catch (err) {
-      showNotice(`Gagal simpan shift: ${err.message}`);
+      const msg = String(err?.message || err || "");
+      if (/404|not found/i.test(msg)) {
+        showNotice(
+          "Gagal simpan: API /api/shift-settings belum aktif. Restart backend (go run .) lalu coba lagi."
+        );
+      } else {
+        showNotice(`Gagal simpan shift: ${msg}`);
+      }
     } finally {
       shiftModalSaving.value = false;
     }
@@ -983,6 +1024,8 @@ export function useLocationTemplate() {
     shiftModalOpen,
     shiftModalSaving,
     shiftConfigs,
+    shiftSettings,
+    shiftDefaults,
 
     draggingLine,
     dragOverLine,

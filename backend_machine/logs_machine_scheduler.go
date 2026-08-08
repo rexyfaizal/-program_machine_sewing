@@ -88,10 +88,18 @@ func buildProductivityRowsForLogs(
 		var row models.ProductivityRow
 
 		useShift, segments, schedule := utils.ResolveShiftSegmentsForLocation(location, shiftConfigMap)
-		if useShift {
+		area, lineName := utils.ParseLocationParts(location)
+		hasShiftSetting := false
+		if area != "" {
+			hasShiftSetting, _ = repo.HasActiveShiftSettings(ctx, area, gm3WorkDate)
+		}
+
+		if useShift && hasShiftSetting {
+			row, err = repo.GetMachineProductivityFinal(ctx, m, gm3WorkDate, "SHIFT", area, lineName, "")
+		} else if useShift {
 			row, err = repo.GetMachineProductivityByShift(ctx, m, gm3WorkDate, utils.ShiftALL, segments, schedule)
 		} else {
-			row, err = repo.GetMachineProductivity(ctx, m, date)
+			row, err = repo.GetMachineProductivityFinal(ctx, m, date, "NORMAL", area, lineName, "")
 		}
 
 		if err != nil {
