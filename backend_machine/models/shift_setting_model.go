@@ -2,10 +2,12 @@ package models
 
 // ShiftSetting adalah baris konfigurasi jam shift per area (dbo.shift_setting).
 // LineName kosong ("") = jadwal DEFAULT area; terisi = override khusus line.
+// DayType: WEEKDAY (Sen–Jum + Minggu) atau SATURDAY.
 type ShiftSetting struct {
 	ID            int64  `json:"id"`
 	Area          string `json:"area"`
 	LineName      string `json:"lineName"`
+	DayType       string `json:"dayType,omitempty"`
 	ShiftNo       int    `json:"shiftNo"`
 	ShiftName     string `json:"shiftName"`
 	StartTime     string `json:"startTime"` // HH:mm atau HH:mm:ss
@@ -30,11 +32,12 @@ type ShiftSettingLineInput struct {
 }
 
 // ShiftSettingPutRequest body PUT /api/shift-settings.
-// shifts = jadwal default area; lines = mode + override per line.
+// shifts = jadwal Sen–Jum (+ Minggu); saturdayShifts = jadwal Sabtu saja.
 type ShiftSettingPutRequest struct {
-	Area   string                  `json:"area"`
-	Shifts []ShiftSetting          `json:"shifts"`
-	Lines  []ShiftSettingLineInput `json:"lines"`
+	Area           string                  `json:"area"`
+	Shifts         []ShiftSetting          `json:"shifts"`
+	SaturdayShifts []ShiftSetting          `json:"saturdayShifts"`
+	Lines          []ShiftSettingLineInput `json:"lines"`
 }
 
 // FinalProductivityGroup hasil agregat per NORMAL / per shift dari rumus FINAL.

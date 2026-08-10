@@ -24,6 +24,30 @@ export const DEFAULT_SHIFT_SCHEDULE = [
   },
 ];
 
+export const DEFAULT_SATURDAY_SHIFT_SCHEDULE = [
+  {
+    code: "SHIFT_1",
+    start: "06:00",
+    end: "11:30",
+    breakStart: "10:00",
+    breakEnd: "10:30",
+  },
+  {
+    code: "SHIFT_2",
+    start: "11:30",
+    end: "17:00",
+    breakStart: "15:30",
+    breakEnd: "16:00",
+  },
+  {
+    code: "SHIFT_3",
+    start: "17:00",
+    end: "22:30",
+    breakStart: "21:00",
+    breakEnd: "21:30",
+  },
+];
+
 export const GM3_SHIFT_OPTIONS = [
   { value: "CURRENT", label: "Current Shift" },
   { value: "SHIFT_1", label: "Shift 1 (06:00-13:30)" },
@@ -36,8 +60,9 @@ export function resolveGM3WorkDate(now = new Date()) {
   const d = new Date(now);
   const minutes = d.getHours() * 60 + d.getMinutes();
 
-  // Sebelum 04:30 masih work_date hari sebelumnya (SHIFT_3).
-  if (minutes < 270) {
+  // Sen–Sabtu sebelum 04:30 masih work_date kemarin (SHIFT_3 weekday).
+  // Minggu dini hari tidak wrap — Sabtu sudah selesai 22:30.
+  if (minutes < 270 && d.getDay() !== 0) {
     d.setDate(d.getDate() - 1);
   }
 
@@ -81,6 +106,19 @@ export function getGM3CurrentShift(now = new Date()) {
   const minutesFromWorkDate = Math.floor(
     (now.getTime() - workDate.getTime()) / 60000
   );
+
+  if (workDate.getDay() === 6) {
+    if (minutesFromWorkDate >= 360 && minutesFromWorkDate < 690) {
+      return { shiftCode: "SHIFT_1", shiftName: "Shift 1", workDate };
+    }
+    if (minutesFromWorkDate >= 690 && minutesFromWorkDate < 1020) {
+      return { shiftCode: "SHIFT_2", shiftName: "Shift 2", workDate };
+    }
+    if (minutesFromWorkDate >= 1020 && minutesFromWorkDate < 1350) {
+      return { shiftCode: "SHIFT_3", shiftName: "Shift 3", workDate };
+    }
+    return { shiftCode: "ALL", shiftName: "All Shifts", workDate };
+  }
 
   if (minutesFromWorkDate >= 360 && minutesFromWorkDate < 810) {
     return { shiftCode: "SHIFT_1", shiftName: "Shift 1", workDate };

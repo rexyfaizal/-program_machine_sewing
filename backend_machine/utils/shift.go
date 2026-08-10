@@ -54,6 +54,18 @@ func DefaultGM3ScheduleItems() []models.ShiftScheduleItem {
 	}
 }
 
+// DefaultGM3SaturdayScheduleItems jam kerja Sabtu (tanpa lintas hari).
+// SHIFT_1 06:00–11:30 istirahat 10:00–10:30
+// SHIFT_2 11:30–17:00 istirahat 15:30–16:00
+// SHIFT_3 17:00–22:30 istirahat 21:00–21:30
+func DefaultGM3SaturdayScheduleItems() []models.ShiftScheduleItem {
+	return []models.ShiftScheduleItem{
+		{Code: Shift1, Start: "06:00", End: "11:30", BreakStart: "10:00", BreakEnd: "10:30"},
+		{Code: Shift2, Start: "11:30", End: "17:00", BreakStart: "15:30", BreakEnd: "16:00"},
+		{Code: Shift3, Start: "17:00", End: "22:30", BreakStart: "21:00", BreakEnd: "21:30"},
+	}
+}
+
 func NormalizeShiftCode(shift string) string {
 	code := strings.ToUpper(strings.TrimSpace(shift))
 
@@ -354,12 +366,13 @@ func FactoryHasEnabledShift(factory string, configMap map[string]models.LineShif
 }
 
 // ResolveGM3WorkDate menentukan work_date untuk GM3.
-// Jam 00:00–04:29 masih termasuk work_date hari sebelumnya (SHIFT_3).
+// Jam 00:00–04:29 Sen–Sabtu masih work_date hari sebelumnya (SHIFT_3 weekday).
+// Minggu dini hari tidak wrap (Sabtu SHIFT_3 sudah selesai 22:30).
 func ResolveGM3WorkDate(now time.Time) time.Time {
 	local := now
 	minutes := local.Hour()*60 + local.Minute()
 
-	if minutes < 270 { // sebelum 04:30
+	if minutes < 270 && local.Weekday() != time.Sunday { // sebelum 04:30, kecuali Minggu
 		local = local.AddDate(0, 0, -1)
 	}
 
@@ -384,6 +397,19 @@ func ResolveGM3CurrentShift(now time.Time) (workDate time.Time, shiftCode string
 	base := workDate
 
 	minutesFromWorkDate := int(now.Sub(base).Minutes())
+
+	if workDate.Weekday() == time.Saturday {
+		switch {
+		case minutesFromWorkDate >= 360 && minutesFromWorkDate < 690: // 06:00–11:30
+			return workDate, Shift1
+		case minutesFromWorkDate >= 690 && minutesFromWorkDate < 1020: // 11:30–17:00
+			return workDate, Shift2
+		case minutesFromWorkDate >= 1020 && minutesFromWorkDate < 1350: // 17:00–22:30
+			return workDate, Shift3
+		default:
+			return workDate, ShiftALL
+		}
+	}
 
 	switch {
 	case minutesFromWorkDate >= 360 && minutesFromWorkDate < 810:

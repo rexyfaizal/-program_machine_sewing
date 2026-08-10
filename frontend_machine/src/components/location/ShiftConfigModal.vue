@@ -1,6 +1,9 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { DEFAULT_SHIFT_SCHEDULE } from "../../utils/gm3Shift";
+import {
+  DEFAULT_SHIFT_SCHEDULE,
+  DEFAULT_SATURDAY_SHIFT_SCHEDULE,
+} from "../../utils/gm3Shift";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -8,13 +11,16 @@ const props = defineProps({
   lines: { type: Array, default: () => [] },
   savedConfigs: { type: Array, default: () => [] },
   savedShifts: { type: Array, default: () => [] },
+  savedSaturdayShifts: { type: Array, default: () => [] },
   defaults: { type: Array, default: () => [] },
+  saturdayDefaults: { type: Array, default: () => [] },
   saving: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["close", "save"]);
 
 const draftShifts = ref([]);
+const draftSaturdayShifts = ref([]);
 const draftLines = ref([]);
 const localError = ref("");
 
@@ -29,6 +35,21 @@ function cloneFallbackSchedule() {
     Array.isArray(props.defaults) && props.defaults.length
       ? props.defaults
       : DEFAULT_SHIFT_SCHEDULE;
+  return source.map((item, index) => ({
+    shiftNo: index + 1,
+    shiftName: String(item.code || `SHIFT_${index + 1}`).toUpperCase(),
+    startTime: toHHMM(item.start),
+    endTime: toHHMM(item.end),
+    breakStart: toHHMM(item.breakStart),
+    breakEnd: toHHMM(item.breakEnd),
+  }));
+}
+
+function cloneSaturdaySchedule() {
+  const source =
+    Array.isArray(props.saturdayDefaults) && props.saturdayDefaults.length
+      ? props.saturdayDefaults
+      : DEFAULT_SATURDAY_SHIFT_SCHEDULE;
   return source.map((item, index) => ({
     shiftNo: index + 1,
     shiftName: String(item.code || `SHIFT_${index + 1}`).toUpperCase(),
@@ -63,6 +84,14 @@ function buildDraftShifts() {
   return [];
 }
 
+function buildDraftSaturdayShifts() {
+  const saved = Array.isArray(props.savedSaturdayShifts)
+    ? props.savedSaturdayShifts
+    : [];
+  if (saved.length) return mapShiftRows(saved);
+  return cloneSaturdaySchedule();
+}
+
 function buildDraftLines() {
   return (props.lines || []).map((lineName) => {
     const saved = findSavedLine(lineName);
@@ -87,12 +116,15 @@ watch(
     props.lines,
     props.savedConfigs,
     props.savedShifts,
+    props.savedSaturdayShifts,
     props.defaults,
+    props.saturdayDefaults,
   ],
   () => {
     if (props.show) {
       localError.value = "";
       draftShifts.value = buildDraftShifts();
+      draftSaturdayShifts.value = buildDraftSaturdayShifts();
       draftLines.value = buildDraftLines();
     }
   },
@@ -101,6 +133,7 @@ watch(
 
 const title = computed(() => `Atur Shift — ${props.factory || "-"}`);
 const shiftCount = computed(() => draftShifts.value.length);
+const saturdayShiftCount = computed(() => draftSaturdayShifts.value.length);
 const lineShiftCount = computed(
   () => draftLines.value.filter((l) => l.mode === "shift").length
 );
@@ -137,6 +170,16 @@ function removeShift(index) {
 function fillDefaultShifts() {
   draftShifts.value = cloneFallbackSchedule();
 }
+function addSaturdayShift() {
+  draftSaturdayShifts.value.push(newShiftRow(draftSaturdayShifts.value));
+}
+function removeSaturdayShift(index) {
+  draftSaturdayShifts.value.splice(index, 1);
+  renumber(draftSaturdayShifts.value);
+}
+function fillDefaultSaturdayShifts() {
+  draftSaturdayShifts.value = cloneSaturdaySchedule();
+}
 
 function setLineMode(line, mode) {
   line.mode = mode === "shift" ? "shift" : "normal";
@@ -169,6 +212,7 @@ function removeLineShift(line, index) {
 function resetToNormal() {
   setAllLinesMode("normal");
   draftShifts.value = [];
+  draftSaturdayShifts.value = [];
   localError.value = "";
 }
 
@@ -196,6 +240,10 @@ function onSave() {
     localError.value = "Isi jam mulai & selesai untuk setiap shift jadwal area.";
     return;
   }
+  if (hasEmptyTime(draftSaturdayShifts.value)) {
+    localError.value = "Isi jam mulai & selesai untuk setiap shift jadwal Sabtu.";
+    return;
+  }
 
   for (const line of draftLines.value) {
     if (line.mode === "shift" && line.custom) {
@@ -215,6 +263,7 @@ function onSave() {
   }
 
   const shifts = cleanShifts(draftShifts.value);
+  const saturdayShifts = cleanShifts(draftSaturdayShifts.value);
   const lines = draftLines.value.map((line) => ({
     lineName: line.lineName,
     enabled: line.mode === "shift",
@@ -222,7 +271,13 @@ function onSave() {
     shifts: line.mode === "shift" && line.custom ? cleanShifts(line.shifts) : [],
   }));
 
-  emit("save", { area: props.factory, factory: props.factory, shifts, lines });
+  emit("save", {
+    area: props.factory,
+    factory: props.factory,
+    shifts,
+    saturdayShifts,
+    lines,
+  });
 }
 </script>
 
@@ -233,8 +288,8 @@ function onSave() {
         <div>
           <h3>{{ title }}</h3>
           <p class="head-sub">
-            Jadwal default area dipakai bersama. Tiap line bisa Normal, Shift
-            (pakai default), atau Shift Custom (jadwal sendiri).
+            Jadwal Sen–Jum dipakai bersama (Minggu ikut jadwal ini). Sabtu punya
+            jam sendiri. Tiap line bisa Normal, Shift, atau Shift Custom.
           </p>
         </div>
         <button type="button" class="close-btn" @click="emit('close')">Tutup</button>
@@ -246,8 +301,8 @@ function onSave() {
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h4>1. Jadwal Default Area</h4>
-              <p class="panel-hint">{{ shiftCount }} shift · {{ factory || "-" }}</p>
+              <h4>1. Jadwal Sen–Jum</h4>
+              <p class="panel-hint">{{ shiftCount }} shift · {{ factory || "-" }} · Minggu ikut jadwal ini</p>
             </div>
             <div class="bulk-actions">
               <button type="button" class="bulk-btn" @click="resetToNormal">
@@ -303,7 +358,66 @@ function onSave() {
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h4>2. Mode per Line</h4>
+              <h4>2. Jadwal Sabtu</h4>
+              <p class="panel-hint">
+                {{ saturdayShiftCount }} shift · 06:00–22:30 · tidak berlaku Minggu
+              </p>
+            </div>
+            <div class="bulk-actions">
+              <button type="button" class="bulk-btn" @click="fillDefaultSaturdayShifts">
+                Isi default Sabtu
+              </button>
+              <button type="button" class="add-btn" @click="addSaturdayShift">
+                + Tambah Shift
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!draftSaturdayShifts.length" class="empty">
+            Kosong = Sabtu memakai jam Sen–Jum.
+            <div class="empty-actions">
+              <button type="button" class="bulk-btn primary" @click="fillDefaultSaturdayShifts">
+                Isi default 3 shift Sabtu
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="schedule-table-wrap">
+            <table class="schedule-table">
+              <thead>
+                <tr>
+                  <th>Nama</th>
+                  <th>Mulai</th>
+                  <th>Selesai</th>
+                  <th>Istirahat mulai</th>
+                  <th>Istirahat selesai</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(shift, index) in draftSaturdayShifts" :key="`sat-${index}`">
+                  <td>
+                    <input v-model="shift.shiftName" type="text" maxlength="32" class="name-input" />
+                  </td>
+                  <td><input v-model="shift.startTime" type="time" /></td>
+                  <td><input v-model="shift.endTime" type="time" /></td>
+                  <td><input v-model="shift.breakStart" type="time" /></td>
+                  <td><input v-model="shift.breakEnd" type="time" /></td>
+                  <td>
+                    <button type="button" class="remove-btn" @click="removeSaturdayShift(index)">
+                      Hapus
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h4>3. Mode per Line</h4>
               <p class="panel-hint">
                 Shift {{ lineShiftCount }} · Normal {{ lineNormalCount }}
               </p>

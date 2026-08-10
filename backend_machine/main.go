@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -80,9 +82,66 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func overloadEnvFile(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	// Notepad/Windows sering simpan UTF-8 BOM; godotenv menolak \ufeff.
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	raw = bytes.TrimPrefix(raw, []byte{0xFE, 0xFF})
+	raw = bytes.TrimPrefix(raw, []byte{0xFF, 0xFE})
+
+	envMap, err := godotenv.Unmarshal(string(raw))
+	if err != nil {
+		return err
+	}
+	for key, value := range envMap {
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadProjectEnv() {
+	cwd, _ := os.Getwd()
+	log.Println("Working directory:", cwd)
+
+	candidates := []string{
+		".env",
+		filepath.Join("backend_machine", ".env"),
+	}
+	dir := cwd
+	for i := 0; i < 5 && dir != "" && dir != filepath.Dir(dir); i++ {
+		candidates = append(candidates, filepath.Join(dir, ".env"))
+		candidates = append(candidates, filepath.Join(dir, "backend_machine", ".env"))
+		dir = filepath.Dir(dir)
+	}
+
+	seen := map[string]bool{}
+	for _, p := range candidates {
+		abs, err := filepath.Abs(p)
+		if err != nil || seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		if st, err := os.Stat(abs); err == nil && !st.IsDir() {
+			if err := overloadEnvFile(abs); err != nil {
+				log.Println("Gagal load env:", abs, err)
+				continue
+			}
+			log.Println("Loaded env:", abs)
+			return
+		}
+	}
+	log.Println("Peringatan: file .env tidak ditemukan. Cek User env DB_SERVER (bisa 10.5.0.106).")
+}
+
 func main() {
-	// Overload agar .env project menang atas User env lama (mis. DB_SERVER=10.5.0.106).
-	_ = godotenv.Overload()
+	// Cari .env di cwd / backend_machine (naik folder) + buang BOM.
+	// Supaya run dari root Cursor tetap pakai 10.5.0.107, bukan User env 106.
+	loadProjectEnv()
 
 	appHost := getEnv("APP_HOST", "0.0.0.0")
 	appPort := getEnv("APP_PORT", "5000")

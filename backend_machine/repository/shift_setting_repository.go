@@ -10,7 +10,7 @@ import (
 	"backend_machine/models"
 )
 
-// EnsureShiftSettingSchema memastikan kolom line_name ada (Opsi B: shift per line).
+// EnsureShiftSettingSchema memastikan kolom line_name + day_type ada.
 func (r *Repository) EnsureShiftSettingSchema(ctx context.Context) error {
 	_, err := r.DB.ExecContext(ctx, `
 IF OBJECT_ID(N'dbo.shift_setting', N'U') IS NOT NULL
@@ -18,6 +18,33 @@ IF OBJECT_ID(N'dbo.shift_setting', N'U') IS NOT NULL
 BEGIN
     ALTER TABLE dbo.shift_setting ADD line_name NVARCHAR(255) NOT NULL
         CONSTRAINT DF_shift_setting_line_name DEFAULT N'';
+END;
+
+IF OBJECT_ID(N'dbo.shift_setting', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.shift_setting', 'day_type') IS NULL
+BEGIN
+    ALTER TABLE dbo.shift_setting ADD day_type NVARCHAR(20) NOT NULL
+        CONSTRAINT DF_shift_setting_day_type DEFAULT N'WEEKDAY';
+END;
+
+-- Unique lama (area+shift tanpa day_type) bentrok WEEKDAY vs SATURDAY.
+IF OBJECT_ID(N'dbo.shift_setting', N'U') IS NOT NULL
+BEGIN
+    DECLARE @drop_ux NVARCHAR(MAX) = N'';
+    SELECT @drop_ux = @drop_ux +
+        CASE
+            WHEN kc.[type] = N'UQ' THEN N'ALTER TABLE dbo.shift_setting DROP CONSTRAINT ' + QUOTENAME(kc.name) + N';'
+            ELSE N'DROP INDEX ' + QUOTENAME(i.name) + N' ON dbo.shift_setting;'
+        END
+    FROM sys.indexes i
+    LEFT JOIN sys.key_constraints kc
+        ON kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id
+    WHERE i.object_id = OBJECT_ID(N'dbo.shift_setting')
+      AND i.is_unique = 1
+      AND i.is_primary_key = 0;
+
+    IF NULLIF(@drop_ux, N'') IS NOT NULL
+        EXEC sys.sp_executesql @drop_ux;
 END;
 `)
 	return err
@@ -57,11 +84,25 @@ func (r *Repository) ListActiveShiftSettings(ctx context.Context, area, workDate
 		return nil, nil
 	}
 
+	dayType := dayTypeForWorkDate(workDate)
+	items, err := r.listActiveShiftSettingsByDayType(ctx, area, workDate, dayType)
+	if err != nil {
+		return nil, err
+	}
+	// Sabtu tanpa jadwal khusus → pakai Sen–Jum.
+	if len(items) == 0 && dayType == "SATURDAY" {
+		return r.listActiveShiftSettingsByDayType(ctx, area, workDate, "WEEKDAY")
+	}
+	return items, nil
+}
+
+func (r *Repository) listActiveShiftSettingsByDayType(ctx context.Context, area, workDate, dayType string) ([]models.ShiftSetting, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 SELECT
     s.id,
     LTRIM(RTRIM(s.area)) AS area,
     ISNULL(LTRIM(RTRIM(s.line_name)), N'') AS line_name,
+    UPPER(LTRIM(RTRIM(ISNULL(NULLIF(s.day_type, N''), N'WEEKDAY')))) AS day_type,
     s.shift_no,
     LTRIM(RTRIM(s.shift_name)) AS shift_name,
     CONVERT(varchar(8), s.start_time, 108) AS start_time,
@@ -77,16 +118,17 @@ WHERE UPPER(LTRIM(RTRIM(s.area))) = @area
   AND s.is_active = 1
   AND s.effective_from <= TRY_CONVERT(date, @work_date)
   AND (s.effective_to IS NULL OR s.effective_to >= TRY_CONVERT(date, @work_date))
+  AND UPPER(LTRIM(RTRIM(ISNULL(NULLIF(s.day_type, N''), N'WEEKDAY')))) = @day_type
 ORDER BY s.line_name, s.shift_no, s.shift_name;
 `,
 		sql.Named("area", area),
 		sql.Named("work_date", workDate),
+		sql.Named("day_type", dayType),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	return scanShiftSettingRows(rows)
 }
 
@@ -102,6 +144,7 @@ SELECT
     s.id,
     LTRIM(RTRIM(s.area)) AS area,
     ISNULL(LTRIM(RTRIM(s.line_name)), N'') AS line_name,
+    UPPER(LTRIM(RTRIM(ISNULL(NULLIF(s.day_type, N''), N'WEEKDAY')))) AS day_type,
     s.shift_no,
     LTRIM(RTRIM(s.shift_name)) AS shift_name,
     CONVERT(varchar(8), s.start_time, 108) AS start_time,
@@ -115,7 +158,7 @@ SELECT
 FROM dbo.shift_setting s
 WHERE UPPER(LTRIM(RTRIM(s.area))) = @area
   AND s.is_active = 1
-ORDER BY s.line_name, s.shift_no, s.shift_name;
+ORDER BY s.day_type, s.line_name, s.shift_no, s.shift_name;
 `,
 		sql.Named("area", area),
 	)
@@ -131,12 +174,13 @@ func scanShiftSettingRows(rows *sql.Rows) ([]models.ShiftSetting, error) {
 	out := make([]models.ShiftSetting, 0)
 	for rows.Next() {
 		var item models.ShiftSetting
-		var lineName, breakStart, breakEnd, effectiveTo, updatedAt sql.NullString
+		var lineName, dayType, breakStart, breakEnd, effectiveTo, updatedAt sql.NullString
 		var active int
 		if err := rows.Scan(
 			&item.ID,
 			&item.Area,
 			&lineName,
+			&dayType,
 			&item.ShiftNo,
 			&item.ShiftName,
 			&item.StartTime,
@@ -151,6 +195,7 @@ func scanShiftSettingRows(rows *sql.Rows) ([]models.ShiftSetting, error) {
 			return nil, err
 		}
 		item.LineName = strings.ToUpper(strings.TrimSpace(lineName.String))
+		item.DayType = normalizeDayType(dayType.String)
 		item.BreakStart = breakStart.String
 		item.BreakEnd = breakEnd.String
 		item.EffectiveTo = effectiveTo.String
@@ -161,6 +206,26 @@ func scanShiftSettingRows(rows *sql.Rows) ([]models.ShiftSetting, error) {
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func normalizeDayType(value string) string {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "SATURDAY", "SABTU", "SAT":
+		return "SATURDAY"
+	default:
+		return "WEEKDAY"
+	}
+}
+
+func dayTypeForWorkDate(workDate string) string {
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(workDate))
+	if err != nil {
+		return "WEEKDAY"
+	}
+	if t.Weekday() == time.Saturday {
+		return "SATURDAY"
+	}
+	return "WEEKDAY"
 }
 
 func normalizeClockToSQLTime(value string) (string, error) {
@@ -191,16 +256,18 @@ func nullableSQLTime(value string) sql.NullString {
 // ReplaceAreaShiftSettings menonaktifkan jadwal lama area lalu insert jadwal default
 // area baru (line_name = ''). Dipertahankan untuk kompatibilitas pemanggil lama.
 func (r *Repository) ReplaceAreaShiftSettings(ctx context.Context, area string, shifts []models.ShiftSetting) error {
-	return r.ReplaceShiftSettings(ctx, area, shifts, nil)
+	return r.ReplaceShiftSettings(ctx, area, shifts, nil, nil)
 }
 
 // ReplaceShiftSettings menonaktifkan seluruh jadwal area, lalu insert:
-//   - defaultShifts → line_name = '' (jadwal umum area)
-//   - lineOverrides[LINE] → line_name = LINE (khusus line yang custom)
+//   - defaultShifts → line_name = '', day_type = WEEKDAY
+//   - saturdayShifts → line_name = '', day_type = SATURDAY
+//   - lineOverrides[LINE] → line_name = LINE, day_type = WEEKDAY
 func (r *Repository) ReplaceShiftSettings(
 	ctx context.Context,
 	area string,
 	defaultShifts []models.ShiftSetting,
+	saturdayShifts []models.ShiftSetting,
 	lineOverrides map[string][]models.ShiftSetting,
 ) error {
 	area = strings.ToUpper(strings.TrimSpace(area))
@@ -224,7 +291,10 @@ WHERE UPPER(LTRIM(RTRIM(area))) = @area;
 		return err
 	}
 
-	if err := insertShiftRows(ctx, tx, area, "", defaultShifts); err != nil {
+	if err := insertShiftRows(ctx, tx, area, "", "WEEKDAY", defaultShifts); err != nil {
+		return err
+	}
+	if err := insertShiftRows(ctx, tx, area, "", "SATURDAY", saturdayShifts); err != nil {
 		return err
 	}
 
@@ -233,7 +303,7 @@ WHERE UPPER(LTRIM(RTRIM(area))) = @area;
 		if lineKey == "" || len(shifts) == 0 {
 			continue
 		}
-		if err := insertShiftRows(ctx, tx, area, lineKey, shifts); err != nil {
+		if err := insertShiftRows(ctx, tx, area, lineKey, "WEEKDAY", shifts); err != nil {
 			return err
 		}
 	}
@@ -241,17 +311,18 @@ WHERE UPPER(LTRIM(RTRIM(area))) = @area;
 	return tx.Commit()
 }
 
-func insertShiftRows(ctx context.Context, tx *sql.Tx, area, lineName string, shifts []models.ShiftSetting) error {
+func insertShiftRows(ctx context.Context, tx *sql.Tx, area, lineName, dayType string, shifts []models.ShiftSetting) error {
+	dayType = normalizeDayType(dayType)
 	insertQuery := `
 INSERT INTO dbo.shift_setting
 (
-    area, line_name, shift_no, shift_name,
+    area, line_name, day_type, shift_no, shift_name,
     start_time, end_time, break_start, break_end,
     effective_from, effective_to, is_active, updated_at
 )
 VALUES
 (
-    @area, @line_name, @shift_no, @shift_name,
+    @area, @line_name, @day_type, @shift_no, @shift_name,
     @start_time, @end_time, @break_start, @break_end,
     CAST(SYSDATETIME() AS date), NULL, 1, SYSDATETIME()
 );
@@ -281,6 +352,7 @@ VALUES
 			insertQuery,
 			sql.Named("area", area),
 			sql.Named("line_name", strings.ToUpper(strings.TrimSpace(lineName))),
+			sql.Named("day_type", dayType),
 			sql.Named("shift_no", shiftNo),
 			sql.Named("shift_name", name),
 			sql.Named("start_time", startTime),

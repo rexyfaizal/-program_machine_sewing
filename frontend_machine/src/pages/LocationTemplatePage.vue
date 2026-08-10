@@ -26,7 +26,9 @@ const {
   shiftModalSaving,
   shiftConfigs,
   shiftSettings,
+  saturdayShiftSettings,
   shiftDefaults,
+  saturdayShiftDefaults,
   draggingLine,
   dragOverLine,
   form,
@@ -132,7 +134,9 @@ function openDetailMachine(machine) {
       :lines="activeLines"
       :saved-configs="shiftConfigs"
       :saved-shifts="shiftSettings"
+      :saved-saturday-shifts="saturdayShiftSettings"
       :defaults="shiftDefaults"
+      :saturday-defaults="saturdayShiftDefaults"
       :saving="shiftModalSaving"
       @close="closeShiftConfigModal"
       @save="saveShiftConfig"

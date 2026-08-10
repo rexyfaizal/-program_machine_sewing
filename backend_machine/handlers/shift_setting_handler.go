@@ -43,18 +43,27 @@ func (h *Handler) getShiftSettings(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 
-	// Pisah jadwal default area (line_name='') dari override per line.
+	// Pisah jadwal default area (line_name='') dari override per line + Sabtu.
 	defaultShifts := make([]models.ShiftSetting, 0)
+	saturdayShifts := make([]models.ShiftSetting, 0)
 	overrideByLine := map[string][]models.ShiftSetting{}
 	for _, s := range allShifts {
 		s.StartTime = trimClockHHMM(s.StartTime)
 		s.EndTime = trimClockHHMM(s.EndTime)
 		s.BreakStart = trimClockHHMM(s.BreakStart)
 		s.BreakEnd = trimClockHHMM(s.BreakEnd)
+		dayType := strings.ToUpper(strings.TrimSpace(s.DayType))
+		if dayType == "" {
+			dayType = "WEEKDAY"
+		}
 		line := strings.ToUpper(strings.TrimSpace(s.LineName))
 		if line == "" {
-			defaultShifts = append(defaultShifts, s)
-		} else {
+			if dayType == "SATURDAY" {
+				saturdayShifts = append(saturdayShifts, s)
+			} else {
+				defaultShifts = append(defaultShifts, s)
+			}
+		} else if dayType != "SATURDAY" {
 			overrideByLine[line] = append(overrideByLine[line], s)
 		}
 	}
@@ -81,11 +90,13 @@ func (h *Handler) getShiftSettings(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	writeJSON(w, map[string]any{
-		"area":   area,
-		"shifts": defaultShifts,
-		"lines":  lines,
+		"area":            area,
+		"shifts":          defaultShifts,
+		"saturdayShifts":  saturdayShifts,
+		"lines":           lines,
 		"defaults": map[string]any{
-			"schedule": utils.DefaultGM3ScheduleItems(),
+			"schedule":          utils.DefaultGM3ScheduleItems(),
+			"saturdaySchedule":  utils.DefaultGM3SaturdayScheduleItems(),
 		},
 	})
 }
@@ -103,9 +114,14 @@ func (h *Handler) putShiftSettings(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 
-	defaultShifts, err := normalizeShiftInputs(input.Shifts, area, "")
+	defaultShifts, err := normalizeShiftInputs(input.Shifts, area, "", "WEEKDAY")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	saturdayShifts, err := normalizeShiftInputs(input.SaturdayShifts, area, "", "SATURDAY")
+	if err != nil {
+		http.Error(w, "Jadwal Sabtu: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	defaultSchedule := shiftsToSchedule(defaultShifts)
@@ -127,7 +143,7 @@ func (h *Handler) putShiftSettings(ctx context.Context, w http.ResponseWriter, r
 		}
 
 		if line.Enabled && line.Custom {
-			lineShifts, err := normalizeShiftInputs(line.Shifts, area, lineKey)
+			lineShifts, err := normalizeShiftInputs(line.Shifts, area, lineKey, "WEEKDAY")
 			if err != nil {
 				http.Error(w, "Line "+lineName+": "+err.Error(), http.StatusBadRequest)
 				return
@@ -146,7 +162,7 @@ func (h *Handler) putShiftSettings(ctx context.Context, w http.ResponseWriter, r
 		linePayload = append(linePayload, cfg)
 	}
 
-	if err := h.Repo.ReplaceShiftSettings(ctx, area, defaultShifts, overrides); err != nil {
+	if err := h.Repo.ReplaceShiftSettings(ctx, area, defaultShifts, saturdayShifts, overrides); err != nil {
 		http.Error(w, "Gagal simpan shift_setting: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -160,7 +176,11 @@ func (h *Handler) putShiftSettings(ctx context.Context, w http.ResponseWriter, r
 }
 
 // normalizeShiftInputs memvalidasi + membersihkan daftar shift.
-func normalizeShiftInputs(shifts []models.ShiftSetting, area, lineName string) ([]models.ShiftSetting, error) {
+func normalizeShiftInputs(shifts []models.ShiftSetting, area, lineName, dayType string) ([]models.ShiftSetting, error) {
+	dayType = strings.ToUpper(strings.TrimSpace(dayType))
+	if dayType != "SATURDAY" {
+		dayType = "WEEKDAY"
+	}
 	out := make([]models.ShiftSetting, 0, len(shifts))
 	for i, shift := range shifts {
 		name := strings.ToUpper(strings.TrimSpace(shift.ShiftName))
@@ -188,6 +208,7 @@ func normalizeShiftInputs(shifts []models.ShiftSetting, area, lineName string) (
 		out = append(out, models.ShiftSetting{
 			Area:       area,
 			LineName:   lineName,
+			DayType:    dayType,
 			ShiftNo:    shiftNo,
 			ShiftName:  name,
 			StartTime:  start,

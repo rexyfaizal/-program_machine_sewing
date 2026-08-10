@@ -38,8 +38,10 @@ export function useLocationTemplate() {
   const shiftModalSaving = ref(false);
   const shiftConfigs = ref([]);
   const shiftSettings = ref([]);
+  const saturdayShiftSettings = ref([]);
   const shiftConfigMap = ref(new Map());
   const shiftDefaults = ref([]);
+  const saturdayShiftDefaults = ref([]);
 
   const draggingLine = ref("");
   const dragOverLine = ref("");
@@ -490,6 +492,7 @@ export function useLocationTemplate() {
     if (!factoryKey) {
       shiftConfigs.value = [];
       shiftSettings.value = [];
+      saturdayShiftSettings.value = [];
       return;
     }
 
@@ -497,13 +500,23 @@ export function useLocationTemplate() {
       // Jadwal area + toggle line dari shift_setting (sumber hitung FINAL).
       const data = await getShiftSettings(factoryKey);
       shiftSettings.value = Array.isArray(data?.shifts) ? data.shifts : [];
+      saturdayShiftSettings.value = Array.isArray(data?.saturdayShifts)
+        ? data.saturdayShifts
+        : [];
       shiftConfigs.value = Array.isArray(data?.lines) ? data.lines : [];
       if (Array.isArray(data?.defaults?.schedule) && data.defaults.schedule.length) {
         shiftDefaults.value = data.defaults.schedule;
       }
+      if (
+        Array.isArray(data?.defaults?.saturdaySchedule) &&
+        data.defaults.saturdaySchedule.length
+      ) {
+        saturdayShiftDefaults.value = data.defaults.saturdaySchedule;
+      }
     } catch (err) {
       console.warn("Gagal load shift settings:", err);
       shiftSettings.value = [];
+      saturdayShiftSettings.value = [];
       shiftConfigs.value = [];
       throw err;
     }
@@ -1025,7 +1038,9 @@ export function useLocationTemplate() {
     shiftModalSaving,
     shiftConfigs,
     shiftSettings,
+    saturdayShiftSettings,
     shiftDefaults,
+    saturdayShiftDefaults,
 
     draggingLine,
     dragOverLine,

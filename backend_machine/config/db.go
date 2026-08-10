@@ -21,20 +21,16 @@ func GetEnv(key, def string) string {
 }
 
 func ConnectDB() (*sql.DB, error) {
-	// Prioritas: SEWINGIOT_DB_SERVER (khusus project) > DB_SERVER > default.
-	// Hindari User env lama (mis. 10.5.0.106) mengalahkan server produksi project.
-	server := GetEnv("SEWINGIOT_DB_SERVER", "")
-	if server == "" {
-		server = GetEnv("DB_SERVER", "10.5.0.107")
-	}
+	// Paksa server produksi project ini. Jangan baca DB_SERVER (User env lama = 10.5.0.106).
+	const forcedServer = "10.5.0.107"
+	server := forcedServer
+
 	port := GetEnv("DB_PORT", "1433")
 	user := GetEnv("DB_USER", "sa")
 	password := GetEnv("DB_PASSWORD", "Satu1234!")
 
 	// Project ini selalu pakai sewingiot.
-	// Jangan baca DB_NAME global (bisa "lectra" dari User env project lain).
-	// Override khusus project ini hanya lewat SEWINGIOT_DB_NAME.
-	database := GetEnv("SEWINGIOT_DB_NAME", "sewingiot")
+	database := "sewingiot"
 
 	q := url.Values{}
 	q.Add("database", database)

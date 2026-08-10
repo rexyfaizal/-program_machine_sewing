@@ -211,6 +211,9 @@ export async function saveShiftSettings(payload) {
     body: JSON.stringify({
       area,
       shifts: Array.isArray(payload?.shifts) ? payload.shifts : [],
+      saturdayShifts: Array.isArray(payload?.saturdayShifts)
+        ? payload.saturdayShifts
+        : [],
       lines: Array.isArray(payload?.lines)
         ? payload.lines.map((line) => ({
             lineName: line.lineName,

@@ -37,12 +37,51 @@ END;
 
 IF UPPER(@mode) = N'SHIFT'
 BEGIN
-    -- Ada override khusus line? kalau ada pakai line, kalau tidak pakai default area (line_name = '').
+    -- 0=Minggu … 6=Sabtu, independen DATEFIRST.
+    DECLARE @is_saturday BIT = CASE
+        WHEN ((DATEPART(WEEKDAY, @work_date) + @@DATEFIRST - 1) % 7) = 6 THEN 1
+        ELSE 0
+    END;
+
+    DECLARE @want_day NVARCHAR(20) = N'WEEKDAY';
+    DECLARE @has_sat_line BIT = 0;
+    DECLARE @has_sat_area BIT = 0;
+
+    IF @is_saturday = 1
+    BEGIN
+        IF @line <> N'' AND EXISTS (
+            SELECT 1 FROM dbo.shift_setting s
+            WHERE UPPER(LTRIM(RTRIM(s.area))) = UPPER(LTRIM(RTRIM(@area)))
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.line_name, N'')))) = @line
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.day_type, N'')))) = N'SATURDAY'
+              AND s.is_active = 1
+              AND s.effective_from <= @work_date
+              AND (s.effective_to IS NULL OR s.effective_to >= @work_date)
+        )
+            SET @has_sat_line = 1;
+
+        IF EXISTS (
+            SELECT 1 FROM dbo.shift_setting s
+            WHERE UPPER(LTRIM(RTRIM(s.area))) = UPPER(LTRIM(RTRIM(@area)))
+              AND ISNULL(LTRIM(RTRIM(s.line_name)), N'') = N''
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.day_type, N'')))) = N'SATURDAY'
+              AND s.is_active = 1
+              AND s.effective_from <= @work_date
+              AND (s.effective_to IS NULL OR s.effective_to >= @work_date)
+        )
+            SET @has_sat_area = 1;
+
+        IF @has_sat_line = 1 OR @has_sat_area = 1
+            SET @want_day = N'SATURDAY';
+    END;
+
+    -- Override line weekday hanya dipakai jika bukan jadwal Sabtu area.
     DECLARE @has_line_cfg BIT = 0;
     IF @line <> N'' AND EXISTS (
         SELECT 1 FROM dbo.shift_setting s
         WHERE UPPER(LTRIM(RTRIM(s.area))) = UPPER(LTRIM(RTRIM(@area)))
           AND UPPER(LTRIM(RTRIM(ISNULL(s.line_name, N'')))) = @line
+          AND UPPER(LTRIM(RTRIM(ISNULL(NULLIF(s.day_type, N''), N'WEEKDAY')))) = @want_day
           AND s.is_active = 1
           AND s.effective_from <= @work_date
           AND (s.effective_to IS NULL OR s.effective_to >= @work_date)
@@ -69,6 +108,7 @@ BEGIN
           AND s.is_active = 1
           AND s.effective_from <= @work_date
           AND (s.effective_to IS NULL OR s.effective_to >= @work_date)
+          AND UPPER(LTRIM(RTRIM(ISNULL(NULLIF(s.day_type, N''), N'WEEKDAY')))) = @want_day
           AND (
                 (@has_line_cfg = 1 AND UPPER(LTRIM(RTRIM(ISNULL(s.line_name, N'')))) = @line)
              OR (@has_line_cfg = 0 AND ISNULL(LTRIM(RTRIM(s.line_name)), N'') = N'')
