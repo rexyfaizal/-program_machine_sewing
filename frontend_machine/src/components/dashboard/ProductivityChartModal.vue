@@ -58,16 +58,13 @@ const validValues = computed(() =>
   productivityData.value.filter((v) => v !== null && !Number.isNaN(v))
 );
 
-const averageProductivity = computed(() => {
-  if (!validValues.value.length) return 0;
-  const total = validValues.value.reduce((sum, v) => sum + v, 0);
-  return Number((total / validValues.value.length).toFixed(2));
-});
-
 const bestDay = computed(() => pickExtreme("max"));
 const worstDay = computed(() => pickExtreme("min"));
 
 const hasData = computed(() => validValues.value.length > 0);
+
+const THRESHOLD_GOOD = 90;
+const THRESHOLD_NORMAL = 80;
 
 const chartSeries = computed(() => [
   {
@@ -106,19 +103,28 @@ const chartOptions = computed(() => ({
     title: { text: "Produktivitas (%)" },
   },
   annotations: {
-    yaxis: averageProductivity.value
-      ? [
-          {
-            y: averageProductivity.value,
-            borderColor: "#f59e0b",
-            strokeDashArray: 5,
-            label: {
-              text: `Rata-rata ${averageProductivity.value}%`,
-              style: { background: "#f59e0b", color: "#ffffff" },
-            },
-          },
-        ]
-      : [],
+    yaxis: [
+      {
+        y: THRESHOLD_GOOD,
+        borderColor: "#16a34a",
+        strokeDashArray: 0,
+        label: {
+          text: "GOOD ≥ 90%",
+          position: "right",
+          style: { background: "#16a34a", color: "#ffffff", fontSize: "11px", fontWeight: 700 },
+        },
+      },
+      {
+        y: THRESHOLD_NORMAL,
+        borderColor: "#f59e0b",
+        strokeDashArray: 4,
+        label: {
+          text: "NORMAL 80–90%",
+          position: "right",
+          style: { background: "#f59e0b", color: "#ffffff", fontSize: "11px", fontWeight: 700 },
+        },
+      },
+    ],
   },
   tooltip: {
     y: {
@@ -162,7 +168,10 @@ function buildDateRange(startText, endText) {
   const dates = [];
   const cursor = new Date(start);
   while (cursor <= end) {
-    dates.push(toIsoDate(cursor));
+    // Minggu (0) tidak ditampilkan di grafik.
+    if (cursor.getDay() !== 0) {
+      dates.push(toIsoDate(cursor));
+    }
     cursor.setDate(cursor.getDate() + 1);
   }
   return dates;
@@ -292,10 +301,6 @@ watch(
 
       <template v-else>
         <div class="chart-stats">
-          <div class="stat">
-            <span>Rata-rata</span>
-            <strong>{{ averageProductivity }}%</strong>
-          </div>
           <div class="stat good">
             <span>Tertinggi</span>
             <strong v-if="bestDay">{{ bestDay.value }}% ({{ bestDay.label }})</strong>
@@ -305,6 +310,10 @@ watch(
             <span>Terendah</span>
             <strong v-if="worstDay">{{ worstDay.value }}% ({{ worstDay.label }})</strong>
             <strong v-else>-</strong>
+          </div>
+          <div class="stat threshold">
+            <span>Ambang</span>
+            <strong>GOOD ≥ 90% · NORMAL 80–90%</strong>
           </div>
         </div>
 
@@ -434,6 +443,11 @@ watch(
 
 .stat.bad strong {
   color: #b91c1c;
+}
+
+.stat.threshold strong {
+  font-size: 13px;
+  color: #334155;
 }
 
 .chart-body {
