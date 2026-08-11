@@ -62,9 +62,23 @@ func naiveNowUTC() time.Time {
 	)
 }
 
+func intersectNaiveWindow(start, end, clipStart, clipEnd time.Time) (time.Time, time.Time, bool) {
+	if !clipStart.IsZero() && start.Before(clipStart) {
+		start = clipStart
+	}
+	if !clipEnd.IsZero() && end.After(clipEnd) {
+		end = clipEnd
+	}
+	if !end.After(start) {
+		return start, end, false
+	}
+	return start, end, true
+}
+
 func (r *Repository) enrichOperatorReportSessionStats(
 	ctx context.Context,
 	report []models.MachineOperatorReportItem,
+	clipStart, clipEnd time.Time,
 ) {
 	if len(report) == 0 {
 		return
@@ -105,20 +119,28 @@ func (r *Repository) enrichOperatorReportSessionStats(
 			continue
 		}
 
-		runtimeSec, err := r.GetRuntimeSec(ctx, uuid, "", loginAt, endAt)
+		statsStart, statsEnd, okWindow := intersectNaiveWindow(loginAt, endAt, clipStart, clipEnd)
+		if !okWindow {
+			item.HasSessionStats = true
+			continue
+		}
+
+		runtimeSec, err := r.GetRuntimeSec(ctx, uuid, "", statsStart, statsEnd)
 		if err != nil {
 			log.Printf("operator report stats runtime uuid=%s: %v", uuid, err)
 			runtimeSec = 0
 		}
 
 		procSec := int64(0)
+		output := int64(0)
 		tableName := tableByUUID[strings.ToLower(uuid)]
 		if tableName != "" {
-			ps, err := r.GetProductionStats(ctx, tableName, loginAt, endAt)
+			ps, err := r.GetProductionStats(ctx, tableName, statsStart, statsEnd)
 			if err != nil {
 				log.Printf("operator report stats proc uuid=%s table=%s: %v", uuid, tableName, err)
 			} else {
 				procSec = ps.ProcSec
+				output = ps.Output
 			}
 		}
 
@@ -142,16 +164,52 @@ func (r *Repository) enrichOperatorReportSessionStats(
 		item.LossTimeSec = lossSec
 		item.ProductivityPct = pct
 		item.ProductivityStatus = utils.StatusFromPct(pct)
+		item.Output = output
 	}
 }
 
 func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, withStats bool) ([]models.MachineOperatorReportItem, error) {
+	return r.GetMachineOperatorReportFiltered(ctx, date, withStats, false)
+}
+
+func (r *Repository) GetMachineOperatorReportFiltered(
+	ctx context.Context,
+	date string,
+	withStats bool,
+	forExport bool,
+) ([]models.MachineOperatorReportItem, error) {
 	date = strings.TrimSpace(date)
 	if date == "" {
 		return nil, fmt.Errorf("date wajib diisi")
 	}
 
-	sessionQuery := `
+	var clipStart, clipEnd time.Time
+	windowStartText := ""
+	windowEndText := ""
+	if forExport {
+		start, end, err := utils.GM3WorkWindowForDate(date)
+		if err != nil {
+			return nil, err
+		}
+		clipStart, clipEnd = start, end
+		windowStartText = formatNaiveDateTime(start)
+		windowEndText = formatNaiveDateTime(end)
+	}
+
+	sessionWhere := `session_date = CAST(@date AS DATE)`
+	if forExport {
+		sessionWhere = `
+			(
+				session_date = CAST(@date AS DATE)
+				OR (
+					session_date = DATEADD(DAY, 1, CAST(@date AS DATE))
+					AND login_time < TRY_CONVERT(DATETIME2, @window_end)
+					AND (logout_time IS NULL OR logout_time > TRY_CONVERT(DATETIME2, @window_start))
+				)
+			)`
+	}
+
+	sessionQuery := fmt.Sprintf(`
 		SELECT
 			id,
 			CONVERT(VARCHAR(10), session_date, 120) AS session_date,
@@ -169,11 +227,17 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 			ISNULL(CONVERT(VARCHAR(19), created_at, 120), '') AS created_at,
 			ISNULL(CONVERT(VARCHAR(19), updated_at, 120), '') AS updated_at
 		FROM dbo.machine_operator_sessions
-		WHERE session_date = CAST(@date AS DATE)
+		WHERE %s
 		ORDER BY login_time ASC, id ASC
-	`
+	`, sessionWhere)
 
-	rows, err := r.DB.QueryContext(ctx, sessionQuery, sql.Named("date", date))
+	rows, err := r.DB.QueryContext(
+		ctx,
+		sessionQuery,
+		sql.Named("date", date),
+		sql.Named("window_start", windowStartText),
+		sql.Named("window_end", windowEndText),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +264,20 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 		return nil, err
 	}
 
-	noteQuery := `
+	noteWhere := `session_date = CAST(@date AS DATE)`
+	if forExport {
+		noteWhere = `
+			session_id IN (SELECT id FROM dbo.machine_operator_sessions WHERE ` + sessionWhere + `)
+			AND (
+				session_date = CAST(@date AS DATE)
+				OR (
+					created_at >= TRY_CONVERT(DATETIME2, @window_start)
+					AND created_at < TRY_CONVERT(DATETIME2, @window_end)
+				)
+			)`
+	}
+
+	noteQuery := fmt.Sprintf(`
 		SELECT
 			id,
 			session_id,
@@ -213,11 +290,17 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 			ISNULL(note, '') AS note,
 			ISNULL(CONVERT(VARCHAR(19), created_at, 120), '') AS created_at
 		FROM dbo.machine_operator_notes
-		WHERE session_date = CAST(@date AS DATE)
+		WHERE %s
 		ORDER BY created_at ASC, id ASC
-	`
+	`, noteWhere)
 
-	noteRows, err := r.DB.QueryContext(ctx, noteQuery, sql.Named("date", date))
+	noteRows, err := r.DB.QueryContext(
+		ctx,
+		noteQuery,
+		sql.Named("date", date),
+		sql.Named("window_start", windowStartText),
+		sql.Named("window_end", windowEndText),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +371,12 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 				ON s.id = e.session_id
 			WHERE
 				s.session_date = CAST(@date AS DATE)
+				OR (
+					@for_export = 1
+					AND s.session_date = DATEADD(DAY, 1, CAST(@date AS DATE))
+					AND e.start_time >= TRY_CONVERT(DATETIME2, @window_start)
+					AND e.start_time < TRY_CONVERT(DATETIME2, @window_end)
+				)
 		)
 		SELECT
 			id,
@@ -307,7 +396,19 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 		ORDER BY session_id ASC, start_time DESC, id DESC
 	`
 
-	lossRows, err := r.DB.QueryContext(ctx, lossEventQuery, sql.Named("date", date))
+	forExportFlag := 0
+	if forExport {
+		forExportFlag = 1
+	}
+
+	lossRows, err := r.DB.QueryContext(
+		ctx,
+		lossEventQuery,
+		sql.Named("date", date),
+		sql.Named("for_export", forExportFlag),
+		sql.Named("window_start", windowStartText),
+		sql.Named("window_end", windowEndText),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +510,7 @@ func (r *Repository) GetMachineOperatorReport(ctx context.Context, date string, 
 	}
 
 	if withStats {
-		r.enrichOperatorReportSessionStats(ctx, report)
+		r.enrichOperatorReportSessionStats(ctx, report, clipStart, clipEnd)
 	}
 
 	return report, nil

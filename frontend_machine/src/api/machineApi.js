@@ -392,6 +392,13 @@ export async function getMachineOperatorReport(date, options = {}) {
   if (withStats) {
     params.set("withStats", "1");
   }
+  if (
+    options?.forExport === true ||
+    options?.forExport === 1 ||
+    String(options?.forExport || "").trim() === "1"
+  ) {
+    params.set("forExport", "1");
+  }
 
   const res = await fetch(`/api/machine-operator/report?${params.toString()}`);
 

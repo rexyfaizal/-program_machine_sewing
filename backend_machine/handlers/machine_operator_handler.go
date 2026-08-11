@@ -180,6 +180,8 @@ func (h *Handler) MachineOperatorReport(w http.ResponseWriter, r *http.Request) 
 
 	withStats := strings.TrimSpace(r.URL.Query().Get("withStats")) == "1" ||
 		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("withStats")), "true")
+	forExport := strings.TrimSpace(r.URL.Query().Get("forExport")) == "1" ||
+		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("forExport")), "true")
 
 	timeout := 60 * time.Second
 	if withStats {
@@ -194,7 +196,7 @@ func (h *Handler) MachineOperatorReport(w http.ResponseWriter, r *http.Request) 
 		date = time.Now().Format("2006-01-02")
 	}
 
-	data, err := h.Repo.GetMachineOperatorReport(ctx, date, withStats)
+	data, err := h.Repo.GetMachineOperatorReportFiltered(ctx, date, withStats, forExport)
 	if err != nil {
 		http.Error(w, "Gagal ambil report operator: "+err.Error(), http.StatusInternalServerError)
 		return

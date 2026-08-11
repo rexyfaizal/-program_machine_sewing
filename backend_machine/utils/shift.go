@@ -391,6 +391,23 @@ func ResolveGM3WorkWindow(now time.Time) (time.Time, time.Time) {
 	return start, end
 }
 
+// GM3WorkWindowForDate = jendela All Shifts untuk satu work_date (naive UTC).
+// Weekday/Minggu: 06:00 → 04:30 H+1. Sabtu: 06:00 → 22:30 hari yang sama.
+func GM3WorkWindowForDate(workDate string) (time.Time, time.Time, error) {
+	day, err := time.Parse("2006-01-02", strings.TrimSpace(workDate))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
+	start := time.Date(day.Year(), day.Month(), day.Day(), 6, 0, 0, 0, time.UTC)
+	if day.Weekday() == time.Saturday {
+		end := time.Date(day.Year(), day.Month(), day.Day(), 22, 30, 0, 0, time.UTC)
+		return start, end, nil
+	}
+
+	return start, start.Add(22*time.Hour + 30*time.Minute), nil
+}
+
 // ResolveGM3CurrentShift mengembalikan shift aktif berdasarkan waktu sekarang.
 func ResolveGM3CurrentShift(now time.Time) (workDate time.Time, shiftCode string) {
 	workDate = ResolveGM3WorkDate(now)

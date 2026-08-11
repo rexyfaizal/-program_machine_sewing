@@ -988,6 +988,10 @@ export function buildOperatorExportMap(reportData, options = {}) {
             "productivity_status"
           ) || ""
         ).trim(),
+        hasSessionOutput: Boolean(
+          getVal(row, "hasSessionStats", "HasSessionStats")
+        ),
+        sessionOutput: toNumber(getVal(row, "output", "Output") || 0),
       });
     });
   });
@@ -1286,6 +1290,7 @@ export function normalizeRangeItem(
     locationGroup,
     shiftCode: resolvedShiftCode,
     shiftName: resolvedShiftName,
+    useShift: Boolean(lineShift.useShift),
     operatorRows,
     runtime,
     procTime,
@@ -1403,6 +1408,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     options.fallbackStyle || baseRow.Style || ""
   ).trim();
   const fallbackPowerOnSec = toNumber(options.fallbackPowerOnSec || 0);
+  const useShiftOutput = Boolean(options.useShift);
 
   const rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
     isUsefulOperatorRow
@@ -1492,12 +1498,19 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       ? buildExportLossColumns(item?.lossBreakdown, sessionPowerOnSec)
       : emptyExportLossColumns();
 
+    const sessionOutput =
+      useShiftOutput && item?.hasSessionOutput
+        ? toNumber(item.sessionOutput || 0)
+        : showMachineIdentity
+          ? baseRow.Output
+          : "";
+
     return {
       ...baseRow,
       Mesin: showMachineIdentity ? processName || fallbackMesin : "",
       Style: showMachineIdentity ? styleName || fallbackStyle : "",
       UUID: showMachineIdentity ? baseRow.UUID || "" : "",
-      Output: showMachineIdentity ? baseRow.Output : "",
+      Output: isFirstOfSession ? sessionOutput : "",
       "Cycle Time": showMachineIdentity ? baseRow["Cycle Time"] : "",
       "Power On Duration": isFirstOfSession ? sessionPowerOn : "",
       "Running Time": isFirstOfSession ? sessionRunning : "",
@@ -1562,6 +1575,7 @@ export function buildRangeDetailRows(items, shiftCode = "") {
         fallbackMesin: item.originalMesin || item.mesin,
         fallbackStyle: item.styleName || "",
         fallbackPowerOnSec: item.runtime,
+        useShift: Boolean(item.useShift),
       });
     });
 }
@@ -1600,6 +1614,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         cycleDayCount: 0,
         operatorRows: [],
         operatorRowKeySet: new Set(),
+        useShift: Boolean(item.useShift),
       });
     }
 
@@ -1635,6 +1650,9 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
     }
     if (item.location) {
       current.location = item.location;
+    }
+    if (item.useShift) {
+      current.useShift = true;
     }
 
     const operatorRows = Array.isArray(item.operatorRows)
@@ -1679,6 +1697,8 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         shiftTag: String(operatorRow.shiftTag || "").trim(),
         lossBreakdown: operatorRow.lossBreakdown || null,
         dashboardMetrics: operatorRow.dashboardMetrics || null,
+        hasSessionOutput: Boolean(operatorRow.hasSessionOutput),
+        sessionOutput: toNumber(operatorRow.sessionOutput || 0),
       });
     });
   });
@@ -1714,6 +1734,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         productivity: Number(productivity.toFixed(2)),
         status: statusFromProductivity(productivity),
         operatorRows: item.operatorRows,
+        useShift: Boolean(item.useShift),
         __lossSec: item.totalLoss,
       };
     })
@@ -1755,6 +1776,7 @@ export function buildRangeSummaryRows(summaryBaseRows) {
       fallbackMesin: item.originalMesin || item.mesin,
       fallbackStyle: item.styleName || "",
       fallbackPowerOnSec: item.totalPowerOn,
+      useShift: Boolean(item.useShift),
     });
   });
 }

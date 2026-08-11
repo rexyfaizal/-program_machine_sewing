@@ -138,7 +138,10 @@ export function useDashboardExcelExport({
 
           const [operatorResult, selectedProductivity, ...extraProductivity] =
             await Promise.allSettled([
-              getMachineOperatorReport(dateText),
+              getMachineOperatorReport(dateText, {
+                withStats: true,
+                forExport: true,
+              }),
               getProductivity(dateText, { shift: shiftParam }),
               ...extraShiftCodes.map((code) =>
                 getProductivity(dateText, { shift: code })
