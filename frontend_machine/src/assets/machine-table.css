@@ -181,10 +181,11 @@
   border-bottom: 1px solid #edf2f7;
   vertical-align: top;
   color: #1e293b;
+  font-weight: 400;
 }
 
 .machine-table-panel td strong {
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .machine-table-panel td small {
@@ -200,7 +201,7 @@
 
 .machine-table-panel td small.style-line {
   color: #2563eb;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .machine-table-panel tr:hover td {
@@ -223,7 +224,7 @@
 
 .machine-table-panel .time-cell,
 .machine-table-panel .productivity-cell {
-  font-weight: 500;
+  font-weight: 400;
   color: #1e293b;
   white-space: nowrap;
 }
@@ -245,7 +246,7 @@
   display: block;
   color: #0f172a;
   font-size: 12px;
-  font-weight: 950;
+  font-weight: 400;
   white-space: normal;
 }
 
@@ -287,7 +288,7 @@
   display: block;
   color: #94a3b8;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .machine-table-panel .operator-sub {
@@ -295,7 +296,7 @@
   margin-top: 4px;
   color: #2563eb !important;
   font-size: 11px !important;
-  font-weight: 900;
+  font-weight: 400;
   max-width: none !important;
   overflow: visible !important;
   text-overflow: unset !important;
@@ -308,7 +309,7 @@
   white-space: normal;
   line-height: 1.35;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 400;
   color: #334155;
 }
 
