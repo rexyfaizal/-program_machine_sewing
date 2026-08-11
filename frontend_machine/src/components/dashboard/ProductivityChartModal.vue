@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import VueApexCharts from "vue3-apexcharts";
 
-import { getProductivity } from "../../api/machineApi";
+import { getMachineOperatorReport, getProductivity } from "../../api/machineApi";
 
 const props = defineProps({
   show: {
@@ -33,6 +33,10 @@ const loading = ref(false);
 const errorMessage = ref("");
 const categories = ref([]);
 const productivityData = ref([]);
+const operatorLabels = ref([]);
+const isoDates = ref([]);
+
+const machineUuid = computed(() => String(props.machine?.uuid || "").trim());
 
 const machineName = computed(() => {
   const m = props.machine || {};
@@ -127,9 +131,8 @@ const chartOptions = computed(() => ({
     ],
   },
   tooltip: {
-    y: {
-      formatter: (val) => (val === null ? "Tidak ada data" : `${Number(val).toFixed(2)}%`),
-    },
+    shared: false,
+    custom: ({ dataPointIndex }) => buildTooltipHtml(dataPointIndex),
   },
   grid: { borderColor: "#e2e8f0" },
   noData: { text: "Tidak ada data pada rentang ini." },
@@ -198,6 +201,76 @@ function extractRows(data) {
   );
 }
 
+function getVal(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined && row?.[key] !== null && row[key] !== "") {
+      return row[key];
+    }
+  }
+  return "";
+}
+
+function formatOperatorLabel(row) {
+  const nik = String(
+    getVal(row, "operatorNik", "OperatorNik", "operator_nik") || ""
+  ).trim();
+  const name = String(
+    getVal(row, "operatorName", "OperatorName", "operator_name") || ""
+  ).trim();
+  if (nik && name) return `${nik} - ${name}`;
+  return name || nik || "";
+}
+
+function extractOperatorsForMachine(payload, uuid) {
+  const rows = extractRows(payload);
+  const names = [];
+  const seen = new Set();
+
+  rows.forEach((row) => {
+    const rowUuid = String(getVal(row, "uuid", "UUID") || "").trim().toLowerCase();
+    if (rowUuid !== uuid) return;
+    const label = formatOperatorLabel(row);
+    if (!label) return;
+    const key = label.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    names.push(label);
+  });
+
+  return names.length ? names.join(" · ") : "Tidak ada operator";
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildTooltipHtml(index) {
+  const dateLabel = categories.value[index] || "-";
+  const value = productivityData.value[index];
+  const operator = operatorLabels.value[index] || "Tidak ada operator";
+  const pct =
+    value === null || Number.isNaN(value) ? "Tidak ada data" : `${Number(value).toFixed(2)}%`;
+
+  return `
+    <div style="padding:10px 12px;min-width:220px;font-family:inherit;">
+      <div style="font-weight:800;color:#0f172a;margin-bottom:6px;">${escapeHtml(dateLabel)}</div>
+      <div style="font-size:12px;color:#334155;margin-bottom:4px;">
+        <strong>Produktivitas:</strong> ${escapeHtml(pct)}
+      </div>
+      <div style="font-size:12px;color:#334155;margin-bottom:4px;">
+        <strong>Operator:</strong> ${escapeHtml(operator)}
+      </div>
+      <div style="font-size:12px;color:#334155;">
+        <strong>UUID:</strong> ${escapeHtml(machineUuid.value || "-")}
+      </div>
+    </div>
+  `;
+}
+
 function readProductivity(row) {
   const keys = [
     "productivityPct",
@@ -238,23 +311,33 @@ async function loadChart() {
     const results = await Promise.all(
       dates.map(async (date) => {
         try {
-          const payload = await getProductivity(date, { shift });
+          const [payload, operatorPayload] = await Promise.all([
+            getProductivity(date, { shift }),
+            getMachineOperatorReport(date),
+          ]);
           const rows = extractRows(payload);
           const match = rows.find(
             (r) =>
               String(r.uuid || r.UUID || "").trim().toLowerCase() === uuid
           );
-          return match ? readProductivity(match) : null;
+          const value = match ? readProductivity(match) : null;
+          return {
+            value:
+              value === null || Number.isNaN(value)
+                ? null
+                : Number(Number(value).toFixed(2)),
+            operator: extractOperatorsForMachine(operatorPayload, uuid),
+          };
         } catch (err) {
-          return null;
+          return { value: null, operator: "Tidak ada operator" };
         }
       })
     );
 
+    isoDates.value = dates;
     categories.value = dates.map(formatDateLabel);
-    productivityData.value = results.map((v) =>
-      v === null || Number.isNaN(v) ? null : Number(Number(v).toFixed(2))
-    );
+    productivityData.value = results.map((item) => item.value);
+    operatorLabels.value = results.map((item) => item.operator);
   } catch (err) {
     errorMessage.value = `Gagal memuat grafik: ${err.message}`;
   } finally {
@@ -288,6 +371,7 @@ watch(
             <span v-if="props.machine?.location"> · {{ props.machine.location }}</span>
             <span class="range"> · {{ rangeLabel }}</span>
           </p>
+          <p v-if="machineUuid" class="uuid-line">UUID: {{ machineUuid }}</p>
         </div>
 
         <button type="button" class="btn-close" @click="close">✕</button>
@@ -327,6 +411,29 @@ watch(
           />
           <div v-else class="chart-state">
             Tidak ada data produktivitas pada rentang ini.
+          </div>
+        </div>
+
+        <div v-if="hasData" class="day-list">
+          <div class="day-list-head">
+            <span>Tanggal</span>
+            <span>Produktivitas</span>
+            <span>Operator</span>
+          </div>
+          <div
+            v-for="(label, index) in categories"
+            :key="isoDates[index] || label"
+            class="day-row"
+          >
+            <span>{{ label }}</span>
+            <strong>
+              {{
+                productivityData[index] === null
+                  ? "-"
+                  : `${productivityData[index]}%`
+              }}
+            </strong>
+            <span>{{ operatorLabels[index] || "Tidak ada operator" }}</span>
           </div>
         </div>
       </template>
@@ -380,6 +487,12 @@ watch(
 
 .chart-head .range {
   color: #2563eb;
+}
+
+.uuid-line {
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
 }
 
 .btn-close {
@@ -452,6 +565,38 @@ watch(
 
 .chart-body {
   min-height: 360px;
+}
+
+.day-list {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.day-list-head,
+.day-row {
+  display: grid;
+  grid-template-columns: 90px 110px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.day-list-head {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.day-row {
+  border-top: 1px solid #eef2f7;
+  color: #334155;
+  font-weight: 700;
+}
+
+.day-row strong {
+  color: #0f172a;
 }
 
 @media (max-width: 640px) {
