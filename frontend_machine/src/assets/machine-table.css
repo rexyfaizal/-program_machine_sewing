@@ -44,14 +44,26 @@
 .machine-table-panel .table-toolbar {
   display: grid;
   grid-template-columns:
-    minmax(145px, 180px)
-    minmax(145px, 180px)
+    minmax(130px, 160px)
     minmax(120px, 150px)
     minmax(240px, 1fr)
     minmax(150px, 180px);
   gap: 10px;
   margin-bottom: 12px;
   align-items: stretch;
+}
+
+.machine-table-panel .table-toolbar.simple-toolbar {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-bottom: 6px;
+}
+
+.machine-table-panel .range-line {
+  margin: 0 0 12px;
+  padding: 0 4px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .machine-table-panel .table-filter {
@@ -88,6 +100,36 @@
 
 .machine-table-panel .table-filter select {
   cursor: pointer;
+}
+
+.machine-table-panel .view-filter {
+  min-width: 220px;
+}
+
+.machine-table-panel .view-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  height: 28px;
+}
+
+.machine-table-panel .view-btn {
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.machine-table-panel .view-btn:hover {
+  background: #e2e8f0;
+}
+
+.machine-table-panel .view-btn.active {
+  background: #2563eb;
+  color: #ffffff;
 }
 
 .machine-table-panel .table-filter input::placeholder {

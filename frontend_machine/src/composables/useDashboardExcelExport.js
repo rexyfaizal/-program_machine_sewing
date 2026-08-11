@@ -9,6 +9,7 @@ import {
   buildRangeDetailRows,
   buildRangeSummaryBaseRows,
   buildRangeSummaryRows,
+  buildUuidShiftMetricsMap,
   createRangeWorkbook,
   extractRows,
   filterRangeItemsByLocation,
@@ -43,9 +44,8 @@ export function useDashboardExcelExport({
     selectedDate,
     (value) => {
       if (!value) return;
-
-      startDate.value = value;
-      endDate.value = value;
+      if (!startDate.value) startDate.value = value;
+      if (!endDate.value) endDate.value = value;
     },
     { immediate: true }
   );
@@ -98,7 +98,7 @@ export function useDashboardExcelExport({
     const dates = getWeekdaysBetween(range.start, range.end);
 
     if (!dates.length) {
-      showNotice("Range tanggal tidak memiliki hari kerja Senin-Jumat.", "error");
+      showNotice("Range tanggal tidak memiliki hari kerja (Senin–Sabtu).", "error");
       return;
     }
 
@@ -131,14 +131,40 @@ export function useDashboardExcelExport({
 
       const results = await Promise.all(
         dates.map(async (dateText) => {
-          const [productivityResult, operatorResult] = await Promise.allSettled([
-            getProductivity(dateText, { shift: shiftParam }),
-            getMachineOperatorReport(dateText, { withStats: true }),
-          ]);
+          const selectedShift = String(shiftParam || "").trim().toUpperCase();
+          const extraShiftCodes = ["SHIFT_1", "SHIFT_2", "SHIFT_3"].filter(
+            (code) => code !== selectedShift
+          );
 
-          if (productivityResult.status === "rejected") {
-            throw productivityResult.reason;
+          const [operatorResult, selectedProductivity, ...extraProductivity] =
+            await Promise.allSettled([
+              getMachineOperatorReport(dateText),
+              getProductivity(dateText, { shift: shiftParam }),
+              ...extraShiftCodes.map((code) =>
+                getProductivity(dateText, { shift: code })
+              ),
+            ]);
+
+          if (selectedProductivity.status === "rejected") {
+            throw selectedProductivity.reason;
           }
+
+          const productivityByShift = {
+            DEFAULT: selectedProductivity.value,
+          };
+
+          if (["SHIFT_1", "SHIFT_2", "SHIFT_3"].includes(selectedShift)) {
+            productivityByShift[selectedShift] = selectedProductivity.value;
+          }
+
+          extraShiftCodes.forEach((code, index) => {
+            const result = extraProductivity[index];
+            if (result?.status === "fulfilled") {
+              productivityByShift[code] = result.value;
+            }
+          });
+
+          const shiftMetricsMap = buildUuidShiftMetricsMap(productivityByShift);
 
           const operatorMap =
             operatorResult.status === "fulfilled"
@@ -150,7 +176,7 @@ export function useDashboardExcelExport({
                 })
               : new Map();
 
-          const rows = extractRows(productivityResult.value);
+          const rows = extractRows(selectedProductivity.value);
 
           return rows.map((row) =>
             normalizeRangeItem(
@@ -159,7 +185,8 @@ export function useDashboardExcelExport({
               operatorMap,
               getManualSettingByUuid,
               shiftParam,
-              configMap
+              configMap,
+              shiftMetricsMap
             )
           );
         })

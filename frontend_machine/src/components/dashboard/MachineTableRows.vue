@@ -150,7 +150,7 @@ function chartMachine(machine) {
                       class="operator-shift-tag"
                       :class="`shift-tag-${String(op.shiftTagCode || 'NORMAL').toLowerCase()}`"
                     >
-                      | {{ op.shiftTag }}
+                      {{ op.shiftTag }}
                     </span>
                   </strong>
                   <small v-if="op.subText" class="operator-sub">
@@ -269,7 +269,7 @@ function chartMachine(machine) {
                       class="operator-shift-tag"
                       :class="`shift-tag-${String(op.shiftTagCode || 'NORMAL').toLowerCase()}`"
                     >
-                      | {{ op.shiftTag }}
+                      {{ op.shiftTag }}
                     </span>
                   </strong>
                   <small v-if="op.subText" class="operator-sub">

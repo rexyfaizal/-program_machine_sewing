@@ -378,7 +378,7 @@ export function normalizeExportNote(row) {
   let body = statusText;
 
   if (freeNote) {
-    body = `${statusText} | ${freeNote}`;
+    body = `${statusText} - ${freeNote}`;
   }
 
   const label = reasonName || "Other";
@@ -1013,6 +1013,101 @@ export function statusFromProductivity(productivity) {
   return "BAD";
 }
 
+export function extractProductivityMetrics(row) {
+  const procTime = toNumber(
+    getVal(
+      row,
+      "procSec",
+      "ProcSec",
+      "procTimeSec",
+      "ProcTimeSec",
+      "procTime",
+      "ProcTime",
+      "productive_seconds",
+      "productiveSeconds",
+      "process_time",
+      "ProcessTime"
+    ) || 0
+  );
+
+  const runtime = toNumber(
+    getVal(
+      row,
+      "runtimeSec",
+      "RuntimeSec",
+      "runtime",
+      "Runtime",
+      "runTime",
+      "RunTime",
+      "powerOnSeconds",
+      "PowerOnSeconds",
+      "power_on_seconds"
+    ) || 0
+  );
+
+  const lossTime = Math.max(0, runtime - procTime);
+  const productivity =
+    runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
+
+  return {
+    runtime,
+    procTime,
+    lossTime,
+    output: toNumber(getVal(row, "output", "Output") || 0),
+    avgCT: toNumber(
+      getVal(row, "avgCycle", "AvgCycle", "avgCT", "AvgCT") || 0
+    ),
+    productivity: Number(productivity.toFixed(2)),
+    status: statusFromProductivity(productivity),
+  };
+}
+
+export function shiftTagToCode(shiftTag) {
+  const text = String(shiftTag || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^\|\s*/, "");
+
+  if (text.includes("SHIFT_1") || /\bSHIFT\s*1\b/.test(text)) return "SHIFT_1";
+  if (text.includes("SHIFT_2") || /\bSHIFT\s*2\b/.test(text)) return "SHIFT_2";
+  if (text.includes("SHIFT_3") || /\bSHIFT\s*3\b/.test(text)) return "SHIFT_3";
+
+  return "DEFAULT";
+}
+
+export function buildUuidShiftMetricsMap(productivityByShift = {}) {
+  const map = new Map();
+
+  Object.entries(productivityByShift).forEach(([shiftKey, data]) => {
+    const key = String(shiftKey || "").trim().toUpperCase() || "DEFAULT";
+
+    extractRows(data).forEach((row) => {
+      const uuid = normalizeText(getVal(row, "uuid", "UUID") || "");
+      if (!uuid) return;
+
+      if (!map.has(uuid)) {
+        map.set(uuid, {});
+      }
+
+      map.get(uuid)[key] = extractProductivityMetrics(row);
+    });
+  });
+
+  return map;
+}
+
+export function resolveDashboardMetricsForOperator(
+  uuid,
+  shiftTag,
+  shiftMetricsMap,
+  fallback = null
+) {
+  const byShift = shiftMetricsMap?.get?.(normalizeText(uuid)) || {};
+  const code = shiftTagToCode(shiftTag);
+
+  return byShift[code] || byShift.DEFAULT || fallback || null;
+}
+
 export function toIsoDate(date) {
   const offset = date.getTimezoneOffset();
   const local = new Date(date.getTime() - offset * 60000);
@@ -1058,7 +1153,8 @@ export function getWeekdaysBetween(startDateText, endDateText) {
   while (cursor <= end) {
     const day = cursor.getDay();
 
-    if (day >= 1 && day <= 5) {
+    // Skip Minggu saja. Sabtu tetap masuk (shift Sabtu).
+    if (day !== 0) {
       dates.push(toIsoDate(cursor));
     }
 
@@ -1097,45 +1193,18 @@ export function normalizeRangeItem(
   operatorMap = new Map(),
   getManualSettingByUuid = () => null,
   shiftCode = "",
-  shiftConfigMap = new Map()
+  shiftConfigMap = new Map(),
+  shiftMetricsMap = new Map()
 ) {
   const uuid = String(getVal(row, "uuid", "UUID") || "");
   const setting = getManualSettingByUuid(uuid);
-
-  const procTime = toNumber(
-    getVal(
-      row,
-      "procSec",
-      "ProcSec",
-      "procTimeSec",
-      "ProcTimeSec",
-      "procTime",
-      "ProcTime",
-      "process_time",
-      "ProcessTime"
-    ) || 0
-  );
-
-  let runtime = toNumber(
-    getVal(
-      row,
-      "runtimeSec",
-      "RuntimeSec",
-      "runtime",
-      "Runtime",
-      "RunTime",
-      "runTime"
-    ) || 0
-  );
-
-  const lossTime = Math.max(0, runtime - procTime);
-  const productivity =
-    runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
-
-  const output = toNumber(getVal(row, "output", "Output") || 0);
-  const avgCT = toNumber(
-    getVal(row, "avgCycle", "AvgCycle", "avgCT", "AvgCT") || 0
-  );
+  const metrics = extractProductivityMetrics(row);
+  const runtime = metrics.runtime;
+  const procTime = metrics.procTime;
+  const lossTime = metrics.lossTime;
+  const productivity = metrics.productivity;
+  const output = metrics.output;
+  const avgCT = metrics.avgCT;
 
   const backendName = String(
     getVal(
@@ -1155,9 +1224,17 @@ export function normalizeRangeItem(
   const lineShift = resolveLineShiftForLocation(location, shiftConfigMap);
 
   const operatorInfo = operatorMap.get(normalizeText(uuid)) || {};
-  const operatorRows = Array.isArray(operatorInfo.operatorRows)
-    ? operatorInfo.operatorRows
-    : [];
+  const operatorRows = (
+    Array.isArray(operatorInfo.operatorRows) ? operatorInfo.operatorRows : []
+  ).map((operatorRow) => ({
+    ...operatorRow,
+    dashboardMetrics: resolveDashboardMetricsForOperator(
+      uuid,
+      operatorRow.shiftTag,
+      shiftMetricsMap,
+      metrics
+    ),
+  }));
 
   const processFromOperatorRows = String(
     operatorRows.find((item) => String(item.processName || "").trim())
@@ -1251,6 +1328,26 @@ export function safeFileName(value) {
     .replace(/\s+/g, "_");
 }
 
+function formatDashboardOperators(operatorRows) {
+  const seen = new Set();
+  const labels = [];
+
+  (Array.isArray(operatorRows) ? operatorRows : []).forEach((row) => {
+    const { operatorNik, operatorName } = resolveOperatorNikName(row);
+    const label =
+      operatorNik && operatorName
+        ? `${operatorNik} - ${operatorName}`
+        : operatorName || operatorNik;
+    if (!label) return;
+    const key = label.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    labels.push(label);
+  });
+
+  return labels.join(" | ");
+}
+
 function resolveOperatorNikName(item) {
   const nik = String(item?.operatorNik || "").trim();
   let name = String(item?.operatorName || "").trim();
@@ -1291,6 +1388,13 @@ function isUsefulOperatorRow(item) {
   return Boolean(operatorNik || operatorName || note);
 }
 
+function cleanExportNoteText(value) {
+  return String(value || "")
+    .replace(/\s*\|\s*/g, " - ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function expandOperatorRows(baseRow, operatorRows, options = {}) {
   const fallbackMesin = String(
     options.fallbackMesin || baseRow.Mesin || ""
@@ -1300,15 +1404,9 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
   ).trim();
   const fallbackPowerOnSec = toNumber(options.fallbackPowerOnSec || 0);
 
-  let rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
+  const rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
     isUsefulOperatorRow
   );
-
-  // Utamakan baris yang punya note (seperti contoh Excel).
-  const rowsWithNotes = rows.filter((item) => String(item?.note || "").trim());
-  if (rowsWithNotes.length) {
-    rows = rowsWithNotes;
-  }
 
   if (!rows.length) {
     return [
@@ -1326,7 +1424,6 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     ];
   }
 
-  // Urutkan: login → NIK → Name → Note.
   const sortedRows = rows.slice().sort((a, b) => {
     const timeA = parseExportDateTime(a?.loginTime)?.getTime() || 0;
     const timeB = parseExportDateTime(b?.loginTime)?.getTime() || 0;
@@ -1344,10 +1441,8 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     return String(a?.note || "").localeCompare(String(b?.note || ""));
   });
 
-  // Pola:
-  // - Baris pertama tiap session operator: NIK + Name + Waktu Pemakaian + Note
-  // - Baris note berikutnya: NIK/Name/Waktu kosong, Note tetap terisi
   let lastSessionKey = "";
+  let machineIdentityWritten = false;
 
   return sortedRows.map((item) => {
     const { operatorNik, operatorName } = resolveOperatorNikName(item);
@@ -1355,7 +1450,9 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     const styleName = String(item?.styleName || "").trim();
     const loginTime = String(item?.loginTime || "").trim();
     const usageText = String(item?.usageText || "").trim();
-    const shiftTag = String(item?.shiftTag || "").trim();
+    const shiftTag = String(item?.shiftTag || "")
+      .replace(/^\|\s*/, "")
+      .trim();
     const sessionKey = `${operatorNik}||${operatorName}||${loginTime}||${usageText}`;
     const isFirstOfSession = sessionKey !== lastSessionKey;
 
@@ -1363,37 +1460,45 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       lastSessionKey = sessionKey;
     }
 
-    const hasSessionStats = Boolean(item?.hasSessionStats);
-    const sessionPowerOn = hasSessionStats
-      ? formatSeconds(item.runtimeSec)
+    const showMachineIdentity = !machineIdentityWritten && isFirstOfSession;
+    if (showMachineIdentity) {
+      machineIdentityWritten = true;
+    }
+
+    const dashboardMetrics = item?.dashboardMetrics || null;
+    const sessionPowerOnSec = dashboardMetrics
+      ? toNumber(dashboardMetrics.runtime || 0)
+      : fallbackPowerOnSec;
+    const sessionPowerOn = dashboardMetrics
+      ? formatSeconds(dashboardMetrics.runtime)
       : baseRow["Power On Duration"];
-    const sessionRunning = hasSessionStats
-      ? formatSeconds(item.procSec)
+    const sessionRunning = dashboardMetrics
+      ? formatSeconds(dashboardMetrics.procTime)
       : baseRow["Running Time"];
-    const sessionLoss = hasSessionStats
-      ? formatSeconds(item.lossTimeSec)
+    const sessionLoss = dashboardMetrics
+      ? formatSeconds(dashboardMetrics.lossTime)
       : baseRow["Loss Time"];
-    const sessionProductivity = hasSessionStats
-      ? Number(item.productivityPct || 0)
+    const sessionProductivity = dashboardMetrics
+      ? Number(dashboardMetrics.productivity || 0)
       : baseRow.Produktivitas;
-    const sessionStatus = hasSessionStats
-      ? String(item.productivityStatus || statusFromProductivity(item.productivityPct)).trim()
+    const sessionStatus = dashboardMetrics
+      ? String(
+          dashboardMetrics.status ||
+            statusFromProductivity(dashboardMetrics.productivity)
+        ).trim()
       : baseRow.Status;
 
-    const powerOnSec = hasSessionStats
-      ? toNumber(item.runtimeSec || 0)
-      : fallbackPowerOnSec;
-
     const lossColumns = isFirstOfSession
-      ? buildExportLossColumns(item?.lossBreakdown, powerOnSec)
+      ? buildExportLossColumns(item?.lossBreakdown, sessionPowerOnSec)
       : emptyExportLossColumns();
 
     return {
       ...baseRow,
-      Mesin: isFirstOfSession ? processName || fallbackMesin : "",
-      Style: isFirstOfSession ? styleName || fallbackStyle : "",
-      Output: isFirstOfSession ? baseRow.Output : "",
-      "Cycle Time": isFirstOfSession ? baseRow["Cycle Time"] : "",
+      Mesin: showMachineIdentity ? processName || fallbackMesin : "",
+      Style: showMachineIdentity ? styleName || fallbackStyle : "",
+      UUID: showMachineIdentity ? baseRow.UUID || "" : "",
+      Output: showMachineIdentity ? baseRow.Output : "",
+      "Cycle Time": showMachineIdentity ? baseRow["Cycle Time"] : "",
       "Power On Duration": isFirstOfSession ? sessionPowerOn : "",
       "Running Time": isFirstOfSession ? sessionRunning : "",
       "Loss Time": isFirstOfSession ? sessionLoss : "",
@@ -1403,7 +1508,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       "Operator Name": isFirstOfSession ? operatorName : "",
       "Keterangan Shift": isFirstOfSession ? shiftTag : "",
       "Waktu Pemakaian": isFirstOfSession ? usageText : "",
-      "Operator Note": String(item?.note || "").trim(),
+      "Operator Note": cleanExportNoteText(item?.note),
       ...lossColumns,
     };
   });
@@ -1573,12 +1678,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         usageText,
         shiftTag: String(operatorRow.shiftTag || "").trim(),
         lossBreakdown: operatorRow.lossBreakdown || null,
-        hasSessionStats: Boolean(operatorRow.hasSessionStats),
-        runtimeSec: toNumber(operatorRow.runtimeSec || 0),
-        procSec: toNumber(operatorRow.procSec || 0),
-        lossTimeSec: toNumber(operatorRow.lossTimeSec || 0),
-        productivityPct: toNumber(operatorRow.productivityPct || 0),
-        productivityStatus: String(operatorRow.productivityStatus || "").trim(),
+        dashboardMetrics: operatorRow.dashboardMetrics || null,
       });
     });
   });
