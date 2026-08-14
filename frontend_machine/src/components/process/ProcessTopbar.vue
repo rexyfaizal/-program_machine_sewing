@@ -24,7 +24,34 @@ const emit = defineEmits([
   "date-change",
 ]);
 
+function isActiveOperatorSession(session) {
+  const status = String(session?.status || "").toUpperCase();
+  return (
+    ["ACTIVE", "OPEN"].includes(status) &&
+    !String(session?.logoutTime || "").trim()
+  );
+}
+
+const activeOperatorSession = computed(() => {
+  const sessions = Array.isArray(props.machine?.operatorSessions)
+    ? props.machine.operatorSessions
+    : [];
+
+  return sessions.find(isActiveOperatorSession) || null;
+});
+
 const displayName = computed(() => {
+  const processName = String(
+    activeOperatorSession.value?.processName ||
+      props.machine?.operatorProcessName ||
+      props.machine?.displayMachineName ||
+      ""
+  ).trim();
+
+  // Jangan pakai displayMachineName kalau sama dengan nama mesin custom
+  // (sudah di-set dashboard sebagai process || machineName).
+  if (processName) return processName;
+
   return (
     props.machine?.machineName ||
     props.machine?.nickName ||
@@ -54,6 +81,28 @@ const displayStatusClass = computed(() => {
   return getMachineStatusClass(props.machine);
 });
 
+const isOperatorInUse = computed(() => Boolean(activeOperatorSession.value));
+
+const displayOperatorLabel = computed(() => {
+  const active = activeOperatorSession.value;
+  if (!active) return "-";
+
+  if (active.operatorLabel) return active.operatorLabel;
+
+  const nik = String(active.operatorNik || "").trim();
+  const name = String(active.operatorName || "").trim();
+  if (nik && name) return `${nik} - ${name}`;
+  return name || nik || "-";
+});
+
+const operatorStatusText = computed(() => {
+  return isOperatorInUse.value ? "Dipakai" : "Tidak dipakai";
+});
+
+const operatorStatusClass = computed(() => {
+  return isOperatorInUse.value ? "in-use" : "idle";
+});
+
 function updateDate(event) {
   emit("update:selectedDate", event.target.value);
 }
@@ -67,7 +116,6 @@ function changeDate() {
   <section class="process-topbar-card">
     <div class="topbar-main">
       <div class="machine-title-area">
-        <span class="section-label">Detail Mesin</span>
         <h1>{{ displayName }}</h1>
       </div>
 
@@ -116,6 +164,20 @@ function changeDate() {
           <i></i>
           {{ displayStatusText }}
         </strong>
+      </div>
+
+      <div class="info-cell status-cell">
+        <span>Status Operator</span>
+
+        <strong class="status-badge" :class="operatorStatusClass">
+          <i></i>
+          {{ operatorStatusText }}
+        </strong>
+      </div>
+
+      <div class="info-cell operator-cell">
+        <span>Operator</span>
+        <strong>{{ displayOperatorLabel }}</strong>
       </div>
     </div>
   </section>
@@ -212,7 +274,7 @@ function changeDate() {
 
 .machine-info-table {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.5fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -298,6 +360,31 @@ function changeDate() {
 
 .status-badge.offline i {
   background: #94a3b8;
+}
+
+.status-badge.in-use {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.status-badge.in-use i {
+  background: #22c55e;
+}
+
+.status-badge.idle {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.status-badge.idle i {
+  background: #94a3b8;
+}
+
+.operator-cell strong {
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 @media (max-width: 1200px) {

@@ -49,6 +49,28 @@ export function getOperatorNote(machine) {
   return machine?.operatorNote || machine?.spv || "";
 }
 
+export function getOperatorNoteItems(machine) {
+  if (Array.isArray(machine?.operatorNoteItems) && machine.operatorNoteItems.length) {
+    return machine.operatorNoteItems;
+  }
+
+  const rows = getOperatorDisplayRows(machine);
+  const fromRows = rows.flatMap((row) =>
+    Array.isArray(row?.noteItems) ? row.noteItems : []
+  );
+
+  if (fromRows.length) return fromRows;
+
+  const raw = String(getOperatorNote(machine) || "").trim();
+  if (!raw || raw === "-") return [];
+
+  return raw
+    .split(/\s*\|\s*/)
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text) => ({ text, timeRange: "", reasonName: "", body: text, isActive: false }));
+}
+
 export function getOperatorName(machine) {
   return machine?.pic || "";
 }

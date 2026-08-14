@@ -502,6 +502,8 @@ export function useDashboard() {
       note: noteText,
       createdAt,
       endTime,
+      timeText,
+      endTimeText,
       durationSeconds,
       durationText,
       status,
@@ -714,25 +716,59 @@ export function useDashboard() {
   }
 
   // Note yang ditampilkan dibatasi window shift terpilih.
+  function resolveNoteItemsForShift(item, window) {
+    const notes = Array.isArray(item?.notes) ? item.notes : [];
+
+    const filtered = !window
+      ? notes
+      : notes.filter((note) => {
+          const status = String(note.status || "").toUpperCase();
+          const isActive = ["ACTIVE", "OPEN"].includes(status);
+
+          return overlapsShiftWindow(
+            note.createdAt,
+            note.endTime,
+            isActive,
+            window
+          );
+        });
+
+    return filtered
+      .map((note) => {
+        const status = String(note.status || "").toUpperCase();
+        const isActive = ["ACTIVE", "OPEN"].includes(status);
+        const timeText =
+          String(note.timeText || "").trim() ||
+          formatClock(note.createdAt);
+        const endTimeText =
+          String(note.endTimeText || "").trim() ||
+          formatClock(note.endTime);
+        const reasonName = String(note.reasonName || "").trim();
+        const body = String(note.note || "").trim();
+
+        let timeRange = "";
+        if (timeText && endTimeText) timeRange = `${timeText}-${endTimeText}`;
+        else if (timeText) timeRange = timeText;
+
+        const text = String(note.text || "").trim();
+        if (!text && !reasonName && !body) return null;
+
+        return {
+          id: note.id,
+          timeRange,
+          reasonName,
+          body,
+          isActive,
+          text: text || [timeRange, reasonName, body].filter(Boolean).join(" "),
+        };
+      })
+      .filter(Boolean);
+  }
+
   function resolveNoteTextForShift(item, window) {
-    if (!window) {
-      return item.operatorNote || "";
-    }
-
-    const notes = Array.isArray(item.notes) ? item.notes : [];
-    const filtered = notes.filter((note) => {
-      const status = String(note.status || "").toUpperCase();
-      const isActive = ["ACTIVE", "OPEN"].includes(status);
-
-      return overlapsShiftWindow(
-        note.createdAt,
-        note.endTime,
-        isActive,
-        window
-      );
-    });
-
-    return filtered.map((note) => note.text).join(" | ");
+    return resolveNoteItemsForShift(item, window)
+      .map((note) => note.text)
+      .join(" | ");
   }
 
   function buildOperatorDisplayRows(sessions, location) {
@@ -749,6 +785,7 @@ export function useDashboard() {
       styleName: item.styleName || "",
       status: item.status || "",
       note: resolveNoteTextForShift(item, window),
+      noteItems: resolveNoteItemsForShift(item, window),
     }));
   }
 
@@ -1014,6 +1051,9 @@ export function useDashboard() {
             .map((item) => resolveNoteTextForShift(item, getShiftWindowForLocation(location)))
             .filter(Boolean)
             .join(" | ") || "",
+        operatorNoteItems: displaySessions.flatMap((item) =>
+          resolveNoteItemsForShift(item, getShiftWindowForLocation(location))
+        ),
         operatorSessions: displaySessions,
         operatorDisplayRows,
         operatorCount: operatorDisplayRows.length,

@@ -629,15 +629,15 @@ export function buildExportLossColumns(lossBreakdown, powerOnSeconds) {
   const otherSec = toNumber(loss.otherSec || 0);
 
   return {
-    "MESIN RUSAK": formatSeconds(mesinRusakSec),
+    "MESIN RUSAK": formatExportDuration(mesinRusakSec),
     "% Mesin Rusak": formatLossPercent(mesinRusakSec, powerOnSeconds),
-    "TUNGGU HANCA": formatSeconds(tungguHancaSec),
+    "TUNGGU HANCA": formatExportDuration(tungguHancaSec),
     "% Tunggu Hanca": formatLossPercent(tungguHancaSec, powerOnSeconds),
-    TOILET: formatSeconds(toiletSec),
+    TOILET: formatExportDuration(toiletSec),
     "% Toilet": formatLossPercent(toiletSec, powerOnSeconds),
-    SOLAT: formatSeconds(solatSec),
+    SOLAT: formatExportDuration(solatSec),
     "% Solat": formatLossPercent(solatSec, powerOnSeconds),
-    OTHER: formatSeconds(otherSec),
+    OTHER: formatExportDuration(otherSec),
     "% Other": formatLossPercent(otherSec, powerOnSeconds),
     "REMARKS OTHER": String(loss.remarksOther || "").trim(),
   };

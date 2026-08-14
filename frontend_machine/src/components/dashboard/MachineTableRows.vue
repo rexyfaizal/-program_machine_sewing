@@ -5,7 +5,7 @@ import {
   formatMinute,
   getDisplayMachineName,
   getOperatorDisplayRows,
-  getOperatorNote,
+  getOperatorNoteItems,
   isUsingProcessName,
   statusClass,
 } from "../../utils/machineTableFormat";
@@ -165,7 +165,24 @@ function chartMachine(machine) {
             </td>
 
             <td class="note-cell">
-              {{ getOperatorNote(m) || "-" }}
+              <template v-if="getOperatorNoteItems(m).length">
+                <div
+                  v-for="(note, noteIndex) in getOperatorNoteItems(m)"
+                  :key="`${m.uuid || index}-note-${note.id || noteIndex}`"
+                  class="note-line"
+                  :class="{ active: note.isActive }"
+                >
+                  {{
+                    [
+                      [note.reasonName, note.body].filter(Boolean).join(" "),
+                      note.timeRange,
+                    ]
+                      .filter(Boolean)
+                      .join(" | ") || note.text
+                  }}
+                </div>
+              </template>
+              <span v-else>-</span>
             </td>
 
             <td class="center productivity-cell">
@@ -284,7 +301,24 @@ function chartMachine(machine) {
             </td>
 
             <td class="note-cell">
-              {{ getOperatorNote(m) || "-" }}
+              <template v-if="getOperatorNoteItems(m).length">
+                <div
+                  v-for="(note, noteIndex) in getOperatorNoteItems(m)"
+                  :key="`${m.uuid || index}-note-${note.id || noteIndex}`"
+                  class="note-line"
+                  :class="{ active: note.isActive }"
+                >
+                  {{
+                    [
+                      [note.reasonName, note.body].filter(Boolean).join(" "),
+                      note.timeRange,
+                    ]
+                      .filter(Boolean)
+                      .join(" | ") || note.text
+                  }}
+                </div>
+              </template>
+              <span v-else>-</span>
             </td>
 
             <td class="center time-cell">

@@ -346,13 +346,27 @@
 }
 
 .machine-table-panel .note-cell {
-  min-width: 170px;
-  max-width: 260px;
+  min-width: 190px;
+  max-width: 300px;
   white-space: normal;
-  line-height: 1.35;
+  line-height: 1.4;
   font-size: 12px;
   font-weight: 400;
   color: #334155;
+}
+
+.machine-table-panel .note-line {
+  padding: 6px 0;
+  font-weight: 400;
+  color: #334155;
+}
+
+.machine-table-panel .note-line + .note-line {
+  border-top: 1px solid #e2e8f0;
+}
+
+.machine-table-panel .note-line.active {
+  color: #c2410c;
 }
 
 .machine-table-panel .mono {

@@ -32,6 +32,7 @@ const selectedEditMachine = ref(null);
 const notice = ref("");
 const noticeType = ref("ok");
 const isAdmin = ref(getInitialAdminMode());
+const detailTab = ref("output"); // output | proses
 
 const {
   machines,
@@ -59,6 +60,8 @@ const {
   loadProcessDetail,
   prevDetailPage,
   nextDetailPage,
+  goDetailPage,
+  visibleDetailPages,
 } = useProcessDetail();
 
 const localDate = computed({
@@ -114,6 +117,12 @@ const displayMachine = computed(() => {
     ...selected,
     machineName: manualName,
     nickName: manualName,
+    displayMachineName:
+      selected.displayMachineName ||
+      selected.operatorProcessName ||
+      manualName,
+    operatorProcessName: selected.operatorProcessName || "",
+    operatorSessions: selected.operatorSessions || [],
     location: selected.location || detail.location || "-",
     ip: selected.ip || detail.ip || "-",
     uuid: selected.uuid || detail.uuid || "-",
@@ -328,44 +337,77 @@ onMounted(() => {
         {{ notice }}
       </div>
 
-      <ProcessKpi
-        :machine="displayMachine"
-        :detail-machine="detailMachine"
-        :selected-machine="selectedMachine"
-        :events="detailEvents"
-        :avg-node-distance="avgNodeDistance"
-      />
+      <div class="detail-tabs" role="tablist" aria-label="Tampilan detail mesin">
+        <button
+          type="button"
+          class="detail-tab"
+          :class="{ active: detailTab === 'output' }"
+          role="tab"
+          :aria-selected="detailTab === 'output'"
+          @click="detailTab = 'output'"
+        >
+          Detail Mesin
+        </button>
+        <button
+          type="button"
+          class="detail-tab"
+          :class="{ active: detailTab === 'proses' }"
+          role="tab"
+          :aria-selected="detailTab === 'proses'"
+          @click="detailTab = 'proses'"
+        >
+          Detail Output
+        </button>
+      </div>
 
-      <section class="process-grid">
-        <HourChart
-          :hours="detailHours"
-          :selected-date="localDate"
-          :max-hour-proc="maxHourProc"
+      <template v-if="detailTab === 'output'">
+        <ProcessKpi
+          :machine="displayMachine"
+          :detail-machine="detailMachine"
+          :selected-machine="selectedMachine"
+          :events="detailEvents"
+          :avg-node-distance="avgNodeDistance"
         />
 
-        <ProgramBars
+        <section class="process-grid">
+          <HourChart
+            :hours="detailHours"
+            :selected-date="localDate"
+            :max-hour-proc="maxHourProc"
+          />
+
+          <ProgramBars
+            :groups="detailGroups"
+            :max-group-proc="maxGroupProc"
+          />
+        </section>
+
+        <ProcessOutputChart
+          :events="detailEvents"
           :groups="detailGroups"
-          :max-group-proc="maxGroupProc"
         />
-      </section>
 
-      <ProcessOutputChart
-        :events="detailEvents"
-        :groups="detailGroups"
-      />
-
-      <section class="process-grid single-panel">
-        <AlarmSummary :alarms="detailAlarms" />
-      </section>
+        <section class="process-grid single-panel">
+          <AlarmSummary :alarms="detailAlarms" />
+        </section>
+      </template>
 
       <ProcessTable
+        v-else
         :events="detailEvents"
         :paged-events="pagedDetailEvents"
         :page="detailPage"
         :total-pages="totalDetailPages"
         :page-size="detailPageSize"
+        :visible-pages="visibleDetailPages"
+        :machine-name="displayMachine.machineName || displayMachine.nickName || ''"
+        :uuid="selectedUUID"
+        :location="displayMachine.location || ''"
+        :selected-date="localDate"
         @prev="prevDetailPage"
         @next="nextDetailPage"
+        @go="goDetailPage"
+        @notice="showNotice"
       />
     </main>
 
@@ -390,6 +432,33 @@ onMounted(() => {
 
 .process-main {
   min-width: 0;
+}
+
+.detail-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.detail-tab {
+  border: 1px solid #d8e2ee;
+  background: #fff;
+  color: #334155;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.detail-tab:hover {
+  background: #f8fafc;
+}
+
+.detail-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
 }
 
 .process-grid {

@@ -568,6 +568,17 @@ th {
   border-bottom: 1px solid #dbe4ef;
 }
 
+.process-panel th {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border-bottom: 1px solid #1e40af;
+  white-space: nowrap;
+}
+
+.process-panel th + th {
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+}
+
 td {
   padding: 12px;
   border-bottom: 1px solid #edf2f7;
@@ -1011,9 +1022,23 @@ tr:hover td {
   font-weight: 800;
 }
 
-.process-pagination div {
+.process-pagination .process-page-controls {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.process-pagination button.page-number {
+  min-width: 40px;
+  padding: 10px 12px;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.process-pagination button.page-number.active {
+  background: #2563eb;
+  color: #fff;
 }
 
 .process-pagination button:disabled {
