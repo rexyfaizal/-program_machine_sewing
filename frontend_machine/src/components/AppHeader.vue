@@ -26,6 +26,15 @@ const headerInfo = computed(() => {
     };
   }
 
+  if (activePageModel.value === "operator-productivity") {
+    return {
+      kicker: "OPERATOR PRODUCTIVITY",
+      title: "Dashboard Produktivitas Operator",
+      statusTitle: "Operator View",
+      statusText: "Session Productivity",
+    };
+  }
+
   if (activePageModel.value === "master-ie") {
     return {
       kicker: "MASTER IE",
@@ -63,10 +72,17 @@ const headerInfo = computed(() => {
 
 const isMasterIePage = computed(() => activePageModel.value === "master-ie");
 const isMechanicPage = computed(() => activePageModel.value === "mechanic");
+const hasRightCard = computed(() => isMasterIePage.value || isMechanicPage.value);
 </script>
 
 <template>
-  <header class="app-header" :class="{ 'compact-master': isMasterIePage || isMechanicPage }">
+  <header
+    class="app-header"
+    :class="{
+      'compact-master': hasRightCard,
+      'single-brand': !hasRightCard,
+    }"
+  >
     <section class="brand-card">
       <div class="left-area">
         <div class="nav-holder">
@@ -93,31 +109,7 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
       </div>
     </section>
 
-    <section v-if="!isMasterIePage && !isMechanicPage" class="legend-card">
-      <div class="legend-title">Kategori Produktivitas</div>
-
-      <div class="legend-list">
-        <div class="legend-item good">
-          <span></span>
-          <strong>GOOD</strong>
-          <small>≥ 90%</small>
-        </div>
-
-        <div class="legend-item normal">
-          <span></span>
-          <strong>NORMAL</strong>
-          <small>80–90%</small>
-        </div>
-
-        <div class="legend-item bad">
-          <span></span>
-          <strong>BAD</strong>
-          <small>&lt; 80%</small>
-        </div>
-      </div>
-    </section>
-
-    <section v-else-if="isMasterIePage" class="legend-card master-card">
+    <section v-if="isMasterIePage" class="legend-card master-card">
       <div class="legend-title">Master Data IE</div>
 
       <div class="master-info-list">
@@ -141,7 +133,7 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
       </div>
     </section>
 
-    <section v-else class="legend-card mechanic-action-card">
+    <section v-else-if="isMechanicPage" class="legend-card mechanic-action-card">
       <button
         type="button"
         class="mechanic-register-btn"
@@ -163,6 +155,10 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
   z-index: 100;
   overflow: visible;
   min-width: 0;
+}
+
+.app-header.single-brand {
+  grid-template-columns: 1fr;
 }
 
 .brand-card,
@@ -359,72 +355,6 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
   letter-spacing: 0.08em;
 }
 
-.legend-list {
-  display: grid;
-  gap: 9px;
-}
-
-.legend-item {
-  display: grid;
-  grid-template-columns: 12px auto 1fr;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  border-radius: 14px;
-  padding: 9px 11px;
-  font-size: 12px;
-  border: 1px solid transparent;
-  min-width: 0;
-}
-
-.legend-item span {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
-.legend-item strong {
-  font-weight: 950;
-  white-space: nowrap;
-}
-
-.legend-item small {
-  justify-self: end;
-  font-size: 11px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.legend-item.good {
-  background: #dcfce7;
-  color: #166534;
-  border-color: #bbf7d0;
-}
-
-.legend-item.good span {
-  background: #22c55e;
-}
-
-.legend-item.normal {
-  background: #fef3c7;
-  color: #92400e;
-  border-color: #fde68a;
-}
-
-.legend-item.normal span {
-  background: #f59e0b;
-}
-
-.legend-item.bad {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-
-.legend-item.bad span {
-  background: #ef4444;
-}
-
 .master-card {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 244, 0.9)),
@@ -615,10 +545,6 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
     min-height: auto;
   }
 
-  .legend-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .master-info-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -662,7 +588,6 @@ const isMechanicPage = computed(() => activePageModel.value === "mechanic");
     font-size: clamp(28px, 7vw, 36px);
   }
 
-  .legend-list,
   .master-info-list,
   .app-header.compact-master .master-info-list {
     grid-template-columns: 1fr;

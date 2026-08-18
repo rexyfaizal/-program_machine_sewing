@@ -1,0 +1,106 @@
+import * as XLSX from "xlsx";
+import { formatDurationHHMMSS } from "./format";
+
+function safeFileName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .slice(0, 80);
+}
+
+function buildRows(list, averages) {
+  const rows = (Array.isArray(list) ? list : []).map((row) => ({
+    Area: row.area || "-",
+    Location: row.locationLabel || "-",
+    UUID: row.uuid || "-",
+    "Nama Operator": row.operatorName || "-",
+    NIK: row.operatorNik || "-",
+    Shift: row.shiftTag || "Normal",
+    Mesin: row.mesin || "-",
+    Output: Number(row.output || 0),
+    "Cycle Time": Number(Number(row.avgCycle || 0).toFixed(2)),
+    "Mesin Menyala": row.powerOnText || "00:00:00",
+    "Mesin Bekerja": row.processText || "00:00:00",
+    "Waktu Mesin Terbuang": row.lossText || "00:00:00",
+    Produktivitas: Number(Number(row.productivity || 0).toFixed(2)),
+    "Tunggu bahan": row.tungguBahanText || "00:00:00",
+    "Mesin Rusak": row.mesinRusakText || "00:00:00",
+    "Ke Toilet": row.toiletText || "00:00:00",
+    Solat: row.solatText || "00:00:00",
+    Others: row.otherText || "00:00:00",
+    Remarks: row.remarks === "-" ? "" : row.remarks,
+  }));
+
+  rows.push({
+    Area: "AVERAGE",
+    Location: "",
+    UUID: "",
+    "Nama Operator": "",
+    NIK: "",
+    Shift: "",
+    Mesin: "",
+    Output: Number(averages?.output || 0),
+    "Cycle Time": Number(averages?.avgCycle || 0),
+    "Mesin Menyala": formatDurationHHMMSS(averages?.runtimeSec || 0),
+    "Mesin Bekerja": formatDurationHHMMSS(averages?.procSec || 0),
+    "Waktu Mesin Terbuang": formatDurationHHMMSS(averages?.lossTimeSec || 0),
+    Produktivitas: Number(averages?.productivity || 0),
+    "Tunggu bahan": formatDurationHHMMSS(averages?.tungguBahanSec || 0),
+    "Mesin Rusak": formatDurationHHMMSS(averages?.mesinRusakSec || 0),
+    "Ke Toilet": formatDurationHHMMSS(averages?.toiletSec || 0),
+    Solat: formatDurationHHMMSS(averages?.solatSec || 0),
+    Others: formatDurationHHMMSS(averages?.otherSec || 0),
+    Remarks: "",
+  });
+
+  return rows;
+}
+
+export function exportOperatorProductivityExcel({
+  rows = [],
+  averages = {},
+  date = "",
+} = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    throw new Error("Tidak ada data operator untuk diexport.");
+  }
+
+  const sheetRows = buildRows(list, averages);
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(sheetRows);
+
+  sheet["!cols"] = [
+    { wch: 8 },
+    { wch: 28 },
+    { wch: 20 },
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 20 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 36 },
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, sheet, "Produktivitas Operator");
+
+  const datePart = safeFileName(date || "tanggal");
+  const fileName = `produktivitas-operator-${datePart}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+
+  return {
+    fileName,
+    rowCount: list.length,
+  };
+}

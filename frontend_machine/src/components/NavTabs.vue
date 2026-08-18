@@ -120,6 +120,25 @@ onBeforeUnmount(() => {
 
       <button
         class="menu-item"
+        :class="{ active: modelValue === 'operator-productivity' }"
+        @click="selectMenu('operator-productivity')"
+      >
+        <span class="menu-icon">
+          <span class="icon-list">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+        </span>
+
+        <span>
+          <strong>Produktivitas Operator</strong>
+          <small>Laporan output dan losstime per operator</small>
+        </span>
+      </button>
+
+      <button
+        class="menu-item"
         :class="{ active: modelValue === 'master-ie' }"
         @click="selectMenu('master-ie')"
       >

@@ -133,6 +133,7 @@ func (r *Repository) enrichOperatorReportSessionStats(
 
 		procSec := int64(0)
 		output := int64(0)
+		avgCycle := 0.0
 		tableName := tableByUUID[strings.ToLower(uuid)]
 		if tableName != "" {
 			ps, err := r.GetProductionStats(ctx, tableName, statsStart, statsEnd)
@@ -141,6 +142,7 @@ func (r *Repository) enrichOperatorReportSessionStats(
 			} else {
 				procSec = ps.ProcSec
 				output = ps.Output
+				avgCycle = utils.Round2(ps.AvgCycle)
 			}
 		}
 
@@ -165,6 +167,7 @@ func (r *Repository) enrichOperatorReportSessionStats(
 		item.ProductivityPct = pct
 		item.ProductivityStatus = utils.StatusFromPct(pct)
 		item.Output = output
+		item.AvgCycle = avgCycle
 	}
 }
 

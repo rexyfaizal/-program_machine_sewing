@@ -89,6 +89,7 @@ type MachineOperatorReportItem struct {
 	ProductivityPct        float64 `json:"productivityPct"`
 	ProductivityStatus     string  `json:"productivityStatus"`
 	Output                 int64   `json:"output"`
+	AvgCycle               float64 `json:"avgCycle"`
 
 	Notes []MachineOperatorNote `json:"notes"`
 }
