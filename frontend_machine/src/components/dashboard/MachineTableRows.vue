@@ -55,7 +55,7 @@ function chartMachine(machine) {
           <th>Location</th>
           <th>Operator</th>
           <th>Operator Note</th>
-          <th class="center">Produktivitas</th>
+          <th class="center">Utilisasi Mesin</th>
           <th>Status</th>
           <th class="center">
             Power On Duration
@@ -97,7 +97,7 @@ function chartMachine(machine) {
             Loss Time
             <small class="th-sub">waktu terbuang</small>
           </th>
-          <th class="center">Produktivitas</th>
+          <th class="center">Utilisasi Mesin</th>
           <th class="center">Status</th>
           <th class="center">Grafik</th>
         </tr>
