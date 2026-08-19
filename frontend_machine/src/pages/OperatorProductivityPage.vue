@@ -88,8 +88,26 @@ function formatPct(value) {
   return `${Number(value || 0).toFixed(2)}%`;
 }
 
+function parseNotePctValue(value) {
+  const text = String(value || "")
+    .trim()
+    .replace(/%/g, "");
+  const num = Number(text);
+  return Number.isFinite(num) ? num : 0;
+}
+
 function formatNotePct(value) {
+  if (parseNotePctValue(value) > 100) {
+    return "> 100%";
+  }
   return String(value || "").trim() || "-";
+}
+
+const notePctAnomalyTitle =
+  "Anomali: durasi note melebihi Mesin Menyala (note mungkin masih terbuka atau mesin sudah mati saat note berjalan).";
+
+function isNotePctAnomaly(value) {
+  return parseNotePctValue(value) > 100;
 }
 
 function shiftClass(tag) {
@@ -271,15 +289,49 @@ onMounted(() => {
               <td class="right mono">{{ row.lossText }}</td>
               <td class="center pct">{{ formatPct(row.productivity) }}</td>
               <td class="right mono">{{ row.tungguBahanText }}</td>
-              <td class="center note-pct">{{ formatNotePct(row.tungguBahanPct) }}</td>
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(row.tungguBahanPct) }"
+                :title="
+                  isNotePctAnomaly(row.tungguBahanPct) ? notePctAnomalyTitle : ''
+                "
+              >
+                {{ formatNotePct(row.tungguBahanPct) }}
+              </td>
               <td class="right mono">{{ row.mesinRusakText }}</td>
-              <td class="center note-pct">{{ formatNotePct(row.mesinRusakPct) }}</td>
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(row.mesinRusakPct) }"
+                :title="
+                  isNotePctAnomaly(row.mesinRusakPct) ? notePctAnomalyTitle : ''
+                "
+              >
+                {{ formatNotePct(row.mesinRusakPct) }}
+              </td>
               <td class="right mono">{{ row.toiletText }}</td>
-              <td class="center note-pct">{{ formatNotePct(row.toiletPct) }}</td>
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(row.toiletPct) }"
+                :title="isNotePctAnomaly(row.toiletPct) ? notePctAnomalyTitle : ''"
+              >
+                {{ formatNotePct(row.toiletPct) }}
+              </td>
               <td class="right mono">{{ row.solatText }}</td>
-              <td class="center note-pct">{{ formatNotePct(row.solatPct) }}</td>
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(row.solatPct) }"
+                :title="isNotePctAnomaly(row.solatPct) ? notePctAnomalyTitle : ''"
+              >
+                {{ formatNotePct(row.solatPct) }}
+              </td>
               <td class="right mono">{{ row.otherText }}</td>
-              <td class="center note-pct">{{ formatNotePct(row.otherPct) }}</td>
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(row.otherPct) }"
+                :title="isNotePctAnomaly(row.otherPct) ? notePctAnomalyTitle : ''"
+              >
+                {{ formatNotePct(row.otherPct) }}
+              </td>
               <td class="remarks">{{ row.remarks }}</td>
             </tr>
           </tbody>
@@ -308,31 +360,69 @@ onMounted(() => {
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.tungguBahanSec) }}
               </td>
-              <td class="center note-pct">
+              <td
+                class="center note-pct"
+                :class="{
+                  'note-pct-anomaly': isNotePctAnomaly(averages.tungguBahanPct),
+                }"
+                :title="
+                  isNotePctAnomaly(averages.tungguBahanPct)
+                    ? notePctAnomalyTitle
+                    : ''
+                "
+              >
                 {{ formatNotePct(averages.tungguBahanPct) }}
               </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.mesinRusakSec) }}
               </td>
-              <td class="center note-pct">
+              <td
+                class="center note-pct"
+                :class="{
+                  'note-pct-anomaly': isNotePctAnomaly(averages.mesinRusakPct),
+                }"
+                :title="
+                  isNotePctAnomaly(averages.mesinRusakPct)
+                    ? notePctAnomalyTitle
+                    : ''
+                "
+              >
                 {{ formatNotePct(averages.mesinRusakPct) }}
               </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.toiletSec) }}
               </td>
-              <td class="center note-pct">
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(averages.toiletPct) }"
+                :title="
+                  isNotePctAnomaly(averages.toiletPct) ? notePctAnomalyTitle : ''
+                "
+              >
                 {{ formatNotePct(averages.toiletPct) }}
               </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.solatSec) }}
               </td>
-              <td class="center note-pct">
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(averages.solatPct) }"
+                :title="
+                  isNotePctAnomaly(averages.solatPct) ? notePctAnomalyTitle : ''
+                "
+              >
                 {{ formatNotePct(averages.solatPct) }}
               </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.otherSec) }}
               </td>
-              <td class="center note-pct">
+              <td
+                class="center note-pct"
+                :class="{ 'note-pct-anomaly': isNotePctAnomaly(averages.otherPct) }"
+                :title="
+                  isNotePctAnomaly(averages.otherPct) ? notePctAnomalyTitle : ''
+                "
+              >
                 {{ formatNotePct(averages.otherPct) }}
               </td>
               <td></td>
@@ -606,6 +696,17 @@ tr:nth-child(even) td {
   font-weight: 800;
   color: #334155;
   white-space: nowrap;
+}
+
+.note-pct.note-pct-anomaly {
+  background: #fee2e2 !important;
+  color: #b91c1c;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px #fca5a5;
+}
+
+.avg-row .note-pct.note-pct-anomaly {
+  background: #fecaca !important;
 }
 
 .shift-tag {
