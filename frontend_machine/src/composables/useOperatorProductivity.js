@@ -13,6 +13,7 @@ import {
   getVal,
   isAutoLogoutText,
   resolveDashboardMetricsForOperator,
+  formatLossPercent,
   resolveExportOperatorShiftTag,
   toNumber,
 } from "../utils/dashboardExportExcel";
@@ -102,6 +103,19 @@ function applyDashboardMetrics(row, metrics) {
     powerOnText: formatDurationHHMMSS(metrics.runtime),
     processText: formatDurationHHMMSS(metrics.procTime),
     lossText: formatDurationHHMMSS(metrics.lossTime),
+  };
+}
+
+function attachNotePercents(row) {
+  const powerOn = Number(row.runtimeSec || 0);
+
+  return {
+    ...row,
+    tungguBahanPct: formatLossPercent(row.tungguBahanSec, powerOn),
+    mesinRusakPct: formatLossPercent(row.mesinRusakSec, powerOn),
+    toiletPct: formatLossPercent(row.toiletSec, powerOn),
+    solatPct: formatLossPercent(row.solatSec, powerOn),
+    otherPct: formatLossPercent(row.otherSec, powerOn),
   };
 }
 
@@ -301,12 +315,14 @@ export function useOperatorProductivity() {
         )
         .filter(Boolean)
         .map((row) =>
-          applyDashboardMetrics(
-            row,
-            resolveDashboardMetricsForOperator(
-              row.uuid,
-              row.shiftTag,
-              shiftMetricsMap
+          attachNotePercents(
+            applyDashboardMetrics(
+              row,
+              resolveDashboardMetricsForOperator(
+                row.uuid,
+                row.shiftTag,
+                shiftMetricsMap
+              )
             )
           )
         );
@@ -319,9 +335,11 @@ export function useOperatorProductivity() {
         .map((row) => normalizeUnloggedMachine(row, settingsMap))
         .filter((row) => row && !loggedUuids.has(normalizeText(row.uuid)))
         .map((row) =>
-          applyDashboardMetrics(
-            row,
-            resolveDashboardMetricsForOperator(row.uuid, "-", shiftMetricsMap)
+          attachNotePercents(
+            applyDashboardMetrics(
+              row,
+              resolveDashboardMetricsForOperator(row.uuid, "-", shiftMetricsMap)
+            )
           )
         );
 
@@ -407,6 +425,11 @@ export function useOperatorProductivity() {
         toiletSec: 0,
         solatSec: 0,
         otherSec: 0,
+        tungguBahanPct: "",
+        mesinRusakPct: "",
+        toiletPct: "",
+        solatPct: "",
+        otherPct: "",
       };
     }
 
@@ -440,18 +463,30 @@ export function useOperatorProductivity() {
       }
     );
 
+    const runtimeSec = Math.round(sum.runtimeSec / count);
+    const tungguBahanSec = Math.round(sum.tungguBahanSec / count);
+    const mesinRusakSec = Math.round(sum.mesinRusakSec / count);
+    const toiletSec = Math.round(sum.toiletSec / count);
+    const solatSec = Math.round(sum.solatSec / count);
+    const otherSec = Math.round(sum.otherSec / count);
+
     return {
       output: Math.round(sum.output / count),
       avgCycle: Number((sum.avgCycle / count).toFixed(2)),
-      runtimeSec: Math.round(sum.runtimeSec / count),
+      runtimeSec,
       procSec: Math.round(sum.procSec / count),
       lossTimeSec: Math.round(sum.lossTimeSec / count),
       productivity: Number((sum.productivity / count).toFixed(2)),
-      tungguBahanSec: Math.round(sum.tungguBahanSec / count),
-      mesinRusakSec: Math.round(sum.mesinRusakSec / count),
-      toiletSec: Math.round(sum.toiletSec / count),
-      solatSec: Math.round(sum.solatSec / count),
-      otherSec: Math.round(sum.otherSec / count),
+      tungguBahanSec,
+      mesinRusakSec,
+      toiletSec,
+      solatSec,
+      otherSec,
+      tungguBahanPct: formatLossPercent(tungguBahanSec, runtimeSec),
+      mesinRusakPct: formatLossPercent(mesinRusakSec, runtimeSec),
+      toiletPct: formatLossPercent(toiletSec, runtimeSec),
+      solatPct: formatLossPercent(solatSec, runtimeSec),
+      otherPct: formatLossPercent(otherSec, runtimeSec),
     };
   });
 

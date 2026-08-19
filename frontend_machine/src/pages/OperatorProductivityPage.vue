@@ -88,6 +88,10 @@ function formatPct(value) {
   return `${Number(value || 0).toFixed(2)}%`;
 }
 
+function formatNotePct(value) {
+  return String(value || "").trim() || "-";
+}
+
 function shiftClass(tag) {
   const text = String(tag || "Normal")
     .trim()
@@ -214,21 +218,26 @@ onMounted(() => {
               <th class="right">Waktu Mesin Terbuang</th>
               <th class="center">Produktivitas</th>
               <th class="right">Tunggu bahan</th>
+              <th class="center" title="Tunggu bahan">%</th>
               <th class="right">Mesin Rusak</th>
+              <th class="center" title="Mesin Rusak">%</th>
               <th class="right">Ke Toilet</th>
+              <th class="center" title="Ke Toilet">%</th>
               <th class="right">Solat</th>
+              <th class="center" title="Solat">%</th>
               <th class="right">Others</th>
+              <th class="center" title="Others">%</th>
               <th>Remarks</th>
             </tr>
           </thead>
 
           <tbody>
             <tr v-if="loading">
-              <td colspan="19" class="empty">Memuat data operator...</td>
+              <td colspan="24" class="empty">Memuat data operator...</td>
             </tr>
 
             <tr v-else-if="!filteredRows.length">
-              <td colspan="19" class="empty">
+              <td colspan="24" class="empty">
                 Tidak ada data mesin pada tanggal ini.
               </td>
             </tr>
@@ -262,10 +271,15 @@ onMounted(() => {
               <td class="right mono">{{ row.lossText }}</td>
               <td class="center pct">{{ formatPct(row.productivity) }}</td>
               <td class="right mono">{{ row.tungguBahanText }}</td>
+              <td class="center note-pct">{{ formatNotePct(row.tungguBahanPct) }}</td>
               <td class="right mono">{{ row.mesinRusakText }}</td>
+              <td class="center note-pct">{{ formatNotePct(row.mesinRusakPct) }}</td>
               <td class="right mono">{{ row.toiletText }}</td>
+              <td class="center note-pct">{{ formatNotePct(row.toiletPct) }}</td>
               <td class="right mono">{{ row.solatText }}</td>
+              <td class="center note-pct">{{ formatNotePct(row.solatPct) }}</td>
               <td class="right mono">{{ row.otherText }}</td>
+              <td class="center note-pct">{{ formatNotePct(row.otherPct) }}</td>
               <td class="remarks">{{ row.remarks }}</td>
             </tr>
           </tbody>
@@ -294,17 +308,32 @@ onMounted(() => {
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.tungguBahanSec) }}
               </td>
+              <td class="center note-pct">
+                {{ formatNotePct(averages.tungguBahanPct) }}
+              </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.mesinRusakSec) }}
+              </td>
+              <td class="center note-pct">
+                {{ formatNotePct(averages.mesinRusakPct) }}
               </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.toiletSec) }}
               </td>
+              <td class="center note-pct">
+                {{ formatNotePct(averages.toiletPct) }}
+              </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.solatSec) }}
               </td>
+              <td class="center note-pct">
+                {{ formatNotePct(averages.solatPct) }}
+              </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.otherSec) }}
+              </td>
+              <td class="center note-pct">
+                {{ formatNotePct(averages.otherPct) }}
               </td>
               <td></td>
             </tr>
@@ -520,7 +549,7 @@ select {
 
 table {
   width: 100%;
-  min-width: 1680px;
+  min-width: 1980px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
@@ -571,6 +600,12 @@ tr:nth-child(even) td {
   background: #dbeafe !important;
   color: #1e40af;
   font-weight: 800;
+}
+
+.note-pct {
+  font-weight: 800;
+  color: #334155;
+  white-space: nowrap;
 }
 
 .shift-tag {
