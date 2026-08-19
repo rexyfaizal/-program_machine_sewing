@@ -9,6 +9,20 @@ function safeFileName(value) {
     .slice(0, 80);
 }
 
+function parseNotePctValue(value) {
+  const text = String(value || "")
+    .trim()
+    .replace(/%/g, "");
+  const num = Number(text);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function formatExportNotePct(value) {
+  if (!String(value || "").trim()) return "";
+  if (parseNotePctValue(value) > 100) return "> 100%";
+  return String(value).trim();
+}
+
 function buildRows(list, averages) {
   const rows = (Array.isArray(list) ? list : []).map((row) => ({
     Area: row.area || "-",
@@ -25,10 +39,15 @@ function buildRows(list, averages) {
     "Waktu Mesin Terbuang": row.lossText || "00:00:00",
     Produktivitas: Number(Number(row.productivity || 0).toFixed(2)),
     "Tunggu bahan": row.tungguBahanText || "00:00:00",
+    "% Tunggu bahan": formatExportNotePct(row.tungguBahanPct),
     "Mesin Rusak": row.mesinRusakText || "00:00:00",
+    "% Mesin Rusak": formatExportNotePct(row.mesinRusakPct),
     "Ke Toilet": row.toiletText || "00:00:00",
+    "% Toilet": formatExportNotePct(row.toiletPct),
     Solat: row.solatText || "00:00:00",
+    "% Solat": formatExportNotePct(row.solatPct),
     Others: row.otherText || "00:00:00",
+    "% Others": formatExportNotePct(row.otherPct),
     Remarks: row.remarks === "-" ? "" : row.remarks,
   }));
 
@@ -47,10 +66,15 @@ function buildRows(list, averages) {
     "Waktu Mesin Terbuang": formatDurationHHMMSS(averages?.lossTimeSec || 0),
     Produktivitas: Number(averages?.productivity || 0),
     "Tunggu bahan": formatDurationHHMMSS(averages?.tungguBahanSec || 0),
+    "% Tunggu bahan": formatExportNotePct(averages?.tungguBahanPct),
     "Mesin Rusak": formatDurationHHMMSS(averages?.mesinRusakSec || 0),
+    "% Mesin Rusak": formatExportNotePct(averages?.mesinRusakPct),
     "Ke Toilet": formatDurationHHMMSS(averages?.toiletSec || 0),
+    "% Toilet": formatExportNotePct(averages?.toiletPct),
     Solat: formatDurationHHMMSS(averages?.solatSec || 0),
+    "% Solat": formatExportNotePct(averages?.solatPct),
     Others: formatDurationHHMMSS(averages?.otherSec || 0),
+    "% Others": formatExportNotePct(averages?.otherPct),
     Remarks: "",
   });
 
@@ -86,10 +110,15 @@ export function exportOperatorProductivityExcel({
     { wch: 20 },
     { wch: 14 },
     { wch: 14 },
+    { wch: 12 },
     { wch: 14 },
     { wch: 12 },
     { wch: 12 },
+    { wch: 10 },
     { wch: 12 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 10 },
     { wch: 36 },
   ];
 
