@@ -25,6 +25,7 @@ const {
   locationOptions,
   filteredRows,
   averages,
+  machineCount,
   loggedInCount,
   unloggedCount,
   formatLongDate,
@@ -188,7 +189,7 @@ onMounted(() => {
         <div>
           <h3>Produktivitas Operator</h3>
           <p>
-            {{ filteredRows.length }} mesin · {{ loggedInCount }} login ·
+            {{ machineCount }} mesin · {{ loggedInCount }} sesi login ·
             {{ unloggedCount }} belum login
           </p>
         </div>

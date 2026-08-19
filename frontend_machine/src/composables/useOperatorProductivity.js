@@ -375,6 +375,14 @@ export function useOperatorProductivity() {
     });
   });
 
+  const machineCount = computed(() => {
+    const uuids = new Set(
+      filteredRows.value
+        .map((row) => String(row.uuid || "").trim().toUpperCase())
+        .filter(Boolean)
+    );
+    return uuids.size;
+  });
   const loggedInCount = computed(
     () => filteredRows.value.filter((row) => row.loggedIn).length
   );
@@ -455,6 +463,7 @@ export function useOperatorProductivity() {
     locationFilter,
     locationOptions,
     filteredRows,
+    machineCount,
     loggedInCount,
     unloggedCount,
     averages,
