@@ -229,6 +229,7 @@ onMounted(() => {
               <th>NIK</th>
               <th>Shift</th>
               <th>Mesin</th>
+              <th>Style</th>
               <th class="right">Output</th>
               <th class="right">Cycle Time</th>
               <th class="right">Mesin Menyala</th>
@@ -251,11 +252,11 @@ onMounted(() => {
 
           <tbody>
             <tr v-if="loading">
-              <td colspan="24" class="empty">Memuat data operator...</td>
+              <td colspan="25" class="empty">Memuat data operator...</td>
             </tr>
 
             <tr v-else-if="!filteredRows.length">
-              <td colspan="24" class="empty">
+              <td colspan="25" class="empty">
                 Tidak ada data mesin pada tanggal ini.
               </td>
             </tr>
@@ -282,6 +283,7 @@ onMounted(() => {
                 <span v-else class="shift-tag shift-empty">-</span>
               </td>
               <td>{{ row.mesin }}</td>
+              <td>{{ row.style }}</td>
               <td class="right">{{ row.output }}</td>
               <td class="right">{{ formatCycle(row.avgCycle) }}</td>
               <td class="right mono">{{ row.powerOnText }}</td>
@@ -339,6 +341,7 @@ onMounted(() => {
           <tfoot v-if="!loading && filteredRows.length">
             <tr class="avg-row">
               <td><strong>AVERAGE</strong></td>
+              <td></td>
               <td></td>
               <td></td>
               <td></td>

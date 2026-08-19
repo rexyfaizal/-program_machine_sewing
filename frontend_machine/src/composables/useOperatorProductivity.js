@@ -175,6 +175,9 @@ export function useOperatorProductivity() {
     const machineName = String(
       getVal(row, "machineName", "MachineName") || ""
     ).trim();
+    const styleName = String(
+      getVal(row, "styleName", "StyleName", "style_name") || ""
+    ).trim();
 
     const notes = extractRows(getVal(row, "notes", "Notes") || []);
     const loss = buildExportLossBreakdown(notes);
@@ -199,6 +202,7 @@ export function useOperatorProductivity() {
       operatorName,
       shiftTag,
       mesin: processName || machineName || "-",
+      style: styleName || "-",
       tungguBahanSec: toNumber(loss.tungguHancaSec),
       mesinRusakSec: toNumber(loss.mesinRusakSec),
       toiletSec: toNumber(loss.toiletSec),
@@ -265,6 +269,7 @@ export function useOperatorProductivity() {
       operatorName: "Not logged in",
       shiftTag: "-",
       mesin,
+      style: "-",
       ...emptyLossFields(),
       loginTime: "",
       loggedIn: false,
