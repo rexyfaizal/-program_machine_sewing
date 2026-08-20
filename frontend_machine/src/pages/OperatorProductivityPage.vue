@@ -231,7 +231,7 @@ onMounted(() => {
               <th>Mesin</th>
               <th>Style</th>
               <th class="right">Output</th>
-              <th class="right">Cycle Time</th>
+              <th class="right">Avg Proses</th>
               <th class="right">Mesin Menyala</th>
               <th class="right">Mesin Bekerja</th>
               <th class="right">Waktu Mesin Terbuang</th>

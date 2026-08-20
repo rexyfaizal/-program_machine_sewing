@@ -71,7 +71,7 @@ function chartMachine(machine) {
           </th>
           <th>Output</th>
           <th>Abnormal</th>
-          <th>Avg / Max CT</th>
+          <th>Avg / Max Proses</th>
           <th>Alarm</th>
           <th>Program Dominan</th>
           <th>UUID / Table</th>
