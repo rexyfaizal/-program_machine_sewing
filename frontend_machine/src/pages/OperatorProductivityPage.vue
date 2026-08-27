@@ -235,7 +235,7 @@ onMounted(() => {
               <th class="right">Mesin Menyala</th>
               <th class="right">Mesin Bekerja</th>
               <th class="right">Waktu Mesin Terbuang</th>
-              <th class="center">Produktivitas</th>
+              <th class="center">Utilitas Mesin</th>
               <th class="right">Tunggu bahan</th>
               <th class="center" title="Tunggu bahan">%</th>
               <th class="right">Mesin Rusak</th>
