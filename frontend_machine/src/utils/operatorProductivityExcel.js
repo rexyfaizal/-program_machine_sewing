@@ -1,5 +1,7 @@
 import * as XLSX from "xlsx";
 import { formatDurationHHMMSS } from "./format";
+import { formatCtNumber, formatProduktivitasCtPct } from "./operatorCt";
+import { formatOutputTarget } from "./operatorOutputTarget";
 
 function safeFileName(value) {
   return String(value || "")
@@ -34,11 +36,19 @@ function buildRows(list, averages) {
     Mesin: row.mesin || "-",
     Style: row.style || "-",
     Output: Number(row.output || 0),
-    "Avg Proses": Number(Number(row.avgCycle || 0).toFixed(2)),
+    "Output Targetan": formatOutputTarget(row.outputTarget),
+    "CT SUM": formatCtNumber(row.ctSum),
+    "CT STD": formatCtNumber(row.ctStd),
+    CT: formatCtNumber(row.ctValue),
+    "Kap/Jam": row.kapPerJam || "",
     "Mesin Menyala": row.powerOnText || "00:00:00",
     "Mesin Bekerja": row.processText || "00:00:00",
     "Waktu Mesin Terbuang": row.lossText || "00:00:00",
     "Utilitas Mesin": Number(Number(row.productivity || 0).toFixed(2)),
+    "Produktivitas CT": formatProduktivitasCtPct(row.produktivitasCt),
+    "Produktivitas CT Targetan": formatProduktivitasCtPct(
+      row.produktivitasCtTargetan
+    ),
     "Tunggu bahan": row.tungguBahanText || "00:00:00",
     "% Tunggu bahan": formatExportNotePct(row.tungguBahanPct),
     "Mesin Rusak": row.mesinRusakText || "00:00:00",
@@ -62,11 +72,19 @@ function buildRows(list, averages) {
     Mesin: "",
     Style: "",
     Output: Number(averages?.output || 0),
-    "Avg Proses": Number(averages?.avgCycle || 0),
+    "Output Targetan": formatOutputTarget(averages?.outputTarget),
+    "CT SUM": "",
+    "CT STD": "",
+    CT: "",
+    "Kap/Jam": "",
     "Mesin Menyala": formatDurationHHMMSS(averages?.runtimeSec || 0),
     "Mesin Bekerja": formatDurationHHMMSS(averages?.procSec || 0),
     "Waktu Mesin Terbuang": formatDurationHHMMSS(averages?.lossTimeSec || 0),
     "Utilitas Mesin": Number(averages?.productivity || 0),
+    "Produktivitas CT": formatProduktivitasCtPct(averages?.produktivitasCt),
+    "Produktivitas CT Targetan": formatProduktivitasCtPct(
+      averages?.produktivitasCtTargetan
+    ),
     "Tunggu bahan": formatDurationHHMMSS(averages?.tungguBahanSec || 0),
     "% Tunggu bahan": formatExportNotePct(averages?.tungguBahanPct),
     "Mesin Rusak": formatDurationHHMMSS(averages?.mesinRusakSec || 0),
@@ -106,11 +124,17 @@ export function exportOperatorProductivityExcel({
     { wch: 12 },
     { wch: 28 },
     { wch: 10 },
-    { wch: 12 },
+    { wch: 16 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 8 },
+    { wch: 10 },
     { wch: 16 },
     { wch: 16 },
     { wch: 20 },
     { wch: 14 },
+    { wch: 18 },
+    { wch: 22 },
     { wch: 14 },
     { wch: 12 },
     { wch: 14 },

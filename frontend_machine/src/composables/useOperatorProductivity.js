@@ -3,6 +3,8 @@ import {
   getLineShiftConfig,
   getMachineOperatorReport,
   getMachineSettings,
+  getOperatorCtMaster,
+  getOperatorOutputTarget,
   getProductivity,
 } from "../api/machineApi";
 import {
@@ -19,6 +21,15 @@ import {
 } from "../utils/dashboardExportExcel";
 import { buildLineShiftConfigMap } from "../utils/gm3Shift";
 import { formatDurationHHMMSS } from "../utils/format";
+import {
+  attachOperatorCtFields,
+  attachProduktivitasCtFields,
+  buildOperatorCtMap,
+} from "../utils/operatorCt";
+import {
+  attachOperatorOutputTargetFields,
+  buildOperatorOutputTargetMap,
+} from "../utils/operatorOutputTarget";
 
 function normalizeText(value) {
   return String(value || "")
@@ -57,6 +68,15 @@ function lineSortParts(location) {
   };
 }
 
+function attachOperatorMasterFields(row, ctMap, outputTargetMap) {
+  const withMaster = attachOperatorOutputTargetFields(
+    attachOperatorCtFields(row, ctMap),
+    outputTargetMap
+  );
+
+  return attachProduktivitasCtFields(withMaster);
+}
+
 function compareOperatorRows(a, b) {
   const ka = lineSortParts(a.location || a.locationLabel);
   const kb = lineSortParts(b.location || b.locationLabel);
@@ -81,7 +101,6 @@ function applyDashboardMetrics(row, metrics) {
     return {
       ...row,
       output: 0,
-      avgCycle: 0,
       runtimeSec: 0,
       procSec: 0,
       lossTimeSec: 0,
@@ -95,7 +114,6 @@ function applyDashboardMetrics(row, metrics) {
   return {
     ...row,
     output: metrics.output,
-    avgCycle: metrics.avgCT,
     runtimeSec: metrics.runtime,
     procSec: metrics.procTime,
     lossTimeSec: metrics.lossTime,
@@ -288,6 +306,8 @@ export function useOperatorProductivity() {
         reportData,
         settingsData,
         shiftConfigData,
+        operatorCtData,
+        operatorOutputTargetData,
         currentProd,
         shift1Prod,
         shift2Prod,
@@ -296,11 +316,16 @@ export function useOperatorProductivity() {
         getMachineOperatorReport(requestDate),
         getMachineSettings().catch(() => []),
         getLineShiftConfig("").catch(() => ({ lines: [] })),
+        getOperatorCtMaster().catch(() => []),
+        getOperatorOutputTarget(requestDate).catch(() => []),
         getProductivity(requestDate, { shift: "CURRENT" }).catch(() => []),
         getProductivity(requestDate, { shift: "SHIFT_1" }).catch(() => []),
         getProductivity(requestDate, { shift: "SHIFT_2" }).catch(() => []),
         getProductivity(requestDate, { shift: "SHIFT_3" }).catch(() => []),
       ]);
+
+      const ctMap = buildOperatorCtMap(operatorCtData);
+      const outputTargetMap = buildOperatorOutputTargetMap(operatorOutputTargetData);
 
       const settingsMap = buildSettingsMap(settingsData);
       const shiftConfigMap = buildLineShiftConfigMap(
@@ -320,15 +345,19 @@ export function useOperatorProductivity() {
         )
         .filter(Boolean)
         .map((row) =>
-          attachNotePercents(
-            applyDashboardMetrics(
-              row,
-              resolveDashboardMetricsForOperator(
-                row.uuid,
-                row.shiftTag,
-                shiftMetricsMap
+          attachOperatorMasterFields(
+            attachNotePercents(
+              applyDashboardMetrics(
+                row,
+                resolveDashboardMetricsForOperator(
+                  row.uuid,
+                  row.shiftTag,
+                  shiftMetricsMap
+                )
               )
-            )
+            ),
+            ctMap,
+            outputTargetMap
           )
         );
 
@@ -340,11 +369,15 @@ export function useOperatorProductivity() {
         .map((row) => normalizeUnloggedMachine(row, settingsMap))
         .filter((row) => row && !loggedUuids.has(normalizeText(row.uuid)))
         .map((row) =>
-          attachNotePercents(
-            applyDashboardMetrics(
-              row,
-              resolveDashboardMetricsForOperator(row.uuid, "-", shiftMetricsMap)
-            )
+          attachOperatorMasterFields(
+            attachNotePercents(
+              applyDashboardMetrics(
+                row,
+                resolveDashboardMetricsForOperator(row.uuid, "-", shiftMetricsMap)
+              )
+            ),
+            ctMap,
+            outputTargetMap
           )
         );
 
@@ -420,7 +453,9 @@ export function useOperatorProductivity() {
     if (!count) {
       return {
         output: 0,
-        avgCycle: 0,
+        outputTarget: 0,
+        produktivitasCt: 0,
+        produktivitasCtTargetan: 0,
         runtimeSec: 0,
         procSec: 0,
         lossTimeSec: 0,
@@ -441,7 +476,18 @@ export function useOperatorProductivity() {
     const sum = list.reduce(
       (acc, row) => {
         acc.output += Number(row.output || 0);
-        acc.avgCycle += Number(row.avgCycle || 0);
+        acc.outputTarget += Number(row.outputTarget || 0);
+        if (row.produktivitasCt !== null && row.produktivitasCt !== undefined) {
+          acc.produktivitasCt += Number(row.produktivitasCt || 0);
+          acc.produktivitasCtCount += 1;
+        }
+        if (
+          row.produktivitasCtTargetan !== null &&
+          row.produktivitasCtTargetan !== undefined
+        ) {
+          acc.produktivitasCtTargetan += Number(row.produktivitasCtTargetan || 0);
+          acc.produktivitasCtTargetanCount += 1;
+        }
         acc.runtimeSec += Number(row.runtimeSec || 0);
         acc.procSec += Number(row.procSec || 0);
         acc.lossTimeSec += Number(row.lossTimeSec || 0);
@@ -455,7 +501,11 @@ export function useOperatorProductivity() {
       },
       {
         output: 0,
-        avgCycle: 0,
+        outputTarget: 0,
+        produktivitasCt: 0,
+        produktivitasCtTargetan: 0,
+        produktivitasCtCount: 0,
+        produktivitasCtTargetanCount: 0,
         runtimeSec: 0,
         procSec: 0,
         lossTimeSec: 0,
@@ -477,7 +527,17 @@ export function useOperatorProductivity() {
 
     return {
       output: Math.round(sum.output / count),
-      avgCycle: Number((sum.avgCycle / count).toFixed(2)),
+      outputTarget: Math.round(sum.outputTarget / count),
+      produktivitasCt: sum.produktivitasCtCount
+        ? Number((sum.produktivitasCt / sum.produktivitasCtCount).toFixed(2))
+        : 0,
+      produktivitasCtTargetan: sum.produktivitasCtTargetanCount
+        ? Number(
+            (sum.produktivitasCtTargetan / sum.produktivitasCtTargetanCount).toFixed(
+              2
+            )
+          )
+        : 0,
       runtimeSec,
       procSec: Math.round(sum.procSec / count),
       lossTimeSec: Math.round(sum.lossTimeSec / count),

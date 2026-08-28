@@ -172,6 +172,12 @@ func main() {
 		if err := repo.EnsureMechanicClaimSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema mechanic claim:", err)
 		}
+		if err := repo.EnsureOperatorCtSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema operator_ct_master:", err)
+		}
+		if err := repo.EnsureOperatorOutputTargetSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema operator_output_target:", err)
+		}
 		cancel()
 	}
 
@@ -220,6 +226,11 @@ func main() {
 	mux.HandleFunc("/api/mechanic/broken-machines", api.MechanicBrokenList)
 	mux.HandleFunc("/api/mechanic/claim", api.MechanicClaim)
 	mux.HandleFunc("/api/mechanic/done", api.MechanicDone)
+
+	mux.HandleFunc("/api/operator-ct", api.OperatorCtMaster)
+	mux.HandleFunc("/api/operator-ct/import", api.OperatorCtImport)
+	mux.HandleFunc("/api/operator-output-target", api.OperatorOutputTarget)
+	mux.HandleFunc("/api/operator-output-target/import", api.OperatorOutputTargetImport)
 
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)

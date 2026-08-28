@@ -1,8 +1,15 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useOperatorProductivity } from "../composables/useOperatorProductivity";
+import { useOperatorCtImport } from "../composables/useOperatorCtImport";
+import { useOperatorOutputTargetImport } from "../composables/useOperatorOutputTargetImport";
 import { exportOperatorProductivityExcel } from "../utils/operatorProductivityExcel";
 import { formatDurationHHMMSS } from "../utils/format";
+import { formatCtNumber, formatProduktivitasCtPct } from "../utils/operatorCt";
+import { formatOutputTarget } from "../utils/operatorOutputTarget";
+import OperatorCtImportPanel from "../components/operator/OperatorCtImportPanel.vue";
+import OperatorOutputTargetImportPanel from "../components/operator/OperatorOutputTargetImportPanel.vue";
+import { getInitialAdminMode } from "../utils/adminMode";
 
 const props = defineProps({
   selectedDate: {
@@ -16,6 +23,7 @@ const emit = defineEmits(["update:selectedDate"]);
 const exporting = ref(false);
 const notice = ref("");
 const noticeType = ref("ok");
+const isAdmin = ref(false);
 
 const {
   loading,
@@ -28,19 +36,61 @@ const {
   machineCount,
   loggedInCount,
   unloggedCount,
-  formatLongDate,
   loadOperatorProductivity,
 } = useOperatorProductivity();
+
+const {
+  importing: ctImporting,
+  importInputKey,
+  importFileName,
+  importPreviewRows,
+  importPreviewDisplayRows,
+  importDuplicateRows,
+  importErrorRows,
+  importStats,
+  importErrorMessage,
+  importSuccessMessage,
+  resetImport,
+  handleImportFileChange,
+  submitImportExcel,
+  cleanupOperatorCtImport,
+} = useOperatorCtImport({
+  isAdmin,
+  onImported: async () => {
+    await loadOperatorProductivity(localDate.value);
+  },
+});
+
+const {
+  importing: targetImporting,
+  importInputKey: targetImportInputKey,
+  importFileName: targetImportFileName,
+  importPreviewRows: targetImportPreviewRows,
+  importPreviewDisplayRows: targetImportPreviewDisplayRows,
+  importDuplicateRows: targetImportDuplicateRows,
+  importErrorRows: targetImportErrorRows,
+  importStats: targetImportStats,
+  importErrorMessage: targetImportErrorMessage,
+  importSuccessMessage: targetImportSuccessMessage,
+  resetImport: resetTargetImport,
+  handleImportFileChange: handleTargetImportFileChange,
+  submitImportExcel: submitTargetImportExcel,
+  cleanupOperatorOutputTargetImport,
+} = useOperatorOutputTargetImport({
+  isAdmin,
+  selectedDate: () => localDate.value,
+  onImported: async () => {
+    await loadOperatorProductivity(localDate.value);
+  },
+});
 
 const localDate = computed({
   get: () => props.selectedDate,
   set: (value) => emit("update:selectedDate", value),
 });
 
-const dateLabel = computed(() => formatLongDate(localDate.value));
-
 const page = ref(1);
-const pageSize = 10;
+const pageSize = 20;
 
 const totalPages = computed(() => {
   return Math.max(1, Math.ceil(filteredRows.value.length / pageSize));
@@ -80,12 +130,23 @@ function goPage(pageNumber) {
   page.value = Math.min(totalPages.value, Math.max(1, next));
 }
 
-function formatCycle(value) {
-  return Number(value || 0).toFixed(2);
-}
-
 function formatPct(value) {
   return `${Number(value || 0).toFixed(2)}%`;
+}
+
+function formatDisplayName(value) {
+  const text = String(value || "").trim();
+  if (!text) return "-";
+  if (text.toLowerCase() === "not logged in") return text;
+
+  const letters = text.replace(/[^A-Za-z]/g, "");
+  if (letters && letters === letters.toUpperCase()) {
+    return text
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  return text;
 }
 
 function parseNotePctValue(value) {
@@ -156,107 +217,168 @@ watch([keyword, locationFilter], () => {
   page.value = 1;
 });
 
-onMounted(() => {
+onMounted(async () => {
+  isAdmin.value = await Promise.resolve(getInitialAdminMode());
   loadOperatorProductivity(localDate.value);
+});
+
+onBeforeUnmount(() => {
+  cleanupOperatorCtImport();
+  cleanupOperatorOutputTargetImport();
 });
 </script>
 
 <template>
   <section class="operator-prod-page">
-    <section class="toolbar-card">
-      <div class="toolbar-left">
-        <label class="date-box">
-          <span class="box-label">Tanggal</span>
-          <input v-model="localDate" type="date" />
-        </label>
+    <section v-if="isAdmin" class="ie-upload-group">
+      <OperatorCtImportPanel
+      embedded
+      :is-admin="isAdmin"
+      :template-rows="filteredRows"
+      :location-filter="locationFilter"
+      :importing="ctImporting"
+      :import-input-key="importInputKey"
+      :import-file-name="importFileName"
+      :import-preview-rows="importPreviewRows"
+      :import-preview-display-rows="importPreviewDisplayRows"
+      :import-duplicate-rows="importDuplicateRows"
+      :import-error-rows="importErrorRows"
+      :import-stats="importStats"
+      :import-error-message="importErrorMessage"
+      :import-success-message="importSuccessMessage"
+      @reset-import="resetImport"
+      @file-change="handleImportFileChange"
+      @submit-import="submitImportExcel"
+    />
 
-        <label class="search-box">
-          <span class="box-label">Pencarian</span>
-          <input
-            v-model="keyword"
-            type="text"
-            placeholder="Cari operator, NIK, lokasi, UUID, atau proses..."
-          />
-        </label>
-
-        <label class="filter-box">
-          <span class="box-label">Area</span>
-          <select v-model="locationFilter">
-            <option
-              v-for="area in locationOptions"
-              :key="area"
-              :value="area"
-            >
-              {{ area === "ALL" ? "Semua Area" : area }}
-            </option>
-          </select>
-        </label>
-      </div>
-
-      <button
-        type="button"
-        class="export-btn"
-        :disabled="exporting || loading || !filteredRows.length"
-        @click="handleExport"
-      >
-        {{ exporting ? "Exporting..." : "Export Excel" }}
-      </button>
+    <OperatorOutputTargetImportPanel
+      embedded
+      :is-admin="isAdmin"
+      :selected-date="localDate"
+      :template-rows="filteredRows"
+      :location-filter="locationFilter"
+      :importing="targetImporting"
+      :import-input-key="targetImportInputKey"
+      :import-file-name="targetImportFileName"
+      :import-preview-rows="targetImportPreviewRows"
+      :import-preview-display-rows="targetImportPreviewDisplayRows"
+      :import-duplicate-rows="targetImportDuplicateRows"
+      :import-error-rows="targetImportErrorRows"
+      :import-stats="targetImportStats"
+      :import-error-message="targetImportErrorMessage"
+      :import-success-message="targetImportSuccessMessage"
+      @reset-import="resetTargetImport"
+      @file-change="handleTargetImportFileChange"
+      @submit-import="submitTargetImportExcel"
+    />
     </section>
 
-    <p v-if="notice" class="notice" :class="noticeType">{{ notice }}</p>
-    <p v-if="errorMessage" class="notice error">{{ errorMessage }}</p>
-
     <section class="table-card">
-      <div class="table-head">
-        <div>
+      <div class="table-card-head">
+        <div class="table-title-block">
           <h3>Produktivitas Operator</h3>
-          <p>
+          <p class="table-meta">
             {{ machineCount }} mesin · {{ loggedInCount }} sesi login ·
             {{ unloggedCount }} belum login
           </p>
+          <p class="table-legend">
+            <span class="legend-item legend-ie">Upload IE</span>
+            <span class="legend-item legend-prod">Produktivitas sistem</span>
+          </p>
         </div>
-        <div class="date-banner">{{ dateLabel || "-" }}</div>
+
+        <div class="table-toolbar">
+          <label class="filter-field filter-date">
+            <span>Tanggal</span>
+            <input v-model="localDate" type="date" />
+          </label>
+
+          <label class="filter-field filter-search">
+            <span>Cari</span>
+            <input
+              v-model="keyword"
+              type="text"
+              placeholder="Operator, NIK, lokasi, UUID..."
+            />
+          </label>
+
+          <div class="filter-field filter-area-segment">
+            <span>Area</span>
+            <div class="area-switch">
+              <button
+                v-for="area in locationOptions"
+                :key="area"
+                type="button"
+                class="area-btn"
+                :class="{ active: locationFilter === area }"
+                @click="locationFilter = area"
+              >
+                {{ area === "ALL" ? "Semua" : area }}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="export-btn"
+            :disabled="exporting || loading || !filteredRows.length"
+            @click="handleExport"
+          >
+            {{ exporting ? "Export..." : "Export Excel" }}
+          </button>
+        </div>
       </div>
 
+      <p v-if="notice" class="notice inline-notice" :class="noticeType">
+        {{ notice }}
+      </p>
+      <p v-if="errorMessage" class="notice error inline-notice">{{ errorMessage }}</p>
+
       <div class="table-wrap">
-        <table>
+        <table class="operator-table">
           <thead>
             <tr>
-              <th>Area</th>
-              <th>Location</th>
-              <th>UUID</th>
-              <th>Nama Operator</th>
-              <th>NIK</th>
-              <th>Shift</th>
-              <th>Mesin</th>
-              <th>Style</th>
-              <th class="right">Output</th>
-              <th class="right">Avg Proses</th>
-              <th class="right">Mesin Menyala</th>
-              <th class="right">Mesin Bekerja</th>
-              <th class="right">Waktu Mesin Terbuang</th>
-              <th class="center">Utilitas Mesin</th>
-              <th class="right">Tunggu bahan</th>
-              <th class="center" title="Tunggu bahan">%</th>
-              <th class="right">Mesin Rusak</th>
-              <th class="center" title="Mesin Rusak">%</th>
-              <th class="right">Ke Toilet</th>
-              <th class="center" title="Ke Toilet">%</th>
-              <th class="right">Solat</th>
-              <th class="center" title="Solat">%</th>
-              <th class="right">Others</th>
-              <th class="center" title="Others">%</th>
-              <th>Remarks</th>
+              <th class="th-left th-wide freeze-col freeze-col-1">Area</th>
+              <th class="th-left th-location freeze-col freeze-col-2">Location</th>
+              <th class="th-left th-uuid freeze-col freeze-col-3">UUID</th>
+              <th class="th-left th-operator freeze-col freeze-col-4">Nama Operator</th>
+              <th class="th-narrow freeze-col freeze-col-5 freeze-col-last">NIK</th>
+              <th class="th-narrow">Shift</th>
+              <th class="th-left th-mesin">Mesin</th>
+              <th class="th-narrow">Style</th>
+              <th class="th-num">Output</th>
+              <th class="th-num col-ie">Output Targetan</th>
+              <th class="th-num col-ie">CT SUM</th>
+              <th class="th-num col-ie">CT STD</th>
+              <th class="th-num col-ie">CT</th>
+              <th class="th-num col-ie">Kap/Jam</th>
+              <th class="th-num">Mesin Menyala</th>
+              <th class="th-num">Mesin Bekerja</th>
+              <th class="th-num">Waktu Mesin Terbuang</th>
+              <th class="th-num">Utilitas Mesin</th>
+              <th class="th-num">Produktivitas CT</th>
+              <th class="th-num">Produktivitas CT Targetan</th>
+              <th class="th-num">Tunggu bahan</th>
+              <th class="th-pct" title="Tunggu bahan">%</th>
+              <th class="th-num">Mesin Rusak</th>
+              <th class="th-pct" title="Mesin Rusak">%</th>
+              <th class="th-num">Ke Toilet</th>
+              <th class="th-pct" title="Ke Toilet">%</th>
+              <th class="th-num">Solat</th>
+              <th class="th-pct" title="Solat">%</th>
+              <th class="th-num">Others</th>
+              <th class="th-pct" title="Others">%</th>
+              <th class="th-left th-remarks">Remarks</th>
             </tr>
           </thead>
 
           <tbody>
             <tr v-if="loading">
-              <td colspan="25" class="empty">Memuat data operator...</td>
+              <td colspan="31" class="empty">Memuat data operator...</td>
             </tr>
 
             <tr v-else-if="!filteredRows.length">
-              <td colspan="25" class="empty">
+              <td colspan="31" class="empty">
                 Tidak ada data mesin pada tanggal ini.
               </td>
             </tr>
@@ -265,14 +387,23 @@ onMounted(() => {
               v-for="row in pagedRows"
               :key="`${row.uuid}-${row.id}-${row.loginTime}`"
             >
-              <td>{{ row.area }}</td>
-              <td>{{ row.locationLabel }}</td>
-              <td class="mono">{{ row.uuid }}</td>
-              <td :class="{ 'not-logged': !row.loggedIn }">
-                {{ row.operatorName }}
+              <td class="col-area freeze-col freeze-col-1">{{ row.area }}</td>
+              <td class="col-location cell-wrap freeze-col freeze-col-2">
+                {{ row.locationLabel }}
               </td>
-              <td>{{ row.operatorNik || "-" }}</td>
-              <td>
+              <td class="mono col-uuid cell-wrap freeze-col freeze-col-3">
+                {{ row.uuid }}
+              </td>
+              <td
+                class="col-operator cell-wrap freeze-col freeze-col-4"
+                :class="{ 'not-logged': !row.loggedIn }"
+              >
+                {{ formatDisplayName(row.operatorName) }}
+              </td>
+              <td class="col-nik freeze-col freeze-col-5 freeze-col-last">
+                {{ row.operatorNik || "-" }}
+              </td>
+              <td class="col-shift">
                 <span
                   v-if="row.loggedIn"
                   class="shift-tag"
@@ -282,14 +413,24 @@ onMounted(() => {
                 </span>
                 <span v-else class="shift-tag shift-empty">-</span>
               </td>
-              <td>{{ row.mesin }}</td>
-              <td>{{ row.style }}</td>
+              <td class="col-mesin cell-wrap">{{ row.mesin }}</td>
+              <td class="col-style">{{ row.style }}</td>
               <td class="right">{{ row.output }}</td>
-              <td class="right">{{ formatCycle(row.avgCycle) }}</td>
+              <td class="right col-ie">{{ formatOutputTarget(row.outputTarget) }}</td>
+              <td class="right col-ie">{{ formatCtNumber(row.ctSum) }}</td>
+              <td class="right col-ie">{{ formatCtNumber(row.ctStd) }}</td>
+              <td class="right col-ie">{{ formatCtNumber(row.ctValue) }}</td>
+              <td class="right col-ie">{{ row.kapPerJam || "-" }}</td>
               <td class="right mono">{{ row.powerOnText }}</td>
               <td class="right mono">{{ row.processText }}</td>
               <td class="right mono">{{ row.lossText }}</td>
               <td class="center pct">{{ formatPct(row.productivity) }}</td>
+              <td class="center pct">
+                {{ formatProduktivitasCtPct(row.produktivitasCt) }}
+              </td>
+              <td class="center pct">
+                {{ formatProduktivitasCtPct(row.produktivitasCtTargetan) }}
+              </td>
               <td class="right mono">{{ row.tungguBahanText }}</td>
               <td
                 class="center note-pct"
@@ -334,22 +475,26 @@ onMounted(() => {
               >
                 {{ formatNotePct(row.otherPct) }}
               </td>
-              <td class="remarks">{{ row.remarks }}</td>
+              <td class="remarks cell-wrap">{{ row.remarks }}</td>
             </tr>
           </tbody>
 
           <tfoot v-if="!loading && filteredRows.length">
             <tr class="avg-row">
-              <td><strong>AVERAGE</strong></td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
+              <td class="freeze-col freeze-col-1"><strong>AVERAGE</strong></td>
+              <td class="freeze-col freeze-col-2"></td>
+              <td class="freeze-col freeze-col-3"></td>
+              <td class="freeze-col freeze-col-4"></td>
+              <td class="freeze-col freeze-col-5 freeze-col-last"></td>
               <td></td>
               <td></td>
               <td></td>
               <td class="right">{{ averages.output }}</td>
-              <td class="right">{{ formatCycle(averages.avgCycle) }}</td>
+              <td class="right col-ie">{{ formatOutputTarget(averages.outputTarget) }}</td>
+              <td class="col-ie"></td>
+              <td class="col-ie"></td>
+              <td class="col-ie"></td>
+              <td class="col-ie"></td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.runtimeSec) }}
               </td>
@@ -360,6 +505,12 @@ onMounted(() => {
                 {{ formatDurationHHMMSS(averages.lossTimeSec) }}
               </td>
               <td class="center pct">{{ formatPct(averages.productivity) }}</td>
+              <td class="center pct">
+                {{ formatProduktivitasCtPct(averages.produktivitasCt) }}
+              </td>
+              <td class="center pct">
+                {{ formatProduktivitasCtPct(averages.produktivitasCtTargetan) }}
+              </td>
               <td class="right mono">
                 {{ formatDurationHHMMSS(averages.tungguBahanSec) }}
               </td>
@@ -472,70 +623,166 @@ onMounted(() => {
   min-width: 0;
 }
 
-.toolbar-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: stretch;
-  padding: 16px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #ffffff, #f3f8ff);
-  border: 1px solid #dbeafe;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.toolbar-left {
+.ie-upload-group {
   display: grid;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(140px, 180px);
-  gap: 14px;
-  flex: 1;
-  min-width: 0;
-}
-
-.date-box,
-.search-box,
-.filter-box {
-  display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
   padding: 12px 14px;
-  border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid #dbeafe;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
 }
 
-.box-label {
-  font-size: 11px;
-  font-weight: 800;
-  color: #64748b;
-  text-transform: uppercase;
+.ie-upload-group > :deep(.import-panel:first-child) {
+  padding-right: 14px;
+  border-right: 1px solid #e2e8f0;
 }
 
-input,
-select {
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 700;
+.ie-upload-group > :deep(.import-panel:last-child) {
+  padding-left: 14px;
+}
+
+@media (max-width: 900px) {
+  .ie-upload-group {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ie-upload-group > :deep(.import-panel:first-child) {
+    padding-right: 0;
+    padding-bottom: 12px;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .ie-upload-group > :deep(.import-panel:last-child) {
+    padding-left: 0;
+    padding-top: 0;
+  }
+}
+
+.table-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.table-title-block h3 {
+  margin: 0;
+  font-size: 18px;
   color: #0f172a;
 }
 
-.export-btn {
+.table-meta {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.filter-field {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  min-width: 0;
+}
+
+.filter-field span {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.filter-field input,
+.filter-field select {
   border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 0;
+}
+
+.filter-date {
+  flex: 0 0 150px;
+}
+
+.filter-search {
+  flex: 1 1 220px;
+}
+
+.filter-area-segment {
+  flex: 0 1 auto;
+  min-width: 220px;
+  background: #fff;
+  border-color: #dbeafe;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.035);
+}
+
+.area-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.area-btn {
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 12px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.area-btn:hover {
+  background: #e2e8f0;
+}
+
+.area-btn.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.table-toolbar .export-btn {
+  flex: 0 0 auto;
+  height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
   background: #16a34a;
   color: #fff;
-  border-radius: 16px;
-  padding: 0 18px;
+  font-size: 13px;
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.export-btn:disabled {
+.table-toolbar .export-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.inline-notice {
+  margin: 0 0 10px;
+  font-size: 13px;
 }
 
 .notice {
@@ -562,43 +809,63 @@ select {
   min-width: 0;
 }
 
-.table-head {
+.table-legend {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-top: 8px !important;
 }
 
-.table-head h3 {
-  margin: 0;
-  font-size: 18px;
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
 }
 
-.table-head p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-weight: 800;
-  font-size: 13px;
+.legend-item::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.date-banner {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: #fff;
-  font-weight: 800;
-  font-size: 16px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  min-width: 240px;
-  text-align: center;
-  white-space: nowrap;
+.legend-ie::before {
+  background: #fff7ed;
+}
+
+.legend-prod::before {
+  background: #dbeafe;
+}
+
+@media (max-width: 900px) {
+  .table-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-search {
+    grid-column: 1 / -1;
+  }
+
+  .filter-area-segment {
+    grid-column: 1 / -1;
+  }
+
+  .table-toolbar .export-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 44px;
+  }
 }
 
 .table-wrap {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid #dbe4ef;
   border-radius: 16px;
 }
@@ -640,12 +907,17 @@ select {
   cursor: not-allowed;
 }
 
-table {
-  width: 100%;
-  min-width: 1980px;
+table.operator-table {
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
+  --freeze-w-1: 56px;
+  --freeze-w-2: 148px;
+  --freeze-w-3: 132px;
+  --freeze-w-4: 168px;
+  --freeze-w-5: 84px;
 }
 
 th,
@@ -653,23 +925,218 @@ td {
   box-sizing: border-box;
 }
 
-th {
+.operator-table thead th.th-wide.freeze-col-1,
+.operator-table td.freeze-col-1 {
+  min-width: var(--freeze-w-1);
+  max-width: var(--freeze-w-1);
+  width: var(--freeze-w-1);
+}
+
+.operator-table thead th.th-location.freeze-col-2,
+.operator-table td.freeze-col-2 {
+  min-width: var(--freeze-w-2);
+  max-width: var(--freeze-w-2);
+  width: var(--freeze-w-2);
+}
+
+.operator-table thead th.th-uuid.freeze-col-3,
+.operator-table td.freeze-col-3 {
+  min-width: var(--freeze-w-3);
+  max-width: var(--freeze-w-3);
+  width: var(--freeze-w-3);
+}
+
+.operator-table thead th.th-operator.freeze-col-4,
+.operator-table td.freeze-col-4 {
+  min-width: var(--freeze-w-4);
+  max-width: var(--freeze-w-4);
+  width: var(--freeze-w-4);
+}
+
+.operator-table thead th.freeze-col-5,
+.operator-table td.freeze-col-5 {
+  min-width: var(--freeze-w-5);
+  max-width: var(--freeze-w-5);
+  width: var(--freeze-w-5);
+}
+
+.operator-table .freeze-col {
+  position: sticky;
+  background-clip: padding-box;
+}
+
+.operator-table thead th.freeze-col {
+  z-index: 4;
+}
+
+.operator-table tbody td.freeze-col,
+.operator-table tfoot td.freeze-col {
+  z-index: 2;
+  background: #fff;
+}
+
+.operator-table tbody tr:nth-child(even) td.freeze-col {
+  background: #f8fafc;
+}
+
+.operator-table tfoot td.freeze-col {
+  background: #e2e8f0 !important;
+}
+
+.operator-table .freeze-col-1 {
+  left: 0;
+}
+
+.operator-table .freeze-col-2 {
+  left: var(--freeze-w-1);
+}
+
+.operator-table .freeze-col-3 {
+  left: calc(var(--freeze-w-1) + var(--freeze-w-2));
+}
+
+.operator-table .freeze-col-4 {
+  left: calc(var(--freeze-w-1) + var(--freeze-w-2) + var(--freeze-w-3));
+}
+
+.operator-table .freeze-col-5 {
+  left: calc(var(--freeze-w-1) + var(--freeze-w-2) + var(--freeze-w-3) + var(--freeze-w-4));
+}
+
+.operator-table .freeze-col-last {
+  box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.18);
+}
+
+.operator-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #fff;
-  text-align: left;
-  padding: 10px 8px;
-  font-size: 11px;
+  padding: 8px 6px;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.operator-table thead th:last-child {
+  border-right: 0;
+}
+
+.operator-table thead th.th-left {
+  text-align: left;
+}
+
+.operator-table thead th.th-narrow {
+  width: 56px;
+  min-width: 56px;
+}
+
+.operator-table thead th.th-pct {
+  width: 42px;
+  min-width: 42px;
+}
+
+.operator-table thead th.th-num {
+  width: 78px;
+  min-width: 72px;
+}
+
+.operator-table thead th.th-wide {
+  min-width: 56px;
+}
+
+.operator-table thead th.th-location {
+  min-width: 148px;
+}
+
+.operator-table thead th.th-uuid {
+  min-width: 132px;
+}
+
+.operator-table thead th.th-operator {
+  min-width: 168px;
+}
+
+.operator-table thead th.th-mesin {
+  min-width: 220px;
+}
+
+.operator-table thead th.th-remarks {
+  min-width: 140px;
 }
 
 td {
-  padding: 8px;
-  border-bottom: 1px solid #edf2f7;
+  padding: 10px 10px;
+  border-bottom: 1px solid #e8eef4;
   font-size: 12px;
   vertical-align: top;
   color: #1e293b;
+  line-height: 1.45;
+}
+
+.cell-wrap {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.col-area {
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.col-nik,
+.col-style {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.col-uuid {
+  font-size: 11px;
+  color: #475569;
+  word-break: break-all;
+}
+
+.col-operator {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.operator-table td.col-location {
+  font-size: 12px;
+  color: #334155;
+}
+
+.operator-table td.col-mesin {
+  font-size: 12px;
+  color: #334155;
+}
+
+.right,
+.center,
+.col-nik,
+.col-style,
+.col-shift,
+td.col-ie {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.col-shift {
+  text-align: center;
 }
 
 tr:nth-child(even) td {
@@ -687,6 +1154,24 @@ tr:nth-child(even) td {
 .mono {
   font-family: Consolas, Menlo, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+th.col-ie {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+}
+
+td.col-ie {
+  background: #fff7ed !important;
+  color: #7c2d12;
+  font-weight: 700;
+}
+
+tr:nth-child(even) td.col-ie {
+  background: #ffedd5 !important;
+}
+
+.avg-row td.col-ie {
+  background: #fed7aa !important;
 }
 
 .pct {
@@ -713,13 +1198,17 @@ tr:nth-child(even) td {
 }
 
 .shift-tag {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 2px 7px;
+  border-radius: 6px;
   color: #fff;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 700;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
 .shift-tag.shift-1 {
@@ -750,12 +1239,13 @@ tr:nth-child(even) td {
 .not-logged {
   color: #94a3b8;
   font-style: italic;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .remarks {
-  min-width: 180px;
-  white-space: normal;
+  min-width: 140px;
+  max-width: 220px;
+  font-size: 12px;
 }
 
 .empty {
@@ -773,15 +1263,5 @@ tr:nth-child(even) td {
 
 .avg-row .pct {
   background: #bfdbfe !important;
-}
-
-@media (max-width: 900px) {
-  .toolbar-left {
-    grid-template-columns: 1fr;
-  }
-
-  .toolbar-card {
-    flex-direction: column;
-  }
 }
 </style>

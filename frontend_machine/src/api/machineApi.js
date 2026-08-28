@@ -530,6 +530,57 @@ export async function importProcessStyles(rows) {
   return await readResponse(res);
 }
 
+export async function getOperatorCtMaster() {
+  const res = await fetch("/api/operator-ct");
+  return await readResponse(res);
+}
+
+export async function importOperatorCt(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!rows.length) {
+    throw new Error("Tidak ada data CT valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/operator-ct/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getOperatorOutputTarget(date) {
+  const workDate = String(date || "").trim();
+  if (!workDate) {
+    throw new Error("Tanggal wajib diisi.");
+  }
+
+  const res = await fetch(
+    `/api/operator-output-target?date=${encodeURIComponent(workDate)}`
+  );
+  return await readResponse(res);
+}
+
+export async function importOperatorOutputTarget(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!rows.length) {
+    throw new Error("Tidak ada data output target valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/operator-output-target/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows }),
+  });
+
+  return await readResponse(res);
+}
+
 export async function identifyMechanic(code) {
   const value = String(code || "").trim();
   if (!value) {
