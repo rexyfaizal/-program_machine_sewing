@@ -50,6 +50,7 @@ const {
   loading,
   errorMessage,
   loadDashboard,
+  loadDashboardRange,
   normalizeRows,
   machineSettings,
   shiftConfigMap,
@@ -124,15 +125,23 @@ function showNotice(message, type = "ok") {
 }
 
 async function refreshDashboardByDate() {
-  if (startDate.value) {
-    localDate.value = startDate.value;
-  }
+  const start = String(startDate.value || localDate.value || "").trim();
+  const end = String(endDate.value || start).trim();
 
-  const date = startDate.value || localDate.value;
+  if (!start) return;
+
   const shift = productivityShift.value;
 
-  await loadDashboard(date, { shift });
-  connect(date, shift);
+  if (end && start !== end) {
+    localDate.value = end;
+    await loadDashboardRange(start, end, { shift });
+    connect(end, shift);
+    return;
+  }
+
+  localDate.value = start;
+  await loadDashboard(start, { shift });
+  connect(start, shift);
 }
 
 function openEditModal(machine) {

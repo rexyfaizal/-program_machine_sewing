@@ -123,12 +123,13 @@ func AggregateFinalGroups(groups []models.FinalProductivityGroup) models.FinalPr
 			agg.PeriodEnd = g.PeriodEnd
 		}
 	}
-	agg.LossSeconds = agg.PowerSeconds - agg.ProcessSeconds
+	adjustedPower, adjustedProc, _ := utils.ApplyProcRuntimeTolerance(agg.PowerSeconds, agg.ProcessSeconds)
+	agg.LossSeconds = adjustedPower - adjustedProc
 	if agg.LossSeconds < 0 {
 		agg.LossSeconds = 0
 	}
-	if agg.PowerSeconds > 0 {
-		agg.Productivity = float64(agg.ProcessSeconds) * 100.0 / float64(agg.PowerSeconds)
+	if adjustedPower > 0 {
+		agg.Productivity = float64(adjustedProc) * 100.0 / float64(adjustedPower)
 		if agg.Productivity > 100 {
 			agg.Productivity = 100
 		}
@@ -191,14 +192,23 @@ func (r *Repository) GetMachineProductivityFinal(
 	}
 
 	row := buildProductivityRow(m, workDate, agg.PowerSeconds, ps, as)
-	row.RuntimeSec = agg.PowerSeconds
 	// Process Time actual (langsung dari mUUID, tanpa iris runtime) untuk TAMPILAN.
 	row.ProcActualSec = agg.ProcessActualSeconds
 	row.ProcActualHours = utils.Round2(float64(agg.ProcessActualSeconds) / 3600)
-	// procSec = nilai yang dilihat user → pakai metode actual.
 	row.ProcSec = agg.ProcessActualSeconds
-	// Loss & Productivity TETAP metode lama (runtime-intersection): agg.LossSeconds & agg.Productivity.
-	row.LossTimeSec = agg.LossSeconds
+
+	adjustedRuntime, _, applied := utils.ApplyProcRuntimeTolerance(
+		agg.PowerSeconds,
+		row.ProcSec,
+	)
+	if applied {
+		row.RuntimeSec = adjustedRuntime
+		row.LossTimeSec = adjustedRuntime - row.ProcSec
+	} else {
+		row.RuntimeSec = agg.PowerSeconds
+		row.LossTimeSec = agg.LossSeconds
+	}
+
 	if row.LossTimeSec < 0 {
 		row.LossTimeSec = 0
 	}
@@ -206,7 +216,10 @@ func (r *Repository) GetMachineProductivityFinal(
 	row.ProcHours = utils.Round2(float64(row.ProcSec) / 3600)
 	row.LossTimeHours = utils.Round2(float64(row.LossTimeSec) / 3600)
 
-	pct := agg.Productivity
+	pct := 0.0
+	if row.RuntimeSec > 0 {
+		pct = float64(row.ProcSec) / float64(row.RuntimeSec) * 100
+	}
 	if pct > 100 {
 		pct = 100
 	}

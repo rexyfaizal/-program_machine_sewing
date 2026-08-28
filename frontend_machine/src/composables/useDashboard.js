@@ -7,6 +7,15 @@ import {
 } from "../api/machineApi";
 import { isAutoLogoutText } from "../utils/dashboardExportExcel";
 import {
+  applyProcRuntimeTolerance,
+  buildOperatorExportMap,
+  buildRangeSummaryBaseRows,
+  buildUuidShiftMetricsMap,
+  getOrderedRange,
+  getWeekdaysBetween,
+  normalizeRangeItem,
+} from "../utils/dashboardExportExcel";
+import {
   buildLineShiftConfigMap,
   formatLocalDate,
   getGM3ShiftWindow,
@@ -926,6 +935,9 @@ export function useDashboard() {
         ) || 0
       );
 
+      const adjusted = applyProcRuntimeTolerance(runtime, procTime);
+      const effectiveProcTime = adjusted.procTime;
+
       const okProcTime = toNumber(
         getVal(
           row,
@@ -937,10 +949,12 @@ export function useDashboard() {
         ) || 0
       );
 
-      const lossTime = Math.max(0, runtime - procTime);
+      const lossTime = Math.max(0, adjusted.runtime - effectiveProcTime);
 
       const productivity =
-        runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
+        adjusted.runtime > 0
+          ? Math.min((effectiveProcTime / adjusted.runtime) * 100, 100)
+          : 0;
 
       const output = toNumber(getVal(row, "output", "Output") || 0);
       const cycles = toNumber(getVal(row, "cycles", "Cycles") || 0);
@@ -983,13 +997,13 @@ export function useDashboard() {
         macType: String(getVal(row, "macType", "MacType") || ""),
         macState: normalizeMacState(row),
 
-        runtime,
-        procTime,
+        runtime: adjusted.runtime,
+        procTime: effectiveProcTime,
         okProcTime,
         lossTime,
 
-        runtimeHours: Number((runtime / 3600).toFixed(2)),
-        procHours: Number((procTime / 3600).toFixed(2)),
+        runtimeHours: Number((adjusted.runtime / 3600).toFixed(2)),
+        procHours: Number((effectiveProcTime / 3600).toFixed(2)),
         lossTimeHours: Number((lossTime / 3600).toFixed(2)),
 
         productivity,
@@ -1064,6 +1078,267 @@ export function useDashboard() {
     setLastUpdate();
 
     return normalized;
+  }
+
+  function getManualSettingByUuid(uuid) {
+    return machineSettings.value.get(normalizeText(uuid)) || null;
+  }
+
+  function getLocationByUuid(uuid) {
+    return getManualSettingByUuid(uuid)?.location || "";
+  }
+
+  function mapRangeSummaryToMachines(summaryRows) {
+    return summaryRows.map((item) => {
+      const uuid = String(item.uuid || "").trim();
+      const setting = getManualSettingByUuid(uuid);
+      const runtime = Number(item.totalPowerOn || 0);
+      const procTime = Number(item.totalRunning || 0);
+      const lossTime = Number(item.totalLoss || 0);
+      const productivity = Number(item.productivity || 0);
+      const output = Number(item.totalOutput || 0);
+      const avgCT = Number(item.avgCT || 0);
+      const operatorRows = Array.isArray(item.operatorRows) ? item.operatorRows : [];
+      const operatorDisplayRows = operatorRows.map((operatorRow) => ({
+        label: String(
+          operatorRow.operator ||
+            operatorRow.operatorName ||
+            operatorRow.operatorNik ||
+            ""
+        ).trim(),
+        shiftTag: String(operatorRow.shiftTag || "").trim(),
+        shiftTagCode: "",
+        subText: String(operatorRow.usageText || "").trim(),
+        processName: String(operatorRow.processName || "").trim(),
+        styleName: String(operatorRow.styleName || "").trim(),
+        status: "",
+        note: String(operatorRow.note || "").trim(),
+        noteItems: [],
+      }));
+      const primary = operatorRows[0];
+      const machineName =
+        setting?.customName || item.originalMesin || item.mesin || uuid;
+      const displayMachineName = item.mesin || machineName;
+      const operatorNotes = operatorRows
+        .map((operatorRow) => String(operatorRow.note || "").trim())
+        .filter(Boolean)
+        .join(" | ");
+
+      return {
+        date: item.periode || "",
+        uuid,
+        tableName: "",
+        machineName,
+        displayMachineName,
+        originalMachineName: item.originalMesin || machineName,
+        customName: setting?.customName || "",
+        location: item.location || "-",
+        manualPic: setting?.pic || "",
+        manualSpv: setting?.spv || "",
+        ip: "",
+        macType: "",
+        macState: "",
+        runtime,
+        procTime,
+        okProcTime: 0,
+        lossTime,
+        runtimeHours: Number((runtime / 3600).toFixed(2)),
+        procHours: Number((procTime / 3600).toFixed(2)),
+        lossTimeHours: Number((lossTime / 3600).toFixed(2)),
+        productivity,
+        productivityPct: productivity,
+        status: item.status || getProductivityStatus(productivity),
+        output,
+        cycles: 0,
+        complete: 0,
+        incomplete: 0,
+        abnormal: 0,
+        avgCT,
+        minCT: 0,
+        maxCT: 0,
+        slowCycles: 0,
+        uniqueFiles: 0,
+        program: "",
+        firstProcess: "",
+        lastProcess: "",
+        alarm: 0,
+        alarmTypes: "",
+        workSecondsPerDay: WORK_SECONDS_PER_DAY,
+        pic: primary?.operator || primary?.operatorName || "",
+        spv: setting?.spv || "",
+        operatorNik: primary?.operatorNik || "",
+        operatorName: primary?.operatorName || "",
+        operatorLabel: primary?.operator || primary?.operatorName || "",
+        operatorProcessName: primary?.processName || "",
+        operatorStyleName: primary?.styleName || item.styleName || "",
+        operatorLoginTime: primary?.loginTime || "",
+        operatorLogoutTime: primary?.logoutTime || "",
+        operatorLoginClock: "",
+        operatorActiveDuration: "",
+        operatorLoginText: "",
+        operatorActiveText: primary?.usageText || "",
+        operatorSubText: "",
+        operatorNote: operatorNotes,
+        operatorNotes,
+        operatorNoteItems: [],
+        operatorSessions: [],
+        operatorDisplayRows,
+        operatorCount: operatorDisplayRows.length,
+      };
+    });
+  }
+
+  async function loadDashboardRange(startDateText, endDateText, options = {}) {
+    const range = getOrderedRange(startDateText, endDateText, "");
+    const dates = getWeekdaysBetween(range.start, range.end);
+
+    if (!range.start || !range.end || !dates.length) {
+      errorMessage.value =
+        "Range tanggal tidak valid atau tidak memiliki hari kerja (Senin–Sabtu).";
+      return;
+    }
+
+    const requestShift = String(options.shift || "").trim();
+    const requestKey = `${range.start}|${range.end}|${requestShift}`;
+
+    if (loading.value && inFlightRequest && inFlightDate === requestKey) {
+      return inFlightRequest;
+    }
+
+    const requestSeq = ++dashboardRequestSeq;
+
+    loading.value = true;
+    errorMessage.value = "";
+    inFlightDate = requestKey;
+    loadedDashboardDate.value = range.end;
+    loadedDashboardShift.value = requestShift;
+
+    const request = (async () => {
+      const [settingsResult, shiftConfigResult] = await Promise.allSettled([
+        getMachineSettings(),
+        getLineShiftConfig(""),
+      ]);
+
+      if (requestSeq !== dashboardRequestSeq) return;
+
+      if (settingsResult.status === "fulfilled") {
+        machineSettings.value = buildMachineSettingsMap(settingsResult.value);
+      } else {
+        console.warn("Gagal load machine settings:", settingsResult.reason);
+      }
+
+      if (shiftConfigResult.status === "fulfilled") {
+        const lines = Array.isArray(shiftConfigResult.value?.lines)
+          ? shiftConfigResult.value.lines
+          : [];
+        shiftConfigMap.value = buildLineShiftConfigMap(lines);
+      } else {
+        console.warn("Gagal load line shift config:", shiftConfigResult.reason);
+      }
+
+      activeOperatorMap.value = new Map();
+
+      const configMap = shiftConfigMap.value;
+      const selectedShift = String(requestShift || "").trim().toUpperCase();
+      const extraShiftCodes = ["SHIFT_1", "SHIFT_2", "SHIFT_3"].filter(
+        (code) => code !== selectedShift
+      );
+
+      const results = await Promise.all(
+        dates.map(async (dateText) => {
+          const [operatorResult, selectedProductivity, ...extraProductivity] =
+            await Promise.allSettled([
+              getMachineOperatorReport(dateText, {
+                withStats: true,
+                forExport: true,
+              }),
+              getProductivity(dateText, { shift: requestShift }),
+              ...extraShiftCodes.map((code) =>
+                getProductivity(dateText, { shift: code })
+              ),
+            ]);
+
+          if (selectedProductivity.status === "rejected") {
+            throw selectedProductivity.reason;
+          }
+
+          const productivityByShift = {
+            DEFAULT: selectedProductivity.value,
+          };
+
+          if (["SHIFT_1", "SHIFT_2", "SHIFT_3"].includes(selectedShift)) {
+            productivityByShift[selectedShift] = selectedProductivity.value;
+          }
+
+          extraShiftCodes.forEach((code, index) => {
+            const result = extraProductivity[index];
+            if (result?.status === "fulfilled") {
+              productivityByShift[code] = result.value;
+            }
+          });
+
+          const shiftMetricsMap = buildUuidShiftMetricsMap(productivityByShift);
+          const operatorMap =
+            operatorResult.status === "fulfilled"
+              ? buildOperatorExportMap(operatorResult.value, {
+                  workDate: dateText,
+                  shiftCode: requestShift || "ALL",
+                  shiftConfigMap: configMap,
+                  getLocationByUuid,
+                })
+              : new Map();
+
+          const rows = extractRows(selectedProductivity.value);
+
+          return rows.map((row) =>
+            normalizeRangeItem(
+              row,
+              dateText,
+              operatorMap,
+              getManualSettingByUuid,
+              requestShift,
+              configMap,
+              shiftMetricsMap
+            )
+          );
+        })
+      );
+
+      if (requestSeq !== dashboardRequestSeq) return;
+
+      const summaryRows = buildRangeSummaryBaseRows(
+        results.flat(),
+        range.start,
+        range.end,
+        requestShift
+      );
+
+      machines.value = mapRangeSummaryToMachines(summaryRows);
+      setLastUpdate();
+    })();
+
+    inFlightRequest = request;
+
+    try {
+      await request;
+    } catch (err) {
+      if (requestSeq === dashboardRequestSeq) {
+        errorMessage.value = `Gagal mengambil data range dari backend: ${
+          err?.message || err
+        }`;
+      }
+    } finally {
+      if (requestSeq === dashboardRequestSeq) {
+        loading.value = false;
+      }
+
+      if (inFlightRequest === request) {
+        inFlightRequest = null;
+        inFlightDate = "";
+      }
+    }
+
+    return request;
   }
 
   async function loadDashboard(date, options = {}) {
@@ -1160,6 +1435,7 @@ export function useDashboard() {
     loadShiftConfigs,
     loadActiveOperators,
     loadDashboard,
+    loadDashboardRange,
     normalizeRows,
   };
 }

@@ -40,30 +40,6 @@ func (r *Repository) GetMachineProductivity(ctx context.Context, m models.Machin
 
 	row := buildProductivityRow(m, date, runtimeSec, ps, as)
 
-	// Jangan timpa Power On dengan ProcTime — tetap nilai kolom RunTime.
-	row.RuntimeSec = runtimeSec
-	if row.RuntimeSec < 0 {
-		row.RuntimeSec = 0
-	}
-	row.LossTimeSec = row.RuntimeSec - row.ProcSec
-	if row.LossTimeSec < 0 {
-		row.LossTimeSec = 0
-	}
-	row.RuntimeHours = utils.Round2(float64(row.RuntimeSec) / 3600)
-	row.LossTimeHours = utils.Round2(float64(row.LossTimeSec) / 3600)
-
-	productivityRaw := 0.0
-	if row.RuntimeSec > 0 {
-		productivityRaw = float64(row.ProcSec) / float64(row.RuntimeSec) * 100
-	}
-	if productivityRaw > 100 {
-		productivityRaw = 100
-	}
-	row.ProductivityRaw = utils.Round2(productivityRaw)
-	row.ProductivityPct = utils.Round2(productivityRaw)
-	row.Status = utils.StatusFromPct(row.ProductivityPct)
-	row.Category = row.Status
-
 	row.MainSource = "record_runtime_column"
 	row.ShiftCode = utils.ShiftNormal
 	row.ShiftName = utils.ShiftDisplayName(utils.ShiftNormal)
@@ -78,10 +54,21 @@ func buildProductivityRow(
 	ps models.ProductionStats,
 	as models.AlarmStats,
 ) models.ProductivityRow {
-	runtimeHours := utils.Round2(float64(runtimeSec) / 3600)
-	procHours := utils.Round2(float64(ps.ProcSec) / 3600)
+	rawProcSec := ps.ProcSec
+	adjustedRuntime, _, applied := utils.ApplyProcRuntimeTolerance(runtimeSec, rawProcSec)
+	displayRuntimeSec := runtimeSec
+	if applied {
+		displayRuntimeSec = adjustedRuntime
+	}
+	if displayRuntimeSec < 0 {
+		displayRuntimeSec = 0
+	}
 
-	lossTimeSec := runtimeSec - ps.ProcSec
+	displayProcSec := rawProcSec
+	runtimeHours := utils.Round2(float64(displayRuntimeSec) / 3600)
+	procHours := utils.Round2(float64(displayProcSec) / 3600)
+
+	lossTimeSec := displayRuntimeSec - displayProcSec
 	if lossTimeSec < 0 {
 		lossTimeSec = 0
 	}
@@ -91,8 +78,8 @@ func buildProductivityRow(
 	productivityRaw := 0.0
 	productivityPct := 0.0
 
-	if runtimeSec > 0 {
-		productivityRaw = float64(ps.ProcSec) / float64(runtimeSec) * 100
+	if displayRuntimeSec > 0 {
+		productivityRaw = float64(displayProcSec) / float64(displayRuntimeSec) * 100
 		productivityPct = productivityRaw
 	}
 
@@ -115,7 +102,7 @@ func buildProductivityRow(
 		MacType:          m.MacType,
 		MacState:         m.MacState,
 
-		RuntimeSec:   runtimeSec,
+		RuntimeSec:   displayRuntimeSec,
 		RuntimeHours: runtimeHours,
 
 		LossTimeSec:   lossTimeSec,
@@ -126,7 +113,7 @@ func buildProductivityRow(
 		Status:          status,
 		MainSource:      "process_time_runtime",
 
-		ProcSec:    ps.ProcSec,
+		ProcSec:    displayProcSec,
 		ProcHours:  procHours,
 		OkProcSec:  ps.OkProcSec,
 		Output:     ps.Output,
@@ -149,7 +136,7 @@ func buildProductivityRow(
 		LastProcess:  ps.LastProcess,
 
 		MachineName:       m.NickName,
-		ProductiveSeconds: ps.ProcSec,
+		ProductiveSeconds: displayProcSec,
 		ProductiveHours:   procHours,
 		Category:          status,
 		OutputOK:          ps.Complete,
@@ -158,9 +145,8 @@ func buildProductivityRow(
 		LastStart:         ps.LastProcess,
 	}
 
-	// Power On tetap dari Record_RunTime / query shift (jangan timpa dengan Running).
-	// Jika Running > Power On: Loss = 0, produktivitas di-cap 100%.
-	row.LossTimeSec = row.RuntimeSec - row.ProcSec
+	// Power On dari DB; jika proses > mesin nyala → mesin nyala = proses + 5 menit.
+	row.LossTimeSec = displayRuntimeSec - displayProcSec
 	if row.LossTimeSec < 0 {
 		row.LossTimeSec = 0
 	}

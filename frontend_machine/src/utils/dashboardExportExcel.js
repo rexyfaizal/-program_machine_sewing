@@ -11,6 +11,28 @@ export function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Toleransi buffer mesin nyala di atas proses (5 menit). Hanya post-processing metrik.
+export const PROC_RUNTIME_TOLERANCE_SEC = 300;
+
+export function applyProcRuntimeTolerance(runtime, procTime) {
+  const runtimeSec = Math.max(0, toNumber(runtime));
+  const procSec = Math.max(0, toNumber(procTime));
+
+  if (procSec <= runtimeSec) {
+    return {
+      runtime: runtimeSec,
+      procTime: procSec,
+      applied: false,
+    };
+  }
+
+  return {
+    runtime: procSec + PROC_RUNTIME_TOLERANCE_SEC,
+    procTime: procSec,
+    applied: true,
+  };
+}
+
 export function getVal(obj, ...keys) {
   for (const key of keys) {
     if (obj && obj[key] !== undefined && obj[key] !== null) {
@@ -1018,22 +1040,6 @@ export function statusFromProductivity(productivity) {
 }
 
 export function extractProductivityMetrics(row) {
-  const procTime = toNumber(
-    getVal(
-      row,
-      "procSec",
-      "ProcSec",
-      "procTimeSec",
-      "ProcTimeSec",
-      "procTime",
-      "ProcTime",
-      "productive_seconds",
-      "productiveSeconds",
-      "process_time",
-      "ProcessTime"
-    ) || 0
-  );
-
   const runtime = toNumber(
     getVal(
       row,
@@ -1049,12 +1055,33 @@ export function extractProductivityMetrics(row) {
     ) || 0
   );
 
-  const lossTime = Math.max(0, runtime - procTime);
+  const rawProcTime = toNumber(
+    getVal(
+      row,
+      "procSec",
+      "ProcSec",
+      "procTimeSec",
+      "ProcTimeSec",
+      "procTime",
+      "ProcTime",
+      "productive_seconds",
+      "productiveSeconds",
+      "process_time",
+      "ProcessTime"
+    ) || 0
+  );
+
+  const adjusted = applyProcRuntimeTolerance(runtime, rawProcTime);
+  const procTime = adjusted.procTime;
+
+  const lossTime = Math.max(0, adjusted.runtime - procTime);
   const productivity =
-    runtime > 0 ? Math.min((procTime / runtime) * 100, 100) : 0;
+    adjusted.runtime > 0
+      ? Math.min((procTime / adjusted.runtime) * 100, 100)
+      : 0;
 
   return {
-    runtime,
+    runtime: adjusted.runtime,
     procTime,
     lossTime,
     output: toNumber(getVal(row, "output", "Output") || 0),

@@ -54,8 +54,58 @@
 }
 
 .machine-table-panel .table-toolbar.simple-toolbar {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 6px;
+  align-items: stretch;
+}
+
+.machine-table-panel .table-filter.date-range-filter {
+  flex: 0 1 290px;
+  min-width: 260px;
+}
+
+.machine-table-panel .date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.machine-table-panel .date-range-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+
+.machine-table-panel .date-range-sep {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.machine-table-panel .table-filter.view-filter {
+  flex: 0 0 auto;
+  min-width: 220px;
+}
+
+.machine-table-panel .table-filter.area-filter {
+  flex: 0 1 140px;
+  min-width: 120px;
+}
+
+.machine-table-panel .table-filter.search-filter {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.machine-table-panel .table-toolbar.simple-toolbar .download-btn {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 130px;
 }
 
 .machine-table-panel .range-line {
@@ -108,9 +158,10 @@
 
 .machine-table-panel .view-switch {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   height: 28px;
+  width: 100%;
 }
 
 .machine-table-panel .view-btn {
@@ -121,6 +172,9 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
 }
 
 .machine-table-panel .view-btn:hover {
@@ -487,6 +541,16 @@
       minmax(150px, 1fr)
       minmax(150px, 1fr)
       minmax(120px, 1fr);
+  }
+
+  .machine-table-panel .table-toolbar.simple-toolbar {
+    display: flex;
+  }
+
+  .machine-table-panel .table-filter.date-range-filter,
+  .machine-table-panel .table-filter.view-filter {
+    flex: 1 1 100%;
+    min-width: 0;
   }
 
   .machine-table-panel .search-filter,

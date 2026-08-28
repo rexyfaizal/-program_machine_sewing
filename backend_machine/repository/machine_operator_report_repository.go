@@ -146,14 +146,20 @@ func (r *Repository) enrichOperatorReportSessionStats(
 			}
 		}
 
-		lossSec := runtimeSec - procSec
+		adjustedRuntime, _, applied := utils.ApplyProcRuntimeTolerance(runtimeSec, procSec)
+		displayRuntimeSec := runtimeSec
+		if applied {
+			displayRuntimeSec = adjustedRuntime
+		}
+
+		lossSec := displayRuntimeSec - procSec
 		if lossSec < 0 {
 			lossSec = 0
 		}
 
 		pct := 0.0
-		if runtimeSec > 0 {
-			pct = float64(procSec) / float64(runtimeSec) * 100
+		if displayRuntimeSec > 0 {
+			pct = float64(procSec) / float64(displayRuntimeSec) * 100
 		}
 		if pct > 100 {
 			pct = 100
@@ -161,7 +167,7 @@ func (r *Repository) enrichOperatorReportSessionStats(
 		pct = utils.Round2(pct)
 
 		item.HasSessionStats = true
-		item.RuntimeSec = runtimeSec
+		item.RuntimeSec = displayRuntimeSec
 		item.ProcSec = procSec
 		item.LossTimeSec = lossSec
 		item.ProductivityPct = pct

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   MONTH_LABELS_ID,
   formatDateRangeLabel,
@@ -7,6 +7,7 @@ import {
   getMonthWeekOptions,
   todayLocal,
 } from "../../utils/format";
+import { getOrderedRange } from "../../utils/dashboardExportExcel";
 
 const props = defineProps({
   loading: {
@@ -82,10 +83,25 @@ const emit = defineEmits([
 
 const now = new Date();
 const viewMode = ref("day");
-const manualDate = ref(props.startDate || props.selectedDate || todayLocal());
+const rangeStart = ref(props.startDate || props.selectedDate || todayLocal());
+const rangeEnd = ref(
+  props.endDate || props.startDate || props.selectedDate || todayLocal()
+);
 const pickerYear = ref(now.getFullYear());
 const pickerMonth = ref(now.getMonth());
 const pickerWeek = ref(1);
+
+watch(
+  () => [props.startDate, props.endDate],
+  ([start, end]) => {
+    const startText = String(start || "").trim();
+    const endText = String(end || startText).trim();
+    if (!startText) return;
+
+    rangeStart.value = startText;
+    rangeEnd.value = endText;
+  }
+);
 
 const searchPlaceholder = computed(() => {
   if (props.showActions) {
@@ -108,8 +124,14 @@ function applyRange(start, end) {
 
 function applyCurrentSelection() {
   if (viewMode.value === "day") {
-    const day = String(manualDate.value || todayLocal()).trim();
-    applyRange(day, day);
+    const ordered = getOrderedRange(
+      rangeStart.value,
+      rangeEnd.value,
+      todayLocal()
+    );
+    rangeStart.value = ordered.start;
+    rangeEnd.value = ordered.end;
+    applyRange(ordered.start, ordered.end);
     return;
   }
 
@@ -127,8 +149,8 @@ function applyCurrentSelection() {
   applyRange(range.start, range.end);
 }
 
-function syncPickerFromManualDate() {
-  const raw = String(manualDate.value || "").trim();
+function syncPickerFromRangeStart() {
+  const raw = String(rangeStart.value || "").trim();
   const base = raw ? new Date(`${raw}T00:00:00`) : new Date();
   if (Number.isNaN(base.getTime())) return;
   pickerYear.value = base.getFullYear();
@@ -139,7 +161,7 @@ function updateViewMode(mode) {
   const next = String(mode || "day");
   if (viewMode.value === next) return;
   viewMode.value = next;
-  syncPickerFromManualDate();
+  syncPickerFromRangeStart();
   if (viewMode.value === "week" && !weekOptions.value.some((item) => item.weekNo === pickerWeek.value)) {
     pickerWeek.value = weekOptions.value[0]?.weekNo || 1;
   }
@@ -159,14 +181,18 @@ function updateWeek(event) {
   applyCurrentSelection();
 }
 
-function updateManualDate(event) {
+function updateRangeStart(event) {
   const value = String(event.target.value || "").trim();
   if (!value) return;
-  manualDate.value = value;
-  syncPickerFromManualDate();
-  if (viewMode.value === "week" && !weekOptions.value.some((item) => item.weekNo === pickerWeek.value)) {
-    pickerWeek.value = weekOptions.value[0]?.weekNo || 1;
-  }
+  rangeStart.value = value;
+  syncPickerFromRangeStart();
+  applyCurrentSelection();
+}
+
+function updateRangeEnd(event) {
+  const value = String(event.target.value || "").trim();
+  if (!value) return;
+  rangeEnd.value = value;
   applyCurrentSelection();
 }
 
@@ -189,7 +215,7 @@ function updateStatus(event) {
 }
 
 const rangeLabel = computed(() => {
-  const start = String(props.startDate || props.selectedDate || manualDate.value || "").trim();
+  const start = String(props.startDate || props.selectedDate || rangeStart.value || "").trim();
   const end = String(props.endDate || start).trim();
   return formatDateRangeLabel(start, end);
 });
@@ -197,14 +223,26 @@ const rangeLabel = computed(() => {
 
 <template>
   <div class="table-toolbar simple-toolbar">
-    <label class="table-filter date-filter">
+    <div v-if="viewMode === 'day'" class="table-filter date-range-filter">
       <span>Tanggal</span>
-      <input
-        type="date"
-        :value="manualDate"
-        @input="updateManualDate"
-      />
-    </label>
+      <div class="date-range-inputs">
+        <input
+          type="date"
+          class="date-range-input"
+          :value="rangeStart"
+          aria-label="Dari tanggal"
+          @input="updateRangeStart"
+        />
+        <span class="date-range-sep">s/d</span>
+        <input
+          type="date"
+          class="date-range-input"
+          :value="rangeEnd"
+          aria-label="Sampai tanggal"
+          @input="updateRangeEnd"
+        />
+      </div>
+    </div>
 
     <div class="table-filter view-filter">
       <span>Periode</span>
