@@ -1,14 +1,26 @@
 export const KAP_JAM_DIVISOR = 3060;
+/** Default jam shift untuk Produktivitas CT (GM1 / GM2 / area lain). */
 export const KAP_JAM_SHIFT_HOURS = 8;
+/** Jam shift khusus GM3. */
+export const KAP_JAM_SHIFT_HOURS_GM3 = 7;
 
-export function calcProduktivitasCtPct(numerator, kapPerJam) {
+export function getCtShiftHours(area) {
+  const text = String(area || "")
+    .trim()
+    .toUpperCase();
+  if (text === "GM3") return KAP_JAM_SHIFT_HOURS_GM3;
+  return KAP_JAM_SHIFT_HOURS;
+}
+
+export function calcProduktivitasCtPct(numerator, kapPerJam, area) {
   const value = Number(numerator);
   const kap = Number(kapPerJam);
   if (!Number.isFinite(value) || !Number.isFinite(kap) || kap <= 0) {
     return null;
   }
 
-  return Number(((value / (kap * KAP_JAM_SHIFT_HOURS)) * 100).toFixed(2));
+  const hours = getCtShiftHours(area);
+  return Number(((value / (kap * hours)) * 100).toFixed(2));
 }
 
 export function formatProduktivitasCtPct(value) {
@@ -25,12 +37,14 @@ export function attachProduktivitasCtFields(row) {
     (Number.isFinite(fallbackKap) && fallbackKap > 0 ? fallbackKap : null);
   const hasTarget =
     row?.outputTarget !== null && row?.outputTarget !== undefined;
+  const area = row?.area;
 
   return {
     ...row,
-    produktivitasCt: calcProduktivitasCtPct(row?.output, kapPerJamCalc),
+    ctShiftHours: getCtShiftHours(area),
+    produktivitasCt: calcProduktivitasCtPct(row?.output, kapPerJamCalc, area),
     produktivitasCtTargetan: hasTarget
-      ? calcProduktivitasCtPct(row.outputTarget, kapPerJamCalc)
+      ? calcProduktivitasCtPct(row.outputTarget, kapPerJamCalc, area)
       : null,
   };
 }
