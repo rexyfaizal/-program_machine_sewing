@@ -603,35 +603,6 @@ export async function importOperatorOutputTarget(payload) {
   return await readResponse(res);
 }
 
-export async function getOperatorOutputTargetStyle(date) {
-  const workDate = String(date || "").trim();
-  if (!workDate) {
-    throw new Error("Tanggal wajib diisi.");
-  }
-
-  const res = await fetch(
-    `/api/operator-output-target-style?date=${encodeURIComponent(workDate)}`
-  );
-  return await readResponse(res);
-}
-
-export async function importOperatorOutputTargetStyle(payload) {
-  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-  if (!rows.length) {
-    throw new Error("Tidak ada data output target Style valid untuk diimport.");
-  }
-
-  const res = await fetch("/api/operator-output-target-style/import", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ rows }),
-  });
-
-  return await readResponse(res);
-}
-
 export async function identifyMechanic(code) {
   const value = String(code || "").trim();
   if (!value) {
