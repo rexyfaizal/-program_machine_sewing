@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { downloadOperatorOutputTargetTemplate } from "../../utils/operatorOutputTargetImportExcel";
 import { formatOutputTarget } from "../../utils/operatorOutputTarget";
+import { isGm3Area } from "../../utils/operatorCtStyle";
 
 const props = defineProps({
   isAdmin: {
@@ -74,6 +75,10 @@ const props = defineProps({
 
 const emit = defineEmits(["reset-import", "file-change", "submit-import"]);
 
+const isStyleMode = computed(() => isGm3Area(props.locationFilter));
+const panelTitle = computed(() =>
+  isStyleMode.value ? "Output Targetan · Style + Proses" : "Output Targetan"
+);
 const hasFileStats = computed(() => Number(props.importStats?.totalExcelRows || 0) > 0);
 const templateMessage = ref("");
 const templateMessageType = ref("error");
@@ -86,6 +91,7 @@ function handleDownloadTemplate() {
     const result = downloadOperatorOutputTargetTemplate(props.templateRows, {
       defaultDate: props.selectedDate,
       locationFilter: props.locationFilter,
+      styleMode: isStyleMode.value,
     });
     templateMessageType.value = "success";
     templateMessage.value = `Template berhasil (${result.rowCount} baris).`;
@@ -99,7 +105,15 @@ function handleDownloadTemplate() {
 <template>
   <section v-if="isAdmin" class="import-panel" :class="{ embedded }">
     <div class="import-toolbar">
-      <h3>Output Targetan</h3>
+      <h3>{{ panelTitle }}</h3>
+      <p class="mode-hint">
+        <template v-if="isStyleMode">
+          Filter GM3: format Excel Tanggal + Style + Proses + Output Targetan
+        </template>
+        <template v-else>
+          Format Excel Tanggal + UUID + Line
+        </template>
+      </p>
 
       <label class="file-picker">
         <input
@@ -160,7 +174,28 @@ function handleDownloadTemplate() {
 
     <div v-if="importPreviewDisplayRows.length" class="preview-box">
       <div class="preview-table-wrap">
-        <table>
+        <table v-if="isStyleMode">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Style</th>
+              <th>Proses</th>
+              <th>Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in importPreviewDisplayRows"
+              :key="`${row.workDate}-${row.styleName}-${row.processName}-${row.excelRowNumber}`"
+            >
+              <td>{{ row.workDate }}</td>
+              <td>{{ row.styleName }}</td>
+              <td>{{ row.processName }}</td>
+              <td>{{ formatOutputTarget(row.outputTarget) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <table v-else>
           <thead>
             <tr>
               <th>Tanggal</th>
@@ -189,7 +224,27 @@ function handleDownloadTemplate() {
 
     <div v-if="importErrorRows.length" class="preview-box error-box">
       <div class="preview-table-wrap">
-        <table>
+        <table v-if="isStyleMode">
+          <thead>
+            <tr>
+              <th>Baris</th>
+              <th>Tanggal</th>
+              <th>Style</th>
+              <th>Proses</th>
+              <th>Pesan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in importErrorRows.slice(0, 5)" :key="row.excelRowNumber">
+              <td>{{ row.excelRowNumber }}</td>
+              <td>{{ row.workDate || "-" }}</td>
+              <td>{{ row.styleName || "-" }}</td>
+              <td>{{ row.processName || "-" }}</td>
+              <td>{{ row.message }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <table v-else>
           <thead>
             <tr>
               <th>Baris</th>
@@ -239,6 +294,13 @@ function handleDownloadTemplate() {
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
+}
+
+.mode-hint {
+  margin: -2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.35;
 }
 
 .file-picker {

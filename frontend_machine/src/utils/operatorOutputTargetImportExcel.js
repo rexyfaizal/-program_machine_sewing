@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 
 import { normalizeCtLine } from "./operatorCt";
+import { normalizeCtStylePart } from "./operatorCtStyle";
 import {
   formatTemplateOperatorName,
   formatTemplateOperatorNik,
@@ -28,6 +29,13 @@ function getCellValue(row, ...headerNames) {
   }
 
   return "";
+}
+
+function cleanText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 function pad2(value) {
@@ -198,7 +206,99 @@ export function normalizeOperatorOutputTargetImportRows(excelRows, fallbackDate 
   };
 }
 
-export async function parseOperatorOutputTargetExcel(file, fallbackDate = "") {
+export function normalizeOperatorOutputTargetStyleImportRows(
+  excelRows,
+  fallbackDate = ""
+) {
+  const uniqueMap = new Map();
+  const duplicateRows = [];
+  const errorRows = [];
+
+  let skippedEmpty = 0;
+  let skippedDuplicate = 0;
+  let skippedInvalid = 0;
+
+  (Array.isArray(excelRows) ? excelRows : []).forEach((row, index) => {
+    const excelRowNumber = index + 2;
+    const workDate =
+      parseWorkDate(getCellValue(row, "TANGGAL", "DATE", "WORK DATE", "WORK_DATE")) ||
+      parseWorkDate(fallbackDate);
+    const styleName = cleanText(
+      getCellValue(row, "STYLE", "STYLE NAME", "NAMA STYLE")
+    );
+    const processName = cleanText(
+      getCellValue(row, "PROSES", "PROCESS", "NAMA PROSES", "PROCESS NAME")
+    );
+    const outputTarget = parseOutputTargetNumber(
+      getCellValue(
+        row,
+        "OUTPUT TARGETAN",
+        "OUTPUT TARGET",
+        "TARGET",
+        "TARGET OUTPUT"
+      )
+    );
+
+    if (!styleName && !processName && !workDate) {
+      skippedEmpty += 1;
+      return;
+    }
+
+    if (!workDate || !styleName || !processName) {
+      skippedInvalid += 1;
+      errorRows.push({
+        excelRowNumber,
+        message: "Tanggal, Style, dan Proses wajib diisi.",
+        workDate: workDate || "-",
+        styleName,
+        processName,
+      });
+      return;
+    }
+
+    const key =
+      `${workDate.toUpperCase()}||` +
+      `${normalizeCtStylePart(styleName)}||` +
+      `${normalizeCtStylePart(processName)}`;
+
+    if (uniqueMap.has(key)) {
+      skippedDuplicate += 1;
+      duplicateRows.push({
+        excelRowNumber,
+        duplicateOfRowNumber: uniqueMap.get(key).excelRowNumber,
+        workDate,
+        styleName,
+        processName,
+      });
+      return;
+    }
+
+    uniqueMap.set(key, {
+      excelRowNumber,
+      workDate,
+      styleName,
+      processName,
+      outputTarget,
+    });
+  });
+
+  const result = Array.from(uniqueMap.values());
+
+  return {
+    rows: result,
+    duplicateRows,
+    errorRows,
+    stats: {
+      totalExcelRows: excelRows.length,
+      readyRows: result.length,
+      skippedEmpty,
+      skippedDuplicate,
+      skippedInvalid,
+    },
+  };
+}
+
+async function readExcelRows(file) {
   if (!file) {
     throw new Error("File Excel belum dipilih.");
   }
@@ -221,7 +321,17 @@ export async function parseOperatorOutputTargetExcel(file, fallbackDate = "") {
     throw new Error("Sheet Excel kosong.");
   }
 
+  return excelRows;
+}
+
+export async function parseOperatorOutputTargetExcel(file, fallbackDate = "") {
+  const excelRows = await readExcelRows(file);
   return normalizeOperatorOutputTargetImportRows(excelRows, fallbackDate);
+}
+
+export async function parseOperatorOutputTargetStyleExcel(file, fallbackDate = "") {
+  const excelRows = await readExcelRows(file);
+  return normalizeOperatorOutputTargetStyleImportRows(excelRows, fallbackDate);
 }
 
 export function buildOperatorOutputTargetTemplateRows(
@@ -247,12 +357,54 @@ export function buildOperatorOutputTargetTemplateRows(
   return [...uniqueMap.values()]
     .map(({ _hasOperatorInfo, ...entry }) => entry)
     .sort((a, b) => {
-    const lineCmp = String(a.Line).localeCompare(String(b.Line), "id", {
+      const lineCmp = String(a.Line).localeCompare(String(b.Line), "id", {
+        numeric: true,
+        sensitivity: "base",
+      });
+      if (lineCmp !== 0) return lineCmp;
+      return String(a.UUID).localeCompare(String(b.UUID));
+    });
+}
+
+export function buildOperatorOutputTargetStyleTemplateRows(
+  sourceRows = [],
+  defaultDate = ""
+) {
+  const workDate = parseWorkDate(defaultDate) || new Date().toISOString().slice(0, 10);
+  const uniqueMap = new Map();
+
+  (Array.isArray(sourceRows) ? sourceRows : []).forEach((row) => {
+    const area = String(row?.area || "").trim().toUpperCase();
+    if (area !== "GM3") return;
+
+    const styleName = cleanText(row?.style);
+    const processName = cleanText(row?.mesin);
+    if (!styleName || !processName || styleName === "-" || processName === "-") {
+      return;
+    }
+
+    const key =
+      `${normalizeCtStylePart(styleName)}||${normalizeCtStylePart(processName)}`;
+    if (uniqueMap.has(key)) return;
+
+    uniqueMap.set(key, {
+      Tanggal: workDate,
+      Style: styleName,
+      Proses: processName,
+      "Output Targetan": "",
+    });
+  });
+
+  return [...uniqueMap.values()].sort((a, b) => {
+    const styleCmp = String(a.Style).localeCompare(String(b.Style), "id", {
       numeric: true,
       sensitivity: "base",
     });
-    if (lineCmp !== 0) return lineCmp;
-    return String(a.UUID).localeCompare(String(b.UUID));
+    if (styleCmp !== 0) return styleCmp;
+    return String(a.Proses).localeCompare(String(b.Proses), "id", {
+      numeric: true,
+      sensitivity: "base",
+    });
   });
 }
 
@@ -266,31 +418,38 @@ function safeFilePart(value) {
 
 export function downloadOperatorOutputTargetTemplate(
   sourceRows = [],
-  { defaultDate = "", locationFilter = "ALL" } = {}
+  { defaultDate = "", locationFilter = "ALL", styleMode = false } = {}
 ) {
   const workDate = parseWorkDate(defaultDate) || new Date().toISOString().slice(0, 10);
-  const rows = buildOperatorOutputTargetTemplateRows(sourceRows, workDate);
+  const rows = styleMode
+    ? buildOperatorOutputTargetStyleTemplateRows(sourceRows, workDate)
+    : buildOperatorOutputTargetTemplateRows(sourceRows, workDate);
 
   if (!rows.length) {
     throw new Error(
-      "Tidak ada data mesin untuk template. Sesuaikan filter Area/tanggal lalu coba lagi."
+      styleMode
+        ? "Tidak ada data Style+Proses GM3 untuk template. Sesuaikan filter Area/tanggal lalu coba lagi."
+        : "Tidak ada data mesin untuk template. Sesuaikan filter Area/tanggal lalu coba lagi."
     );
   }
 
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(rows);
 
-  sheet["!cols"] = [
-    { wch: 12 },
-    { wch: 8 },
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 28 },
-    { wch: 16 },
-  ];
+  sheet["!cols"] = styleMode
+    ? [{ wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 16 }]
+    : [
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 12 },
+        { wch: 28 },
+        { wch: 16 },
+      ];
 
-  const fileName = `template-output-targetan-${workDate}-${safeFilePart(locationFilter)}.xlsx`;
+  const modePart = styleMode ? "style" : safeFilePart(locationFilter);
+  const fileName = `template-output-targetan-${workDate}-${modePart}.xlsx`;
   XLSX.utils.book_append_sheet(workbook, sheet, "DATA");
   XLSX.writeFile(workbook, fileName);
 

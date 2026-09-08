@@ -56,6 +56,7 @@ const {
   cleanupOperatorCtImport,
 } = useOperatorCtImport({
   isAdmin,
+  locationFilter,
   onImported: async () => {
     await loadOperatorProductivity(localDate.value);
   },
@@ -78,6 +79,7 @@ const {
   cleanupOperatorOutputTargetImport,
 } = useOperatorOutputTargetImport({
   isAdmin,
+  locationFilter,
   selectedDate: () => localDate.value,
   onImported: async () => {
     await loadOperatorProductivity(localDate.value);
@@ -232,45 +234,45 @@ onBeforeUnmount(() => {
   <section class="operator-prod-page">
     <section v-if="isAdmin" class="ie-upload-group">
       <OperatorCtImportPanel
-      embedded
-      :is-admin="isAdmin"
-      :template-rows="filteredRows"
-      :location-filter="locationFilter"
-      :importing="ctImporting"
-      :import-input-key="importInputKey"
-      :import-file-name="importFileName"
-      :import-preview-rows="importPreviewRows"
-      :import-preview-display-rows="importPreviewDisplayRows"
-      :import-duplicate-rows="importDuplicateRows"
-      :import-error-rows="importErrorRows"
-      :import-stats="importStats"
-      :import-error-message="importErrorMessage"
-      :import-success-message="importSuccessMessage"
-      @reset-import="resetImport"
-      @file-change="handleImportFileChange"
-      @submit-import="submitImportExcel"
-    />
+        embedded
+        :is-admin="isAdmin"
+        :template-rows="filteredRows"
+        :location-filter="locationFilter"
+        :importing="ctImporting"
+        :import-input-key="importInputKey"
+        :import-file-name="importFileName"
+        :import-preview-rows="importPreviewRows"
+        :import-preview-display-rows="importPreviewDisplayRows"
+        :import-duplicate-rows="importDuplicateRows"
+        :import-error-rows="importErrorRows"
+        :import-stats="importStats"
+        :import-error-message="importErrorMessage"
+        :import-success-message="importSuccessMessage"
+        @reset-import="resetImport"
+        @file-change="handleImportFileChange"
+        @submit-import="submitImportExcel"
+      />
 
-    <OperatorOutputTargetImportPanel
-      embedded
-      :is-admin="isAdmin"
-      :selected-date="localDate"
-      :template-rows="filteredRows"
-      :location-filter="locationFilter"
-      :importing="targetImporting"
-      :import-input-key="targetImportInputKey"
-      :import-file-name="targetImportFileName"
-      :import-preview-rows="targetImportPreviewRows"
-      :import-preview-display-rows="targetImportPreviewDisplayRows"
-      :import-duplicate-rows="targetImportDuplicateRows"
-      :import-error-rows="targetImportErrorRows"
-      :import-stats="targetImportStats"
-      :import-error-message="targetImportErrorMessage"
-      :import-success-message="targetImportSuccessMessage"
-      @reset-import="resetTargetImport"
-      @file-change="handleTargetImportFileChange"
-      @submit-import="submitTargetImportExcel"
-    />
+      <OperatorOutputTargetImportPanel
+        embedded
+        :is-admin="isAdmin"
+        :selected-date="localDate"
+        :template-rows="filteredRows"
+        :location-filter="locationFilter"
+        :importing="targetImporting"
+        :import-input-key="targetImportInputKey"
+        :import-file-name="targetImportFileName"
+        :import-preview-rows="targetImportPreviewRows"
+        :import-preview-display-rows="targetImportPreviewDisplayRows"
+        :import-duplicate-rows="targetImportDuplicateRows"
+        :import-error-rows="targetImportErrorRows"
+        :import-stats="targetImportStats"
+        :import-error-message="targetImportErrorMessage"
+        :import-success-message="targetImportSuccessMessage"
+        @reset-import="resetTargetImport"
+        @file-change="handleTargetImportFileChange"
+        @submit-import="submitTargetImportExcel"
+      />
     </section>
 
     <section class="table-card">
@@ -633,29 +635,29 @@ onBeforeUnmount(() => {
   border-radius: 12px;
 }
 
-.ie-upload-group > :deep(.import-panel:first-child) {
+.ie-upload-group > :deep(.import-panel:not(:last-child)) {
   padding-right: 14px;
   border-right: 1px solid #e2e8f0;
 }
 
-.ie-upload-group > :deep(.import-panel:last-child) {
+.ie-upload-group > :deep(.import-panel:not(:first-child)) {
   padding-left: 14px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .ie-upload-group {
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
-  .ie-upload-group > :deep(.import-panel:first-child) {
+  .ie-upload-group > :deep(.import-panel:not(:last-child)) {
     padding-right: 0;
     padding-bottom: 12px;
     border-right: 0;
     border-bottom: 1px solid #e2e8f0;
   }
 
-  .ie-upload-group > :deep(.import-panel:last-child) {
+  .ie-upload-group > :deep(.import-panel:not(:first-child)) {
     padding-left: 0;
     padding-top: 0;
   }

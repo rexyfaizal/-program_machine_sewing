@@ -4,7 +4,9 @@ import {
   getMachineOperatorReport,
   getMachineSettings,
   getOperatorCtMaster,
+  getOperatorCtStyleMaster,
   getOperatorOutputTarget,
+  getOperatorOutputTargetStyle,
   getProductivity,
 } from "../api/machineApi";
 import {
@@ -27,8 +29,15 @@ import {
   buildOperatorCtMap,
 } from "../utils/operatorCt";
 import {
+  attachOperatorCtStyleFields,
+  buildOperatorCtStyleMap,
+  isGm3Area,
+} from "../utils/operatorCtStyle";
+import {
   attachOperatorOutputTargetFields,
+  attachOperatorOutputTargetStyleFields,
   buildOperatorOutputTargetMap,
+  buildOperatorOutputTargetStyleMap,
 } from "../utils/operatorOutputTarget";
 
 function normalizeText(value) {
@@ -68,11 +77,20 @@ function lineSortParts(location) {
   };
 }
 
-function attachOperatorMasterFields(row, ctMap, outputTargetMap) {
-  const withMaster = attachOperatorOutputTargetFields(
-    attachOperatorCtFields(row, ctMap),
-    outputTargetMap
-  );
+function attachOperatorMasterFields(
+  row,
+  ctMap,
+  outputTargetMap,
+  styleCtMap,
+  styleOutputTargetMap
+) {
+  const withCt = isGm3Area(row?.area)
+    ? attachOperatorCtStyleFields(row, styleCtMap)
+    : attachOperatorCtFields(row, ctMap);
+
+  const withMaster = isGm3Area(row?.area)
+    ? attachOperatorOutputTargetStyleFields(withCt, styleOutputTargetMap)
+    : attachOperatorOutputTargetFields(withCt, outputTargetMap);
 
   return attachProduktivitasCtFields(withMaster);
 }
@@ -307,7 +325,9 @@ export function useOperatorProductivity() {
         settingsData,
         shiftConfigData,
         operatorCtData,
+        operatorCtStyleData,
         operatorOutputTargetData,
+        operatorOutputTargetStyleData,
         currentProd,
         shift1Prod,
         shift2Prod,
@@ -317,7 +337,9 @@ export function useOperatorProductivity() {
         getMachineSettings().catch(() => []),
         getLineShiftConfig("").catch(() => ({ lines: [] })),
         getOperatorCtMaster().catch(() => []),
+        getOperatorCtStyleMaster().catch(() => []),
         getOperatorOutputTarget(requestDate).catch(() => []),
+        getOperatorOutputTargetStyle(requestDate).catch(() => []),
         getProductivity(requestDate, { shift: "CURRENT" }).catch(() => []),
         getProductivity(requestDate, { shift: "SHIFT_1" }).catch(() => []),
         getProductivity(requestDate, { shift: "SHIFT_2" }).catch(() => []),
@@ -325,7 +347,11 @@ export function useOperatorProductivity() {
       ]);
 
       const ctMap = buildOperatorCtMap(operatorCtData);
+      const styleCtMap = buildOperatorCtStyleMap(operatorCtStyleData);
       const outputTargetMap = buildOperatorOutputTargetMap(operatorOutputTargetData);
+      const styleOutputTargetMap = buildOperatorOutputTargetStyleMap(
+        operatorOutputTargetStyleData
+      );
 
       const settingsMap = buildSettingsMap(settingsData);
       const shiftConfigMap = buildLineShiftConfigMap(
@@ -357,7 +383,9 @@ export function useOperatorProductivity() {
               )
             ),
             ctMap,
-            outputTargetMap
+            outputTargetMap,
+            styleCtMap,
+            styleOutputTargetMap
           )
         );
 
@@ -377,7 +405,9 @@ export function useOperatorProductivity() {
               )
             ),
             ctMap,
-            outputTargetMap
+            outputTargetMap,
+            styleCtMap,
+            styleOutputTargetMap
           )
         );
 

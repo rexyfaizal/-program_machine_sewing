@@ -178,6 +178,12 @@ func main() {
 		if err := repo.EnsureOperatorOutputTargetSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema operator_output_target:", err)
 		}
+		if err := repo.EnsureOperatorCtStyleSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema operator_ct_style:", err)
+		}
+		if err := repo.EnsureOperatorOutputTargetStyleSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema operator_output_target_style:", err)
+		}
 		cancel()
 	}
 
@@ -229,8 +235,12 @@ func main() {
 
 	mux.HandleFunc("/api/operator-ct", api.OperatorCtMaster)
 	mux.HandleFunc("/api/operator-ct/import", api.OperatorCtImport)
+	mux.HandleFunc("/api/operator-ct-style", api.OperatorCtStyleMaster)
+	mux.HandleFunc("/api/operator-ct-style/import", api.OperatorCtStyleImport)
 	mux.HandleFunc("/api/operator-output-target", api.OperatorOutputTarget)
 	mux.HandleFunc("/api/operator-output-target/import", api.OperatorOutputTargetImport)
+	mux.HandleFunc("/api/operator-output-target-style", api.OperatorOutputTargetStyle)
+	mux.HandleFunc("/api/operator-output-target-style/import", api.OperatorOutputTargetStyleImport)
 
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)

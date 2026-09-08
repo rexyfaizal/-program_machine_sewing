@@ -70,17 +70,48 @@ function formatDayMonthId(start, end) {
   return `${start.getDate()} ${startMonth}-${end.getDate()} ${endMonth}`;
 }
 
-/** Minggu 1..n = Senin–Sabtu dalam bulan itu (hari Minggu dilewati). */
+/** Minggu kerja Senin–Sabtu dalam bulan (hari Minggu dilewati).
+ *  Jika bulan tidak mulai Senin, pecahan awal ikut sebagai Minggu 1. */
 export function getMonthWeekOptions(year, monthIndex) {
   const last = new Date(year, monthIndex + 1, 0);
-  const cursor = new Date(year, monthIndex, 1);
-
-  while (cursor.getDay() !== 1 && cursor <= last) {
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
   const options = [];
   let weekNo = 1;
+
+  const firstMonday = new Date(year, monthIndex, 1);
+  while (firstMonday.getDay() !== 1 && firstMonday <= last) {
+    firstMonday.setDate(firstMonday.getDate() + 1);
+  }
+
+  const day1 = new Date(year, monthIndex, 1);
+  if (day1 < firstMonday) {
+    let start = new Date(day1);
+    if (start.getDay() === 0) {
+      start.setDate(start.getDate() + 1);
+    }
+
+    let end = new Date(firstMonday);
+    end.setDate(firstMonday.getDate() - 1);
+    if (end.getDay() === 0) {
+      end.setDate(end.getDate() - 1);
+    }
+
+    if (
+      start.getMonth() === monthIndex &&
+      end.getMonth() === monthIndex &&
+      end >= start
+    ) {
+      options.push({
+        weekNo,
+        start: toLocalIsoDate(start),
+        end: toLocalIsoDate(end),
+        label: `Minggu ${weekNo}`,
+        rangeLabel: formatDayMonthId(start, end),
+      });
+      weekNo += 1;
+    }
+  }
+
+  const cursor = new Date(firstMonday);
 
   while (cursor <= last && cursor.getMonth() === monthIndex) {
     const saturday = new Date(cursor);

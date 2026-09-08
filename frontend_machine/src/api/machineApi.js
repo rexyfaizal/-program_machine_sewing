@@ -552,6 +552,28 @@ export async function importOperatorCt(payload) {
   return await readResponse(res);
 }
 
+export async function getOperatorCtStyleMaster() {
+  const res = await fetch("/api/operator-ct-style");
+  return await readResponse(res);
+}
+
+export async function importOperatorCtStyle(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!rows.length) {
+    throw new Error("Tidak ada data CT Style valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/operator-ct-style/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows }),
+  });
+
+  return await readResponse(res);
+}
+
 export async function getOperatorOutputTarget(date) {
   const workDate = String(date || "").trim();
   if (!workDate) {
@@ -571,6 +593,35 @@ export async function importOperatorOutputTarget(payload) {
   }
 
   const res = await fetch("/api/operator-output-target/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getOperatorOutputTargetStyle(date) {
+  const workDate = String(date || "").trim();
+  if (!workDate) {
+    throw new Error("Tanggal wajib diisi.");
+  }
+
+  const res = await fetch(
+    `/api/operator-output-target-style?date=${encodeURIComponent(workDate)}`
+  );
+  return await readResponse(res);
+}
+
+export async function importOperatorOutputTargetStyle(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!rows.length) {
+    throw new Error("Tidak ada data output target Style valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/operator-output-target-style/import", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
