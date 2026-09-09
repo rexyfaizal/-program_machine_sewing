@@ -35,6 +35,8 @@ export function useOperatorMachinePage(uuidSource) {
 
   const processName = ref("");
   const styleName = ref("");
+  const styleSelectedFromList = ref(false);
+  const processSelectedFromList = ref(false);
 
   const styleOptions = ref([]);
   const styleSearching = ref(false);
@@ -54,10 +56,12 @@ export function useOperatorMachinePage(uuidSource) {
   let employeeSearchTimer = null;
   let styleSearchTimer = null;
   let processSearchTimer = null;
-  let lossTickTimer = null;
-  let lossSyncTimer = null;
 
   let employeeSearchSeq = 0;
+  let styleSearchSeq = 0;
+  let processSearchSeq = 0;
+  let lossTickTimer = null;
+  let lossSyncTimer = null;
 
   const reasonMenus = [
     { reasonCode: "MACHINE_BROKEN", reasonName: "Mesin Rusak" },
@@ -598,6 +602,8 @@ export function useOperatorMachinePage(uuidSource) {
 
     styleName.value = "";
     processName.value = "";
+    styleSelectedFromList.value = false;
+    processSelectedFromList.value = false;
     styleOptions.value = [];
     processOptions.value = [];
     showStyleOptions.value = false;
@@ -923,6 +929,8 @@ export function useOperatorMachinePage(uuidSource) {
     successMessage.value = "";
     errorMessage.value = "";
 
+    styleSelectedFromList.value = false;
+    processSelectedFromList.value = false;
     processName.value = "";
     processOptions.value = [];
     showStyleOptions.value = true;
@@ -938,6 +946,7 @@ export function useOperatorMachinePage(uuidSource) {
 
   async function searchStyleSuggestion() {
     const q = String(styleName.value || "").trim();
+    const requestSeq = ++styleSearchSeq;
 
     styleOptions.value = [];
 
@@ -951,16 +960,34 @@ export function useOperatorMachinePage(uuidSource) {
     try {
       const rows = await searchStyles(q);
 
-      styleOptions.value = rows
+      if (requestSeq !== styleSearchSeq) {
+        return;
+      }
+
+      const options = rows
         .map(normalizeStyle)
         .filter((item) => item.styleName)
         .slice(0, 10);
 
+      const exactStyle = options.find((item) => {
+        return normalizeText(item.styleName) === normalizeText(q);
+      });
+
+      if (exactStyle) {
+        selectStyle(exactStyle);
+        return;
+      }
+
+      styleOptions.value = options;
       showStyleOptions.value = true;
     } catch (err) {
-      errorMessage.value = `Gagal cari style: ${err.message}`;
+      if (requestSeq === styleSearchSeq) {
+        errorMessage.value = `Gagal cari style: ${err.message}`;
+      }
     } finally {
-      styleSearching.value = false;
+      if (requestSeq === styleSearchSeq) {
+        styleSearching.value = false;
+      }
     }
   }
 
@@ -976,11 +1003,18 @@ export function useOperatorMachinePage(uuidSource) {
   }
 
   function selectStyle(item) {
+    if (styleSearchTimer) {
+      clearTimeout(styleSearchTimer);
+    }
+    styleSearchSeq++;
+
     styleName.value = item.styleName;
+    styleSelectedFromList.value = true;
     styleOptions.value = [];
     showStyleOptions.value = false;
 
     processName.value = "";
+    processSelectedFromList.value = false;
     processOptions.value = [];
     showProcessOptions.value = true;
 
@@ -998,6 +1032,7 @@ export function useOperatorMachinePage(uuidSource) {
   function handleProcessInput() {
     successMessage.value = "";
     errorMessage.value = "";
+    processSelectedFromList.value = false;
     showProcessOptions.value = true;
 
     if (processSearchTimer) {
@@ -1012,6 +1047,7 @@ export function useOperatorMachinePage(uuidSource) {
   async function searchProcessSuggestion() {
     const selectedStyle = String(styleName.value || "").trim();
     const q = String(processName.value || "").trim();
+    const requestSeq = ++processSearchSeq;
 
     processOptions.value = [];
 
@@ -1025,16 +1061,34 @@ export function useOperatorMachinePage(uuidSource) {
     try {
       const rows = await searchProcessesByStyle(selectedStyle, q);
 
-      processOptions.value = rows
+      if (requestSeq !== processSearchSeq) {
+        return;
+      }
+
+      const options = rows
         .map(normalizeProcess)
         .filter((item) => item.processName)
         .slice(0, 20);
 
+      const exactProcess = options.find((item) => {
+        return normalizeText(item.processName) === normalizeText(q);
+      });
+
+      if (exactProcess && q) {
+        selectProcess(exactProcess);
+        return;
+      }
+
+      processOptions.value = options;
       showProcessOptions.value = true;
     } catch (err) {
-      errorMessage.value = `Gagal cari proses: ${err.message}`;
+      if (requestSeq === processSearchSeq) {
+        errorMessage.value = `Gagal cari proses: ${err.message}`;
+      }
     } finally {
-      processSearching.value = false;
+      if (requestSeq === processSearchSeq) {
+        processSearching.value = false;
+      }
     }
   }
 
@@ -1049,7 +1103,13 @@ export function useOperatorMachinePage(uuidSource) {
   }
 
   function selectProcess(item) {
+    if (processSearchTimer) {
+      clearTimeout(processSearchTimer);
+    }
+    processSearchSeq++;
+
     processName.value = item.processName;
+    processSelectedFromList.value = true;
     processOptions.value = [];
     showProcessOptions.value = false;
     errorMessage.value = "";
@@ -1080,13 +1140,15 @@ export function useOperatorMachinePage(uuidSource) {
       return;
     }
 
-    if (!styleName.value.trim()) {
-      errorMessage.value = "Style wajib diisi.";
+    if (!styleName.value.trim() || !styleSelectedFromList.value) {
+      errorMessage.value =
+        "Style wajib dipilih dari suggestion sesuai data master.";
       return;
     }
 
-    if (!processName.value.trim()) {
-      errorMessage.value = "Proses wajib diisi.";
+    if (!processName.value.trim() || !processSelectedFromList.value) {
+      errorMessage.value =
+        "Proses wajib dipilih dari suggestion sesuai data master.";
       return;
     }
 
@@ -1392,6 +1454,8 @@ export function useOperatorMachinePage(uuidSource) {
     stopLossSyncPolling();
 
     employeeSearchSeq++;
+    styleSearchSeq++;
+    processSearchSeq++;
   });
 
   return {

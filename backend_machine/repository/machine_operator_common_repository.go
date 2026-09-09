@@ -53,13 +53,12 @@ func normalizeOperatorInput(input models.MachineOperatorLoginRequest) models.Mac
 	return input
 }
 
+var ErrOperatorEmployeeNotFound = errors.New("operator tidak ditemukan di dbo.employee")
+var ErrProcessStylePairNotFound = errors.New("style dan proses tidak ditemukan di master")
+
 func (r *Repository) fillOperatorFromEmployeeTx(ctx context.Context, tx *sql.Tx, input *models.MachineOperatorLoginRequest) error {
 	if input.OperatorNIK == "" {
 		return fmt.Errorf("operatorNik wajib diisi")
-	}
-
-	if input.OperatorName != "" && input.BranchDetail != "" {
-		return nil
 	}
 
 	query := `
@@ -84,18 +83,14 @@ func (r *Repository) fillOperatorFromEmployeeTx(ctx context.Context, tx *sql.Tx,
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("operator dengan NIK %s tidak ditemukan di dbo.employee", input.OperatorNIK)
+			return fmt.Errorf("%w: NIK %s", ErrOperatorEmployeeNotFound, input.OperatorNIK)
 		}
 		return err
 	}
 
-	if input.OperatorName == "" {
-		input.OperatorName = name
-	}
-
-	if input.BranchDetail == "" {
-		input.BranchDetail = branchdetail
-	}
+	input.OperatorNIK = nik
+	input.OperatorName = name
+	input.BranchDetail = branchdetail
 
 	return nil
 }

@@ -53,7 +53,19 @@ func (h *Handler) MachineOperatorLogin(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.Repo.LoginMachineOperator(ctx, input)
 	if err != nil {
-		http.Error(w, "Gagal login operator: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, repository.ErrOperatorEmployeeNotFound) ||
+			errors.Is(err, repository.ErrProcessStylePairNotFound) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		msg := err.Error()
+		if strings.Contains(msg, "wajib diisi") {
+			http.Error(w, "Gagal login operator: "+msg, http.StatusBadRequest)
+			return
+		}
+
+		http.Error(w, "Gagal login operator: "+msg, http.StatusInternalServerError)
 		return
 	}
 

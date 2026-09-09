@@ -4,12 +4,70 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"backend_machine/models"
 )
 
 var ErrProcessStyleNotFound = errors.New("process style tidak ditemukan")
+
+func (r *Repository) EnsureProcessStylePairExists(
+	ctx context.Context,
+	tx *sql.Tx,
+	styleName string,
+	processName string,
+) error {
+	styleName = strings.TrimSpace(styleName)
+	processName = strings.TrimSpace(processName)
+
+	if styleName == "" {
+		return fmt.Errorf("style wajib diisi")
+	}
+	if processName == "" {
+		return fmt.Errorf("proses wajib diisi")
+	}
+
+	query := `
+		SELECT TOP 1 [id]
+		FROM [sewingiot].[dbo].[dt_proses_style]
+		WHERE LOWER(LTRIM(RTRIM(CAST([style] AS NVARCHAR(100))))) = LOWER(LTRIM(RTRIM(@style)))
+		  AND LOWER(LTRIM(RTRIM(ISNULL([proses], '')))) = LOWER(LTRIM(RTRIM(@proses)));
+	`
+
+	var id int64
+	var err error
+
+	if tx != nil {
+		err = tx.QueryRowContext(
+			ctx,
+			query,
+			sql.Named("style", styleName),
+			sql.Named("proses", processName),
+		).Scan(&id)
+	} else {
+		err = r.DB.QueryRowContext(
+			ctx,
+			query,
+			sql.Named("style", styleName),
+			sql.Named("proses", processName),
+		).Scan(&id)
+	}
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf(
+				"%w: style=%s proses=%s",
+				ErrProcessStylePairNotFound,
+				styleName,
+				processName,
+			)
+		}
+		return err
+	}
+
+	return nil
+}
 
 func (r *Repository) GetProcessStyleStyles(ctx context.Context, q string) ([]models.ProcessStyleItem, error) {
 	q = strings.TrimSpace(q)

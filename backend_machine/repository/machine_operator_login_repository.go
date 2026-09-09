@@ -20,6 +20,14 @@ func (r *Repository) LoginMachineOperator(ctx context.Context, input models.Mach
 		return models.MachineOperatorLoginResponse{}, fmt.Errorf("operatorNik wajib diisi")
 	}
 
+	if input.StyleName == "" {
+		return models.MachineOperatorLoginResponse{}, fmt.Errorf("style wajib diisi")
+	}
+
+	if input.ProcessName == "" {
+		return models.MachineOperatorLoginResponse{}, fmt.Errorf("proses wajib diisi")
+	}
+
 	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return models.MachineOperatorLoginResponse{}, err
@@ -27,6 +35,10 @@ func (r *Repository) LoginMachineOperator(ctx context.Context, input models.Mach
 	defer tx.Rollback()
 
 	if err := r.fillOperatorFromEmployeeTx(ctx, tx, &input); err != nil {
+		return models.MachineOperatorLoginResponse{}, err
+	}
+
+	if err := r.EnsureProcessStylePairExists(ctx, tx, input.StyleName, input.ProcessName); err != nil {
 		return models.MachineOperatorLoginResponse{}, err
 	}
 
