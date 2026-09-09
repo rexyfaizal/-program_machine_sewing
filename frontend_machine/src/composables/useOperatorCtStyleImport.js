@@ -1,9 +1,9 @@
 import { ref, computed } from "vue";
 
-import { importOperatorCt } from "../api/machineApi";
-import { parseOperatorCtExcel } from "../utils/operatorCtImportExcel";
+import { importOperatorCtStyle } from "../api/machineApi";
+import { parseOperatorCtStyleExcel } from "../utils/operatorCtStyleImportExcel";
 
-export function useOperatorCtImport({ isAdmin, onImported }) {
+export function useOperatorCtStyleImport({ isAdmin, onImported }) {
   const importing = ref(false);
   const importInputKey = ref(0);
 
@@ -85,7 +85,7 @@ export function useOperatorCtImport({ isAdmin, onImported }) {
     importFileName.value = file.name;
 
     try {
-      const parsed = await parseOperatorCtExcel(file);
+      const parsed = await parseOperatorCtStyleExcel(file);
       importPreviewRows.value = parsed.rows;
       importDuplicateRows.value = parsed.duplicateRows;
       importErrorRows.value = parsed.errorRows;
@@ -93,18 +93,18 @@ export function useOperatorCtImport({ isAdmin, onImported }) {
 
       if (!importPreviewRows.value.length) {
         showImportError(
-          "Tidak ada baris valid. Pastikan kolom UUID dan Line terisi."
+          "Tidak ada baris valid. Pastikan kolom Style, Proses, dan CT Total terisi."
         );
       }
     } catch (err) {
       resetImport(true);
-      showImportError(err?.message || "Gagal membaca file Excel.");
+      showImportError(err?.message || "Gagal membaca file Excel CT GM3.");
     }
   }
 
   async function submitImportExcel() {
     if (!isAdmin?.value) {
-      showImportError("Upload CT hanya untuk mode admin / IE.");
+      showImportError("Upload CT GM3 hanya untuk mode admin / IE.");
       return;
     }
 
@@ -119,21 +119,18 @@ export function useOperatorCtImport({ isAdmin, onImported }) {
     try {
       const payload = {
         rows: importPreviewRows.value.map((row) => ({
-          uuid: row.uuid,
-          line: row.line,
-          area: row.area,
-          ctSum: row.ctSum,
-          ctStd: row.ctStd,
-          ctValue: row.ctValue,
+          styleName: row.styleName,
+          processName: row.processName,
+          ctTotal: row.ctTotal,
         })),
       };
 
-      const result = await importOperatorCt(payload);
+      const result = await importOperatorCtStyle(payload);
       const upserted = Number(result?.upserted || 0);
       const skipped = Number(result?.skipped || 0);
 
       showImportSuccess(
-        `Import CT berhasil (${upserted} tersimpan, ${skipped} dilewati).`
+        `Import CT GM3 berhasil (${upserted} tersimpan, ${skipped} dilewati).`
       );
 
       resetImport(true);
@@ -142,13 +139,13 @@ export function useOperatorCtImport({ isAdmin, onImported }) {
         await onImported();
       }
     } catch (err) {
-      showImportError(err?.message || "Gagal import CT ke server.");
+      showImportError(err?.message || "Gagal import CT GM3 ke server.");
     } finally {
       importing.value = false;
     }
   }
 
-  function cleanupOperatorCtImport() {
+  function cleanupOperatorCtStyleImport() {
     if (importSuccessTimer) {
       clearTimeout(importSuccessTimer);
       importSuccessTimer = null;
@@ -169,6 +166,6 @@ export function useOperatorCtImport({ isAdmin, onImported }) {
     resetImport,
     handleImportFileChange,
     submitImportExcel,
-    cleanupOperatorCtImport,
+    cleanupOperatorCtStyleImport,
   };
 }

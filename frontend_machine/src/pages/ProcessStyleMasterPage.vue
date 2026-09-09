@@ -3,9 +3,11 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import ProcessStyleFormCard from "../components/process-style/ProcessStyleFormCard.vue";
 import ProcessStyleImportPanel from "../components/process-style/ProcessStyleImportPanel.vue";
+import ProcessStyleCtImportPanel from "../components/process-style/ProcessStyleCtImportPanel.vue";
 import ProcessStyleTable from "../components/process-style/ProcessStyleTable.vue";
 
 import { useProcessStyleImport } from "../composables/useProcessStyleImport";
+import { useOperatorCtStyleImport } from "../composables/useOperatorCtStyleImport";
 import { useProcessStyleMaster } from "../composables/useProcessStyleMaster";
 import { getInitialAdminMode } from "../utils/adminMode";
 
@@ -65,6 +67,24 @@ const {
   },
 });
 
+const {
+  importing: ctStyleImporting,
+  importInputKey: ctStyleImportInputKey,
+  importFileName: ctStyleImportFileName,
+  importPreviewRows: ctStyleImportPreviewRows,
+  importPreviewDisplayRows: ctStyleImportPreviewDisplayRows,
+  importDuplicateRows: ctStyleImportDuplicateRows,
+  importStats: ctStyleImportStats,
+  importErrorMessage: ctStyleImportErrorMessage,
+  importSuccessMessage: ctStyleImportSuccessMessage,
+  resetImport: resetCtStyleImport,
+  handleImportFileChange: handleCtStyleImportFileChange,
+  submitImportExcel: submitCtStyleImportExcel,
+  cleanupOperatorCtStyleImport,
+} = useOperatorCtStyleImport({
+  isAdmin,
+});
+
 onMounted(async () => {
   isAdmin.value = await Promise.resolve(getInitialAdminMode());
   await loadRows();
@@ -73,6 +93,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cleanupProcessStyleMaster();
   cleanupProcessStyleImport();
+  cleanupOperatorCtStyleImport();
 });
 </script>
 
@@ -90,21 +111,40 @@ onBeforeUnmount(() => {
       {{ successMessage }}
     </div>
 
-    <ProcessStyleImportPanel
-      :is-admin="isAdmin"
-      :importing="importing"
-      :import-input-key="importInputKey"
-      :import-file-name="importFileName"
-      :import-preview-rows="importPreviewRows"
-      :import-preview-display-rows="importPreviewDisplayRows"
-      :import-duplicate-rows="importDuplicateRows"
-      :import-stats="importStats"
-      :import-error-message="importErrorMessage"
-      :import-success-message="importSuccessMessage"
-      @reset-import="resetImport"
-      @file-change="handleImportFileChange"
-      @submit-import="submitImportExcel"
-    />
+    <div class="import-grid">
+      <ProcessStyleImportPanel
+        :is-admin="isAdmin"
+        :importing="importing"
+        :import-input-key="importInputKey"
+        :import-file-name="importFileName"
+        :import-preview-rows="importPreviewRows"
+        :import-preview-display-rows="importPreviewDisplayRows"
+        :import-duplicate-rows="importDuplicateRows"
+        :import-stats="importStats"
+        :import-error-message="importErrorMessage"
+        :import-success-message="importSuccessMessage"
+        @reset-import="resetImport"
+        @file-change="handleImportFileChange"
+        @submit-import="submitImportExcel"
+      />
+
+      <ProcessStyleCtImportPanel
+        :is-admin="isAdmin"
+        :template-rows="rows"
+        :importing="ctStyleImporting"
+        :import-input-key="ctStyleImportInputKey"
+        :import-file-name="ctStyleImportFileName"
+        :import-preview-rows="ctStyleImportPreviewRows"
+        :import-preview-display-rows="ctStyleImportPreviewDisplayRows"
+        :import-duplicate-rows="ctStyleImportDuplicateRows"
+        :import-stats="ctStyleImportStats"
+        :import-error-message="ctStyleImportErrorMessage"
+        :import-success-message="ctStyleImportSuccessMessage"
+        @reset-import="resetCtStyleImport"
+        @file-change="handleCtStyleImportFileChange"
+        @submit-import="submitCtStyleImportExcel"
+      />
+    </div>
 
     <ProcessStyleFormCard
       :is-admin="isAdmin"

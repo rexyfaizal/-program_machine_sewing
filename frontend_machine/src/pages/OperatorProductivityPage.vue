@@ -56,7 +56,6 @@ const {
   cleanupOperatorCtImport,
 } = useOperatorCtImport({
   isAdmin,
-  locationFilter,
   onImported: async () => {
     await loadOperatorProductivity(localDate.value);
   },

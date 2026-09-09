@@ -1,10 +1,16 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { downloadOperatorCtStyleTemplate } from "../../utils/operatorCtStyleImportExcel";
+import { formatCtNumber } from "../../utils/operatorCt";
 
 const props = defineProps({
   isAdmin: {
     type: Boolean,
     default: false,
+  },
+  templateRows: {
+    type: Array,
+    default: () => [],
   },
   importing: {
     type: Boolean,
@@ -37,6 +43,7 @@ const props = defineProps({
       readyRows: 0,
       skippedEmpty: 0,
       skippedDuplicate: 0,
+      skippedInvalid: 0,
     }),
   },
   importErrorMessage: {
@@ -51,19 +58,35 @@ const props = defineProps({
 
 const emit = defineEmits(["reset-import", "file-change", "submit-import"]);
 
+const templateMessage = ref("");
+const templateMessageType = ref("error");
 const hasFileStats = computed(
   () => Number(props.importStats?.totalExcelRows || 0) > 0
 );
+
+function handleDownloadTemplate() {
+  templateMessage.value = "";
+  templateMessageType.value = "error";
+
+  try {
+    const result = downloadOperatorCtStyleTemplate(props.templateRows);
+    templateMessageType.value = "success";
+    templateMessage.value = `Template berhasil (${result.rowCount} baris).`;
+  } catch (err) {
+    templateMessage.value =
+      err?.message || "Gagal mengunduh template CT GM3.";
+  }
+}
 </script>
 
 <template>
-  <section class="import-card">
+  <section class="import-card import-card-ct">
     <div class="import-head">
       <div class="import-head-text">
-        <h2>Upload Excel Master IE</h2>
+        <h2>Upload CT Khusus GM3</h2>
         <p>
-          Kolom <strong>STYLE</strong> + <strong>NAMA PROSES</strong>.
-          Kolom LINE diabaikan.
+          Kolom <strong>STYLE</strong> + <strong>PROSES</strong> +
+          <strong>CT TOTAL</strong> · dipakai Kap/Jam GM3.
         </p>
       </div>
     </div>
@@ -85,6 +108,9 @@ const hasFileStats = computed(
         </label>
 
         <div class="import-actions">
+          <button type="button" class="btn-soft" @click="handleDownloadTemplate">
+            Template
+          </button>
           <button
             type="button"
             class="btn-soft"
@@ -95,16 +121,20 @@ const hasFileStats = computed(
           </button>
           <button
             type="button"
-            class="btn-primary btn-import"
+            class="btn-primary btn-import btn-ct-gm3"
             :disabled="
               !props.isAdmin || props.importing || !props.importPreviewRows.length
             "
             @click="emit('submit-import')"
           >
-            {{ props.importing ? "Import..." : "Import" }}
+            {{ props.importing ? "Import..." : "Import CT" }}
           </button>
         </div>
       </div>
+
+      <p v-if="templateMessage" class="alert" :class="templateMessageType">
+        {{ templateMessage }}
+      </p>
 
       <div v-if="hasFileStats" class="import-stats">
         <div>
@@ -135,7 +165,7 @@ const hasFileStats = computed(
 
       <div v-if="props.importPreviewRows.length" class="preview-box">
         <div class="preview-title">
-          <strong>Preview</strong>
+          <strong>Preview CT GM3</strong>
           <span>
             {{ props.importPreviewDisplayRows.length }}/{{
               props.importPreviewRows.length
@@ -150,19 +180,21 @@ const hasFileStats = computed(
               <tr>
                 <th>No</th>
                 <th>Style</th>
-                <th>Nama Proses</th>
+                <th>Proses</th>
+                <th>CT Total</th>
               </tr>
             </thead>
             <tbody>
               <tr
                 v-for="(row, index) in props.importPreviewDisplayRows"
-                :key="`${row.style}-${row.processName}-${index}`"
+                :key="`${row.styleName}-${row.processName}-${index}`"
               >
                 <td>{{ index + 1 }}</td>
                 <td>
-                  <strong>{{ row.style }}</strong>
+                  <strong>{{ row.styleName }}</strong>
                 </td>
                 <td>{{ row.processName }}</td>
+                <td>{{ formatCtNumber(row.ctTotal) }}</td>
               </tr>
             </tbody>
           </table>
@@ -193,13 +225,13 @@ const hasFileStats = computed(
             <tbody>
               <tr
                 v-for="(row, index) in props.importDuplicateRows"
-                :key="`${row.style}-${row.processName}-${row.excelRowNumber}`"
+                :key="`${row.styleName}-${row.processName}-${row.excelRowNumber}`"
               >
                 <td>{{ index + 1 }}</td>
                 <td>
                   <strong>{{ row.excelRowNumber }}</strong>
                 </td>
-                <td>{{ row.style }}</td>
+                <td>{{ row.styleName }}</td>
                 <td>{{ row.processName }}</td>
                 <td>{{ row.duplicateOfRowNumber }}</td>
               </tr>

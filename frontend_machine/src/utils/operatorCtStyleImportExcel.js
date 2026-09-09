@@ -144,11 +144,17 @@ export function buildOperatorCtStyleTemplateRows(sourceRows = []) {
   const uniqueMap = new Map();
 
   (Array.isArray(sourceRows) ? sourceRows : []).forEach((row) => {
-    const area = String(row?.area || "").trim().toUpperCase();
-    if (area !== "GM3") return;
+    const styleName = cleanText(
+      row?.styleName || row?.style || row?.Style || ""
+    );
+    const processName = cleanText(
+      row?.processName || row?.mesin || row?.Proses || row?.proses || ""
+    );
 
-    const styleName = cleanText(row?.style);
-    const processName = cleanText(row?.mesin);
+    // Baris dari dashboard operator (hanya GM3); baris Master IE tanpa area ikut semua.
+    const area = String(row?.area || "").trim().toUpperCase();
+    if (area && area !== "GM3") return;
+
     if (!styleName || !processName || styleName === "-" || processName === "-") {
       return;
     }

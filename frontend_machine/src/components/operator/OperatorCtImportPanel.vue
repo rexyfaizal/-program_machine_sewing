@@ -1,9 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { downloadOperatorCtTemplate } from "../../utils/operatorCtImportExcel";
-import { downloadOperatorCtStyleTemplate } from "../../utils/operatorCtStyleImportExcel";
 import { formatCtNumber } from "../../utils/operatorCt";
-import { isGm3Area } from "../../utils/operatorCtStyle";
 
 const props = defineProps({
   isAdmin: {
@@ -72,13 +70,6 @@ const props = defineProps({
 
 const emit = defineEmits(["reset-import", "file-change", "submit-import"]);
 
-const isStyleMode = computed(() => isGm3Area(props.locationFilter));
-const panelTitle = computed(() =>
-  isStyleMode.value ? "CT Master · Style + Proses" : "CT Master"
-);
-const importButtonLabel = computed(() =>
-  isStyleMode.value ? "Import CT Style" : "Import CT"
-);
 const hasFileStats = computed(() => Number(props.importStats?.totalExcelRows || 0) > 0);
 const templateMessage = ref("");
 const templateMessageType = ref("error");
@@ -88,11 +79,9 @@ function handleDownloadTemplate() {
   templateMessageType.value = "error";
 
   try {
-    const result = isStyleMode.value
-      ? downloadOperatorCtStyleTemplate(props.templateRows)
-      : downloadOperatorCtTemplate(props.templateRows, {
-          locationFilter: props.locationFilter,
-        });
+    const result = downloadOperatorCtTemplate(props.templateRows, {
+      locationFilter: props.locationFilter,
+    });
     templateMessageType.value = "success";
     templateMessage.value = `Template berhasil (${result.rowCount} baris).`;
   } catch (err) {
@@ -105,15 +94,8 @@ function handleDownloadTemplate() {
 <template>
   <section v-if="isAdmin" class="import-panel" :class="{ embedded }">
     <div class="import-toolbar">
-      <h3>{{ panelTitle }}</h3>
-      <p class="mode-hint">
-        <template v-if="isStyleMode">
-          Filter GM3: format Excel Style + Proses + CT Total
-        </template>
-        <template v-else>
-          Format Excel UUID + Line (CT Master)
-        </template>
-      </p>
+      <h3>CT Master</h3>
+      <p class="mode-hint">Format Excel UUID + Line (CT Master)</p>
 
       <label class="file-picker">
         <input
@@ -140,12 +122,11 @@ function handleDownloadTemplate() {
         </button>
         <button
           type="button"
-          class="btn-primary"
-          :class="isStyleMode ? 'btn-style' : 'btn-ct'"
+          class="btn-primary btn-ct"
           :disabled="importing || !importPreviewRows.length"
           @click="emit('submit-import')"
         >
-          {{ importing ? "Import..." : importButtonLabel }}
+          {{ importing ? "Import..." : "Import CT" }}
         </button>
       </div>
     </div>
@@ -171,26 +152,7 @@ function handleDownloadTemplate() {
 
     <div v-if="importPreviewDisplayRows.length" class="preview-box">
       <div class="preview-table-wrap">
-        <table v-if="isStyleMode">
-          <thead>
-            <tr>
-              <th>Style</th>
-              <th>Proses</th>
-              <th>CT Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in importPreviewDisplayRows"
-              :key="`${row.styleName}-${row.processName}-${row.excelRowNumber}`"
-            >
-              <td>{{ row.styleName }}</td>
-              <td>{{ row.processName }}</td>
-              <td>{{ formatCtNumber(row.ctTotal) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <table v-else>
+        <table>
           <thead>
             <tr>
               <th>Line</th>
@@ -221,25 +183,7 @@ function handleDownloadTemplate() {
 
     <div v-if="importErrorRows.length" class="preview-box error-box">
       <div class="preview-table-wrap">
-        <table v-if="isStyleMode">
-          <thead>
-            <tr>
-              <th>Baris</th>
-              <th>Style</th>
-              <th>Proses</th>
-              <th>Pesan</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in importErrorRows.slice(0, 5)" :key="row.excelRowNumber">
-              <td>{{ row.excelRowNumber }}</td>
-              <td>{{ row.styleName || "-" }}</td>
-              <td>{{ row.processName || "-" }}</td>
-              <td>{{ row.message }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <table v-else>
+        <table>
           <thead>
             <tr>
               <th>Baris</th>
@@ -348,11 +292,6 @@ function handleDownloadTemplate() {
 
 .btn-primary.btn-ct {
   background: #2563eb;
-  color: #fff;
-}
-
-.btn-primary.btn-style {
-  background: #7c3aed;
   color: #fff;
 }
 

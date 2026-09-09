@@ -3,6 +3,13 @@
   gap: 18px;
 }
 
+.master-ie-page .import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
 .master-ie-page .alert {
   padding: 14px 16px;
   border-radius: 18px;
@@ -37,13 +44,17 @@
 .master-ie-page .import-head,
 .master-ie-page .form-title,
 .master-ie-page .table-toolbar {
-  padding: 18px 20px;
+  padding: 14px 16px;
   border-bottom: 1px solid #dbeafe;
   background: linear-gradient(135deg, #ffffff, #f8fbff);
   display: flex;
   justify-content: space-between;
-  gap: 14px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.master-ie-page .import-head-text {
+  min-width: 0;
 }
 
 .master-ie-page .import-head h2,
@@ -51,88 +62,113 @@
 .master-ie-page .table-toolbar h2 {
   margin: 0;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 16px;
   letter-spacing: -0.02em;
 }
 
 .master-ie-page .import-head p,
 .master-ie-page .table-toolbar p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: #64748b;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .master-ie-page .import-body {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 14px 16px 16px;
 }
 
-.master-ie-page .import-picker {
+.master-ie-page .import-toolbar-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+  gap: 10px;
+}
+
+.master-ie-page .import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .master-ie-page .file-box {
   display: grid;
-  gap: 7px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .master-ie-page .file-box span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 1000;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
+.master-ie-page .file-box.compact .file-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed #93c5fd;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
 .master-ie-page .file-box input {
   width: 100%;
-  min-height: 48px;
-  border: 1px dashed #93c5fd;
-  border-radius: 14px;
-  padding: 10px 14px;
+  max-width: 100%;
+  min-height: 36px;
+  border: 0;
+  padding: 0;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
-  background: #f8fbff;
+  background: transparent;
   cursor: pointer;
 }
 
 .master-ie-page .file-box small {
   color: #64748b;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .master-ie-page .import-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(130px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .master-ie-page .import-stats div {
   display: grid;
-  gap: 3px;
-  padding: 14px;
-  border-radius: 16px;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 12px;
   background: #f8fbff;
   border: 1px solid #dbeafe;
+  min-width: 0;
 }
 
 .master-ie-page .import-stats strong {
   color: #0f172a;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 1000;
 }
 
 .master-ie-page .import-stats span {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.master-ie-page .import-card-ct .btn-ct-gm3 {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  box-shadow: 0 12px 22px rgba(124, 58, 237, 0.18);
 }
 
 .master-ie-page .preview-box {
@@ -326,8 +362,14 @@
 }
 
 .master-ie-page .btn-import {
-  min-height: 48px;
+  min-height: 40px;
   white-space: nowrap;
+}
+
+.master-ie-page .import-actions .btn-soft,
+.master-ie-page .import-actions .btn-primary {
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .master-ie-page .search-box {
@@ -444,6 +486,12 @@
   text-align: right;
 }
 
+@media (max-width: 1100px) {
+  .master-ie-page .import-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .master-ie-page .import-head,
   .master-ie-page .form-title,
@@ -457,13 +505,12 @@
     justify-content: space-between;
   }
 
-  .master-ie-page .import-picker,
   .master-ie-page .form-grid {
     grid-template-columns: 1fr;
   }
 
   .master-ie-page .import-stats {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .master-ie-page .search-box {
