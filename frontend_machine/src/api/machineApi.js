@@ -416,19 +416,26 @@ export async function getProcessStyleList(query = "") {
 export async function createProcessStyle(payload) {
   const styleName = String(payload?.styleName || "").trim();
   const processName = String(payload?.processName || "").trim();
+  const hasCt =
+    payload?.ctTotal !== undefined &&
+    payload?.ctTotal !== null &&
+    String(payload.ctTotal).trim() !== "";
 
   if (!styleName) throw new Error("Style wajib diisi.");
   if (!processName) throw new Error("Proses wajib diisi.");
+
+  const body = {
+    styleName,
+    processName,
+    ctTotal: hasCt ? Number(payload.ctTotal) : null,
+  };
 
   const res = await fetch("/api/process-style", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      styleName,
-      processName,
-    }),
+    body: JSON.stringify(body),
   });
 
   return await readResponse(res);
@@ -438,20 +445,27 @@ export async function updateProcessStyle(id, payload) {
   const rowId = Number(id || 0);
   const styleName = String(payload?.styleName || "").trim();
   const processName = String(payload?.processName || "").trim();
+  const hasCt =
+    payload?.ctTotal !== undefined &&
+    payload?.ctTotal !== null &&
+    String(payload.ctTotal).trim() !== "";
 
   if (!rowId) throw new Error("ID data wajib diisi.");
   if (!styleName) throw new Error("Style wajib diisi.");
   if (!processName) throw new Error("Proses wajib diisi.");
+
+  const body = {
+    styleName,
+    processName,
+    ctTotal: hasCt ? Number(payload.ctTotal) : null,
+  };
 
   const res = await fetch(`/api/process-style/${encodeURIComponent(rowId)}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      styleName,
-      processName,
-    }),
+    body: JSON.stringify(body),
   });
 
   return await readResponse(res);

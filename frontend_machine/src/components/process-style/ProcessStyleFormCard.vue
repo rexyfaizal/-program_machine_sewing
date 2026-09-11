@@ -68,6 +68,20 @@ function updateField(field, event) {
         />
       </label>
 
+      <label>
+        <span>CT</span>
+
+        <input
+          :value="props.form.ctTotal"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Opsional"
+          :disabled="!props.isAdmin || props.saving"
+          @input="updateField('ctTotal', $event)"
+        />
+      </label>
+
       <button
         type="submit"
         class="btn-primary btn-save-green"

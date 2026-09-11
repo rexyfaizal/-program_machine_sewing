@@ -11,15 +11,17 @@ type ProcessStyleProcess struct {
 }
 
 type ProcessStyleRecord struct {
-	ID          int64  `json:"id"`
-	ProcessName string `json:"processName"`
-	StyleName   string `json:"styleName"`
-	CreatedAt   string `json:"createdAt"`
+	ID          int64    `json:"id"`
+	ProcessName string   `json:"processName"`
+	StyleName   string   `json:"styleName"`
+	CreatedAt   string   `json:"createdAt"`
+	CtTotal     *float64 `json:"ctTotal,omitempty"`
 }
 
 type ProcessStyleRequest struct {
-	ProcessName string `json:"processName"`
-	StyleName   string `json:"styleName"`
+	ProcessName string   `json:"processName"`
+	StyleName   string   `json:"styleName"`
+	CtTotal     *float64 `json:"ctTotal"`
 
 	// Alias supaya bisa terima body JSON dengan nama kolom asli juga.
 	Proses string `json:"proses"`

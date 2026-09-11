@@ -147,18 +147,22 @@ func (r *Repository) ListProcessStyle(ctx context.Context, q string) ([]models.P
 
 	query := `
 		SELECT
-			[id],
-			ISNULL([proses], '') AS processName,
-			CAST([style] AS NVARCHAR(100)) AS styleName,
-			ISNULL(CONVERT(VARCHAR(19), [created_at], 120), '') AS createdAt
-		FROM [sewingiot].[dbo].[dt_proses_style]
+			ps.[id],
+			ISNULL(ps.[proses], '') AS processName,
+			CAST(ps.[style] AS NVARCHAR(100)) AS styleName,
+			ISNULL(CONVERT(VARCHAR(19), ps.[created_at], 120), '') AS createdAt,
+			ct.ct_total AS ctTotal
+		FROM [sewingiot].[dbo].[dt_proses_style] ps
+		LEFT JOIN dbo.operator_ct_style ct
+			ON LOWER(LTRIM(RTRIM(ct.style_name))) = LOWER(LTRIM(RTRIM(CAST(ps.[style] AS NVARCHAR(100)))))
+		   AND LOWER(LTRIM(RTRIM(ct.process_name))) = LOWER(LTRIM(RTRIM(ISNULL(ps.[proses], ''))))
 		WHERE
 			@q = ''
-			OR CAST([style] AS NVARCHAR(100)) LIKE '%' + @q + '%'
-			OR [proses] LIKE '%' + @q + '%'
+			OR CAST(ps.[style] AS NVARCHAR(100)) LIKE '%' + @q + '%'
+			OR ps.[proses] LIKE '%' + @q + '%'
 		ORDER BY
-			CAST([style] AS NVARCHAR(100)),
-			[id];
+			CAST(ps.[style] AS NVARCHAR(100)),
+			ps.[id];
 	`
 
 	rows, err := r.DB.QueryContext(ctx, query, sql.Named("q", q))
@@ -171,14 +175,21 @@ func (r *Repository) ListProcessStyle(ctx context.Context, q string) ([]models.P
 
 	for rows.Next() {
 		var item models.ProcessStyleRecord
+		var ctTotal sql.NullFloat64
 
 		if err := rows.Scan(
 			&item.ID,
 			&item.ProcessName,
 			&item.StyleName,
 			&item.CreatedAt,
+			&ctTotal,
 		); err != nil {
 			return nil, err
+		}
+
+		if ctTotal.Valid {
+			value := ctTotal.Float64
+			item.CtTotal = &value
 		}
 
 		data = append(data, item)
@@ -190,21 +201,27 @@ func (r *Repository) ListProcessStyle(ctx context.Context, q string) ([]models.P
 func (r *Repository) GetProcessStyleByID(ctx context.Context, id int64) (models.ProcessStyleRecord, error) {
 	query := `
 		SELECT TOP 1
-			[id],
-			ISNULL([proses], '') AS processName,
-			CAST([style] AS NVARCHAR(100)) AS styleName,
-			ISNULL(CONVERT(VARCHAR(19), [created_at], 120), '') AS createdAt
-		FROM [sewingiot].[dbo].[dt_proses_style]
-		WHERE [id] = @id;
+			ps.[id],
+			ISNULL(ps.[proses], '') AS processName,
+			CAST(ps.[style] AS NVARCHAR(100)) AS styleName,
+			ISNULL(CONVERT(VARCHAR(19), ps.[created_at], 120), '') AS createdAt,
+			ct.ct_total AS ctTotal
+		FROM [sewingiot].[dbo].[dt_proses_style] ps
+		LEFT JOIN dbo.operator_ct_style ct
+			ON LOWER(LTRIM(RTRIM(ct.style_name))) = LOWER(LTRIM(RTRIM(CAST(ps.[style] AS NVARCHAR(100)))))
+		   AND LOWER(LTRIM(RTRIM(ct.process_name))) = LOWER(LTRIM(RTRIM(ISNULL(ps.[proses], ''))))
+		WHERE ps.[id] = @id;
 	`
 
 	var item models.ProcessStyleRecord
+	var ctTotal sql.NullFloat64
 
 	err := r.DB.QueryRowContext(ctx, query, sql.Named("id", id)).Scan(
 		&item.ID,
 		&item.ProcessName,
 		&item.StyleName,
 		&item.CreatedAt,
+		&ctTotal,
 	)
 
 	if err != nil {
@@ -212,6 +229,11 @@ func (r *Repository) GetProcessStyleByID(ctx context.Context, id int64) (models.
 			return item, ErrProcessStyleNotFound
 		}
 		return item, err
+	}
+
+	if ctTotal.Valid {
+		value := ctTotal.Float64
+		item.CtTotal = &value
 	}
 
 	return item, nil
@@ -248,12 +270,23 @@ func (r *Repository) CreateProcessStyle(ctx context.Context, input models.Proces
 		return models.ProcessStyleRecord{}, err
 	}
 
+	if input.CtTotal != nil {
+		if err := r.UpsertOperatorCtStylePair(ctx, styleName, processName, *input.CtTotal); err != nil {
+			return models.ProcessStyleRecord{}, err
+		}
+	}
+
 	return r.GetProcessStyleByID(ctx, id)
 }
 
 func (r *Repository) UpdateProcessStyle(ctx context.Context, id int64, input models.ProcessStyleRequest) (models.ProcessStyleRecord, error) {
 	processName := strings.TrimSpace(input.ProcessName)
 	styleName := strings.TrimSpace(input.StyleName)
+
+	existing, err := r.GetProcessStyleByID(ctx, id)
+	if err != nil {
+		return models.ProcessStyleRecord{}, err
+	}
 
 	query := `
 		UPDATE [sewingiot].[dbo].[dt_proses_style]
@@ -283,10 +316,35 @@ func (r *Repository) UpdateProcessStyle(ctx context.Context, id int64, input mod
 		return models.ProcessStyleRecord{}, ErrProcessStyleNotFound
 	}
 
+	oldStyle := strings.TrimSpace(existing.StyleName)
+	oldProcess := strings.TrimSpace(existing.ProcessName)
+	styleChanged := !strings.EqualFold(oldStyle, styleName) ||
+		!strings.EqualFold(oldProcess, processName)
+
+	if styleChanged {
+		_ = r.DeleteOperatorCtStylePair(ctx, oldStyle, oldProcess)
+	}
+
+	if input.CtTotal != nil {
+		if err := r.UpsertOperatorCtStylePair(ctx, styleName, processName, *input.CtTotal); err != nil {
+			return models.ProcessStyleRecord{}, err
+		}
+	} else if styleChanged {
+		// Style/proses berubah tanpa CT baru: jangan pindahkan CT lama.
+	} else {
+		// CT dikosongkan saat edit → hapus CT pair.
+		_ = r.DeleteOperatorCtStylePair(ctx, styleName, processName)
+	}
+
 	return r.GetProcessStyleByID(ctx, id)
 }
 
 func (r *Repository) DeleteProcessStyle(ctx context.Context, id int64) error {
+	existing, err := r.GetProcessStyleByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	query := `
 		DELETE FROM [sewingiot].[dbo].[dt_proses_style]
 		WHERE [id] = @id;
@@ -305,6 +363,8 @@ func (r *Repository) DeleteProcessStyle(ctx context.Context, id int64) error {
 	if affected == 0 {
 		return ErrProcessStyleNotFound
 	}
+
+	_ = r.DeleteOperatorCtStylePair(ctx, existing.StyleName, existing.ProcessName)
 
 	return nil
 }

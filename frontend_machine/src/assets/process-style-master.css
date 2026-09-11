@@ -279,7 +279,7 @@
 .master-ie-page .form-grid {
   padding: 20px;
   display: grid;
-  grid-template-columns: 180px minmax(260px, 1fr) auto;
+  grid-template-columns: 160px minmax(220px, 1fr) 120px auto;
   gap: 12px;
   align-items: end;
 }
@@ -416,8 +416,10 @@
   vertical-align: top;
 }
 
-.master-ie-page .table-wrap td strong {
-  font-weight: 1000;
+.master-ie-page .table-wrap td.ct-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .master-ie-page .actions {

@@ -163,3 +163,82 @@ WHEN NOT MATCHED THEN
 
 	return response, nil
 }
+
+func (r *Repository) UpsertOperatorCtStylePair(
+	ctx context.Context,
+	styleName string,
+	processName string,
+	ctTotal float64,
+) error {
+	style := normalizeOperatorCtStylePart(styleName)
+	process := normalizeOperatorCtStylePart(processName)
+	if style == "" || process == "" {
+		return fmt.Errorf("style dan proses wajib diisi untuk CT")
+	}
+	if ctTotal < 0 {
+		ctTotal = 0
+	}
+
+	if err := r.EnsureOperatorCtStyleSchema(ctx); err != nil {
+		return err
+	}
+
+	query := `
+MERGE dbo.operator_ct_style WITH (HOLDLOCK) AS target
+USING (
+	SELECT
+		@style_name AS style_name,
+		@process_name AS process_name,
+		@ct_total AS ct_total
+) AS source
+ON LOWER(LTRIM(RTRIM(target.style_name))) = LOWER(LTRIM(RTRIM(source.style_name)))
+ AND LOWER(LTRIM(RTRIM(target.process_name))) = LOWER(LTRIM(RTRIM(source.process_name)))
+WHEN MATCHED THEN
+	UPDATE SET
+		ct_total = source.ct_total,
+		uploaded_at = SYSDATETIME()
+WHEN NOT MATCHED THEN
+	INSERT (style_name, process_name, ct_total, uploaded_at)
+	VALUES (
+		source.style_name,
+		source.process_name,
+		source.ct_total,
+		SYSDATETIME()
+	);
+`
+
+	_, err := r.DB.ExecContext(
+		ctx,
+		query,
+		sql.Named("style_name", style),
+		sql.Named("process_name", process),
+		sql.Named("ct_total", ctTotal),
+	)
+	return err
+}
+
+func (r *Repository) DeleteOperatorCtStylePair(
+	ctx context.Context,
+	styleName string,
+	processName string,
+) error {
+	style := normalizeOperatorCtStylePart(styleName)
+	process := normalizeOperatorCtStylePart(processName)
+	if style == "" || process == "" {
+		return nil
+	}
+
+	query := `
+DELETE FROM dbo.operator_ct_style
+WHERE LOWER(LTRIM(RTRIM(style_name))) = LOWER(LTRIM(RTRIM(@style_name)))
+  AND LOWER(LTRIM(RTRIM(process_name))) = LOWER(LTRIM(RTRIM(@process_name)));
+`
+
+	_, err := r.DB.ExecContext(
+		ctx,
+		query,
+		sql.Named("style_name", style),
+		sql.Named("process_name", process),
+	)
+	return err
+}

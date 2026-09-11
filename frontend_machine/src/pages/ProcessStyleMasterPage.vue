@@ -83,6 +83,9 @@ const {
   cleanupOperatorCtStyleImport,
 } = useOperatorCtStyleImport({
   isAdmin,
+  onImported: async () => {
+    await loadRows();
+  },
 });
 
 onMounted(async () => {

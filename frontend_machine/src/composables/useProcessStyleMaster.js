@@ -18,6 +18,14 @@ function getVal(obj, ...keys) {
 }
 
 function normalizeRow(row) {
+  const rawCt = getVal(row, "ctTotal", "CtTotal", "ct_total");
+  const ctNum = Number(rawCt);
+  const hasCt =
+    rawCt !== undefined &&
+    rawCt !== null &&
+    String(rawCt).trim() !== "" &&
+    Number.isFinite(ctNum);
+
   return {
     id: Number(getVal(row, "id", "ID") || 0),
     styleName: String(
@@ -38,6 +46,7 @@ function normalizeRow(row) {
     createdAt: String(
       getVal(row, "createdAt", "CreatedAt", "created_at", "Created_At") || ""
     ),
+    ctTotal: hasCt ? ctNum : null,
   };
 }
 
@@ -55,6 +64,7 @@ export function useProcessStyleMaster({ isAdmin }) {
     id: null,
     styleName: "",
     processName: "",
+    ctTotal: "",
   });
 
   const currentPage = ref(1);
@@ -171,6 +181,7 @@ export function useProcessStyleMaster({ isAdmin }) {
       id: null,
       styleName: "",
       processName: "",
+      ctTotal: "",
     };
   }
 
@@ -179,12 +190,28 @@ export function useProcessStyleMaster({ isAdmin }) {
       id: row.id,
       styleName: row.styleName,
       processName: row.processName,
+      ctTotal:
+        row.ctTotal === null || row.ctTotal === undefined || row.ctTotal === ""
+          ? ""
+          : String(row.ctTotal),
     };
 
     window.scrollTo({
       top: 0,
       behavior: "smooth",
     });
+  }
+
+  function parseCtTotalInput(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+
+    const num = Number(text);
+    if (!Number.isFinite(num) || num < 0) {
+      return undefined;
+    }
+
+    return num;
   }
 
   async function saveData() {
@@ -195,6 +222,7 @@ export function useProcessStyleMaster({ isAdmin }) {
 
     const styleName = String(form.value.styleName || "").trim();
     const processName = String(form.value.processName || "").trim();
+    const ctTotal = parseCtTotalInput(form.value.ctTotal);
 
     if (!styleName) {
       showError("Style wajib diisi.");
@@ -206,6 +234,11 @@ export function useProcessStyleMaster({ isAdmin }) {
       return;
     }
 
+    if (ctTotal === undefined) {
+      showError("CT harus angka >= 0, atau dikosongkan.");
+      return;
+    }
+
     saving.value = true;
 
     try {
@@ -213,6 +246,7 @@ export function useProcessStyleMaster({ isAdmin }) {
         await updateProcessStyle(form.value.id, {
           styleName,
           processName,
+          ctTotal,
         });
 
         showSuccess("Data berhasil diupdate.");
@@ -220,6 +254,7 @@ export function useProcessStyleMaster({ isAdmin }) {
         await createProcessStyle({
           styleName,
           processName,
+          ctTotal,
         });
 
         showSuccess("Data berhasil ditambahkan.");

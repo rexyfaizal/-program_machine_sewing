@@ -1,5 +1,6 @@
 <script setup>
 import ProcessStylePagination from "./ProcessStylePagination.vue";
+import { formatCtNumber } from "../../utils/operatorCt";
 
 const props = defineProps({
   isAdmin: {
@@ -75,6 +76,11 @@ function formatDateTime(value) {
     minute: "2-digit",
   });
 }
+
+function formatCt(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  return formatCtNumber(value);
+}
 </script>
 
 <template>
@@ -121,6 +127,7 @@ function formatDateTime(value) {
             <th>No</th>
             <th>Style</th>
             <th>Proses</th>
+            <th>CT</th>
             <th>Created At</th>
             <th v-if="props.isAdmin">Action</th>
           </tr>
@@ -128,7 +135,7 @@ function formatDateTime(value) {
 
         <tbody>
           <tr v-if="!props.rows.length">
-            <td :colspan="props.isAdmin ? 5 : 4" class="empty">
+            <td :colspan="props.isAdmin ? 6 : 5" class="empty">
               Belum ada data.
             </td>
           </tr>
@@ -141,6 +148,8 @@ function formatDateTime(value) {
             </td>
 
             <td>{{ row.processName }}</td>
+
+            <td class="ct-cell">{{ formatCt(row.ctTotal) }}</td>
 
             <td>{{ formatDateTime(row.createdAt) }}</td>
 
