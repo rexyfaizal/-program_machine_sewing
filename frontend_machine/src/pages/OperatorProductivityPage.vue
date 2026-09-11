@@ -3,12 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useOperatorProductivity } from "../composables/useOperatorProductivity";
 import { useOperatorCtImport } from "../composables/useOperatorCtImport";
 import { useOperatorOutputTargetImport } from "../composables/useOperatorOutputTargetImport";
+import { useOperatorStyleCorrectionImport } from "../composables/useOperatorStyleCorrectionImport";
 import { exportOperatorProductivityExcel } from "../utils/operatorProductivityExcel";
 import { formatDurationHHMMSS } from "../utils/format";
 import { formatCtNumber, formatProduktivitasCtPct } from "../utils/operatorCt";
 import { formatOutputTarget } from "../utils/operatorOutputTarget";
 import OperatorCtImportPanel from "../components/operator/OperatorCtImportPanel.vue";
 import OperatorOutputTargetImportPanel from "../components/operator/OperatorOutputTargetImportPanel.vue";
+import OperatorStyleCorrectionImportPanel from "../components/operator/OperatorStyleCorrectionImportPanel.vue";
 import { getInitialAdminMode } from "../utils/adminMode";
 
 const props = defineProps({
@@ -77,6 +79,29 @@ const {
   submitImportExcel: submitTargetImportExcel,
   cleanupOperatorOutputTargetImport,
 } = useOperatorOutputTargetImport({
+  isAdmin,
+  selectedDate: () => localDate.value,
+  onImported: async () => {
+    await loadOperatorProductivity(localDate.value);
+  },
+});
+
+const {
+  importing: styleFixImporting,
+  importInputKey: styleFixImportInputKey,
+  importFileName: styleFixImportFileName,
+  importPreviewRows: styleFixImportPreviewRows,
+  importPreviewDisplayRows: styleFixImportPreviewDisplayRows,
+  importDuplicateRows: styleFixImportDuplicateRows,
+  importErrorRows: styleFixImportErrorRows,
+  importStats: styleFixImportStats,
+  importErrorMessage: styleFixImportErrorMessage,
+  importSuccessMessage: styleFixImportSuccessMessage,
+  resetImport: resetStyleFixImport,
+  handleImportFileChange: handleStyleFixImportFileChange,
+  submitImportExcel: submitStyleFixImportExcel,
+  cleanupOperatorStyleCorrectionImport,
+} = useOperatorStyleCorrectionImport({
   isAdmin,
   selectedDate: () => localDate.value,
   onImported: async () => {
@@ -225,6 +250,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cleanupOperatorCtImport();
   cleanupOperatorOutputTargetImport();
+  cleanupOperatorStyleCorrectionImport();
 });
 </script>
 
@@ -270,6 +296,27 @@ onBeforeUnmount(() => {
         @reset-import="resetTargetImport"
         @file-change="handleTargetImportFileChange"
         @submit-import="submitTargetImportExcel"
+      />
+
+      <OperatorStyleCorrectionImportPanel
+        embedded
+        :is-admin="isAdmin"
+        :selected-date="localDate"
+        :template-rows="filteredRows"
+        :location-filter="locationFilter"
+        :importing="styleFixImporting"
+        :import-input-key="styleFixImportInputKey"
+        :import-file-name="styleFixImportFileName"
+        :import-preview-rows="styleFixImportPreviewRows"
+        :import-preview-display-rows="styleFixImportPreviewDisplayRows"
+        :import-duplicate-rows="styleFixImportDuplicateRows"
+        :import-error-rows="styleFixImportErrorRows"
+        :import-stats="styleFixImportStats"
+        :import-error-message="styleFixImportErrorMessage"
+        :import-success-message="styleFixImportSuccessMessage"
+        @reset-import="resetStyleFixImport"
+        @file-change="handleStyleFixImportFileChange"
+        @submit-import="submitStyleFixImportExcel"
       />
     </section>
 
@@ -625,7 +672,7 @@ onBeforeUnmount(() => {
 
 .ie-upload-group {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   padding: 12px 14px;
   background: #fff;

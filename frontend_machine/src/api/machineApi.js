@@ -617,6 +617,23 @@ export async function importOperatorOutputTarget(payload) {
   return await readResponse(res);
 }
 
+export async function importOperatorStyleCorrection(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!rows.length) {
+    throw new Error("Tidak ada data koreksi style valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/operator-style-correction/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows }),
+  });
+
+  return await readResponse(res);
+}
+
 export async function identifyMechanic(code) {
   const value = String(code || "").trim();
   if (!value) {

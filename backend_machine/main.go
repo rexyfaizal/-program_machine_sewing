@@ -236,6 +236,7 @@ func main() {
 	mux.HandleFunc("/api/operator-ct-style/import", api.OperatorCtStyleImport)
 	mux.HandleFunc("/api/operator-output-target", api.OperatorOutputTarget)
 	mux.HandleFunc("/api/operator-output-target/import", api.OperatorOutputTargetImport)
+	mux.HandleFunc("/api/operator-style-correction/import", api.OperatorStyleCorrectionImport)
 
 	mux.HandleFunc("/api/process-style/styles", api.ProcessStyleStyles)
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)
