@@ -5,8 +5,6 @@ import { parseWorkDate } from "./operatorOutputTargetImportExcel";
 import {
   formatTemplateOperatorName,
   formatTemplateOperatorNik,
-  hasTemplateOperatorInfo,
-  upsertOperatorTemplateRow,
 } from "./operatorTemplateRows";
 
 function normalizeHeader(value) {
@@ -172,36 +170,46 @@ export function buildOperatorStyleCorrectionTemplateRows(
   defaultDate = ""
 ) {
   const workDate = parseWorkDate(defaultDate) || new Date().toISOString().slice(0, 10);
-  const uniqueMap = new Map();
+  const rows = [];
 
+  // 1 baris = 1 sesi login sesuai filter (Tanggal + UUID + NIK).
   (Array.isArray(sourceRows) ? sourceRows : []).forEach((row) => {
     if (!row?.loggedIn) return;
 
-    upsertOperatorTemplateRow(uniqueMap, row, (source, { area, line, uuid }) => ({
-      _hasOperatorInfo: hasTemplateOperatorInfo(source),
+    const uuid = cleanText(row?.uuid);
+    const line = normalizeCtLine(row?.location || row?.locationLabel || "");
+    const area = cleanText(row?.area);
+    if (!uuid || !line || line === "-") return;
+
+    rows.push({
       Tanggal: workDate,
       Area: area,
       Line: line,
       UUID: uuid,
-      NIK: formatTemplateOperatorNik(source),
-      "Nama Operator": formatTemplateOperatorName(source),
-      "Style Lama": cleanText(source?.style) || "",
-      "Proses Lama": cleanText(source?.mesin) || "",
+      NIK: formatTemplateOperatorNik(row),
+      "Nama Operator": formatTemplateOperatorName(row),
+      "Style Lama": cleanText(row?.style) || "",
+      "Proses Lama": cleanText(row?.mesin) || "",
       "Style Baru": "",
       "Proses Baru": "",
-    }));
+    });
   });
 
-  return [...uniqueMap.values()]
-    .map(({ _hasOperatorInfo, ...entry }) => entry)
-    .sort((a, b) => {
-      const lineCmp = String(a.Line).localeCompare(String(b.Line), "id", {
-        numeric: true,
-        sensitivity: "base",
-      });
-      if (lineCmp !== 0) return lineCmp;
-      return String(a.UUID).localeCompare(String(b.UUID));
+  return rows.sort((a, b) => {
+    const lineCmp = String(a.Line).localeCompare(String(b.Line), "id", {
+      numeric: true,
+      sensitivity: "base",
     });
+    if (lineCmp !== 0) return lineCmp;
+
+    const uuidCmp = String(a.UUID).localeCompare(String(b.UUID));
+    if (uuidCmp !== 0) return uuidCmp;
+
+    return String(a.NIK).localeCompare(String(b.NIK), "id", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
 }
 
 function safeFilePart(value) {
