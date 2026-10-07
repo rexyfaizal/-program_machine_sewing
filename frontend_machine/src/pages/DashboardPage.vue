@@ -5,16 +5,22 @@ import KpiCards from "../components/dashboard/KpiCards.vue";
 import RankingPanel from "../components/dashboard/RankingPanel.vue";
 import StatusDistribution from "../components/dashboard/StatusDistribution.vue";
 import AttentionPanel from "../components/dashboard/AttentionPanel.vue";
+import AiCopilotPanel from "../components/dashboard/AiCopilotPanel.vue";
+import AiPresentationMode from "../components/dashboard/AiPresentationMode.vue";
 import MachineTable from "../components/dashboard/MachineTable.vue";
 import MachineEditModal from "../components/dashboard/MachineEditModal.vue";
 import MachineQrModal from "../components/dashboard/MachineQrModal.vue";
 import ProductivityChartModal from "../components/dashboard/ProductivityChartModal.vue";
+import AiWhyBadModal from "../components/dashboard/AiWhyBadModal.vue";
 
 import {
   deleteMachineSetting,
   saveMachineSetting,
 } from "../api/machineApi";
 
+import { useAiCopilot } from "../composables/useAiCopilot";
+import { useAiExecutive } from "../composables/useAiExecutive";
+import { useAiInsight } from "../composables/useAiInsight";
 import { useDashboard } from "../composables/useDashboard";
 import { useDashboardExcelExport } from "../composables/useDashboardExcelExport";
 import { useDashboardFilters } from "../composables/useDashboardFilters";
@@ -32,16 +38,21 @@ const emit = defineEmits([
   "update:selectedDate",
   "socket-status-change",
   "admin-mode-change",
+  "navigate-page",
 ]);
 
 const editModalOpen = ref(false);
 const qrModalOpen = ref(false);
 const chartModalOpen = ref(false);
+const whyBadModalOpen = ref(false);
 const selectedEditMachine = ref(null);
 const selectedChartMachine = ref(null);
+const selectedWhyBadItem = ref(null);
+const selectedWhyBadMachine = ref(null);
 const notice = ref("");
 const noticeType = ref("ok");
 const isAdmin = ref(false);
+const chatFocusTick = ref(0);
 
 let noticeTimer = null;
 
@@ -95,6 +106,302 @@ const {
   shiftConfigMap,
 });
 
+const {
+  loading: aiLoading,
+  errorMessage: aiErrorMessage,
+  insight: aiInsight,
+  lastUpdatedAt: aiLastUpdatedAt,
+  refreshAiInsight,
+  startAutoRefresh: startAiAutoRefresh,
+  stopAutoRefresh: stopAiAutoRefresh,
+} = useAiInsight({
+  selectedDate: () => localDate.value,
+  locationFilter: () => locationFilter.value,
+  shiftFilter: () => productivityShift.value,
+  machines: () => filteredMachines.value,
+});
+
+const {
+  open: copilotOpen,
+  sending: copilotSending,
+  errorMessage: copilotError,
+  inputText: copilotInput,
+  messages: copilotMessages,
+  ask: askCopilot,
+  pushLocalExchange,
+} = useAiCopilot();
+
+const {
+  loading: executiveLoading,
+  errorMessage: executiveError,
+  executive,
+  presentationOpen,
+  refreshExecutive,
+  getChangeSinceReport,
+  openPresentation,
+  closePresentation,
+  exportBriefing,
+  copyBriefing,
+} = useAiExecutive();
+
+function copilotContext() {
+  return {
+    page: "dashboard",
+    date: localDate.value,
+    shift: productivityShift.value,
+    location: locationFilter.value,
+    status: statusFilter.value,
+    machines: filteredMachines.value,
+    insight: aiInsight.value,
+  };
+}
+
+async function refreshExecutivePack({ silent = false } = {}) {
+  if (!isAdmin.value) return null;
+  try {
+    return await refreshExecutive({
+      date: localDate.value,
+      shift: productivityShift.value,
+      location: locationFilter.value,
+      machinesToday: filteredMachines.value,
+      insight: aiInsight.value,
+      silent,
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function sendCopilotQuestion(question) {
+  // Pastikan AI Insight terbaru ikut sebagai bukti untuk Copilot.
+  if (!aiInsight.value?.items?.length && !aiLoading.value) {
+    await refreshAiInsight({ silent: true });
+  }
+  return askCopilot(question, copilotContext());
+}
+
+async function showBriefingToChat() {
+  const data = (await refreshExecutivePack()) || executive.value;
+  if (!data?.briefing) {
+    showNotice(executiveError.value || "Briefing belum siap.", "error");
+    return;
+  }
+  chatFocusTick.value += 1;
+  closePresentation();
+  pushLocalExchange("Briefing atasan", data.briefing, {
+    model: "briefing-atasan",
+  });
+  showNotice("Briefing Atasan siap di Chat AI.", "ok");
+}
+
+async function showCompareToChat() {
+  const data = (await refreshExecutivePack()) || executive.value;
+  const summary = data?.compare?.summary;
+  if (!summary) {
+    showNotice(executiveError.value || "Bandingkan vs kemarin belum siap.", "error");
+    return;
+  }
+  const metrics = Array.isArray(data?.compare?.metrics) ? data.compare.metrics : [];
+  const lines = metrics.map((m) => {
+    const unit = m.unit || "";
+    const today = Number(m.today || 0).toFixed(unit === "%" ? 1 : 0);
+    const yday = Number(m.yesterday || 0).toFixed(unit === "%" ? 1 : 0);
+    const delta = Number(m.delta || 0);
+    const sign = delta > 0 ? "+" : "";
+    return `- ${m.label}: hari ini ${today}${unit} | kemarin ${yday}${unit} (${sign}${delta}${unit})`;
+  });
+  pushLocalExchange(
+    "Bandingkan vs kemarin",
+    `BANDINGKAN VS KEMARIN\n${summary}\n\n${lines.join("\n")}\n\nSkor utilitas mesin hari ini: ${data?.health?.score ?? "-"}/100 (${data?.health?.label || "-"}).`,
+    { model: "compare-yesterday" }
+  );
+  showNotice("Ringkas Vs Kemarin siap di Chat AI.", "ok");
+}
+
+async function openPresentationMode() {
+  await refreshExecutivePack();
+  openPresentation();
+}
+
+async function showChangeSinceToChat() {
+  await refreshExecutivePack({ silent: true });
+  const report = getChangeSinceReport();
+  chatFocusTick.value += 1;
+  closePresentation();
+  pushLocalExchange("Apa yang berubah sejak tadi?", report, {
+    model: "change-since",
+  });
+  showNotice("Ringkas perubahan sejak tadi siap di Chat AI.", "ok");
+}
+
+function handleInsightFilter(item) {
+  const location = String(item?.location || "").trim();
+  if (!location) {
+    showNotice("Lokasi/line tidak tersedia untuk difilter.", "error");
+    return;
+  }
+  if (!window.confirm(`Terapkan filter ke: ${location}?`)) return;
+  locationFilter.value = location;
+  showNotice(`Filter diterapkan: ${location}`, "ok");
+}
+
+function handleInsightChart(item) {
+  const uuid = String(item?.uuid || "").trim().toLowerCase();
+  if (!uuid) {
+    showNotice("Mesin ini belum punya UUID untuk chart.", "error");
+    return;
+  }
+  applyCopilotAction({
+    type: "open_chart",
+    value: uuid,
+    label: `Buka chart: ${item?.machineName || item?.location || uuid}`,
+  });
+}
+
+function handleInsightAsk(item) {
+  const title =
+    String(item?.scope || "").toUpperCase() === "LINE"
+      ? String(item?.location || "line ini").trim()
+      : String(item?.machineName || item?.location || "mesin ini").trim();
+  const q = `Jelaskan kenapa ${title} masuk prioritas ${item?.priority || "HIGH"}, dan apa yang harus dilakukan 1 jam ke depan.`;
+  chatFocusTick.value += 1;
+  copilotOpen.value = true;
+  sendCopilotQuestion(q);
+}
+
+function findMachineByUuid(uuid) {
+  const key = String(uuid || "").trim().toLowerCase();
+  if (!key) return null;
+  const list = Array.isArray(filteredMachines.value)
+    ? filteredMachines.value
+    : Array.isArray(machines.value)
+      ? machines.value
+      : [];
+  return (
+    list.find((m) => String(m?.uuid || "").trim().toLowerCase() === key) || null
+  );
+}
+
+function handleInsightWhyBad(item) {
+  const uuid = String(item?.uuid || "").trim();
+  if (!uuid) {
+    showNotice("Mesin ini belum punya UUID untuk dianalisa.", "error");
+    return;
+  }
+  selectedWhyBadItem.value = item;
+  selectedWhyBadMachine.value = findMachineByUuid(uuid);
+  whyBadModalOpen.value = true;
+}
+
+function closeWhyBadModal() {
+  whyBadModalOpen.value = false;
+  selectedWhyBadItem.value = null;
+  selectedWhyBadMachine.value = null;
+}
+
+function handleWhyBadFilter(item) {
+  closeWhyBadModal();
+  handleInsightFilter(item);
+}
+
+function handleWhyBadChart(item) {
+  closeWhyBadModal();
+  handleInsightChart(item);
+}
+
+function handleWhyBadAsk(item) {
+  closeWhyBadModal();
+  handleInsightAsk(item);
+}
+
+function handleExportBriefing() {
+  try {
+    const name = exportBriefing();
+    showNotice(`Briefing diunduh: ${name}`, "ok");
+  } catch (err) {
+    showNotice(err?.message || "Gagal export briefing.", "error");
+  }
+}
+
+async function handleCopyBriefing() {
+  try {
+    await copyBriefing();
+    showNotice("Briefing disalin ke clipboard.", "ok");
+  } catch (err) {
+    showNotice(err?.message || "Gagal menyalin briefing.", "error");
+  }
+}
+
+function applyCopilotAction(action) {
+  const type = String(action?.type || "")
+    .trim()
+    .toLowerCase();
+  const value = String(action?.value || "").trim();
+  if (!type || !value) return;
+
+  const label = String(action?.label || `${type}: ${value}`).trim();
+  if (!window.confirm(`Terapkan saran Copilot?\n\n${label}`)) {
+    return;
+  }
+
+  switch (type) {
+    case "set_location":
+      locationFilter.value = value.toUpperCase() === "ALL" ? "ALL" : value;
+      showNotice(`Filter area/line diterapkan: ${locationFilter.value}`, "ok");
+      break;
+    case "set_shift":
+      shiftFilter.value = value;
+      showNotice(`Filter shift diterapkan: ${value}`, "ok");
+      break;
+    case "set_status":
+      statusFilter.value = value.toUpperCase();
+      showNotice(`Filter status diterapkan: ${statusFilter.value}`, "ok");
+      break;
+    case "set_date":
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        startDate.value = value;
+        endDate.value = value;
+        localDate.value = value;
+        refreshDashboardByDate();
+        showNotice(`Tanggal diterapkan: ${value}`, "ok");
+      } else {
+        showNotice("Format tanggal saran tidak valid.", "error");
+      }
+      break;
+    case "navigate":
+      emit("navigate-page", value);
+      showNotice(`Membuka menu: ${value}`, "ok");
+      break;
+    case "refresh_insight":
+      refreshAiInsight();
+      showNotice("AI Insight di-refresh.", "ok");
+      break;
+    case "open_chart": {
+      const uuid = value.toLowerCase();
+      const pool = [
+        ...(Array.isArray(filteredMachines.value) ? filteredMachines.value : []),
+        ...(Array.isArray(machines.value) ? machines.value : []),
+      ];
+      const machine =
+        pool.find((m) => String(m?.uuid || "").trim().toLowerCase() === uuid) || null;
+      if (!machine) {
+        showNotice("Mesin untuk chart tidak ditemukan di dashboard.", "error");
+        break;
+      }
+      closePresentation();
+      copilotOpen.value = false;
+      openChartModal(machine);
+      showNotice(
+        `Membuka chart: ${machine.displayMachineName || machine.machineName || machine.uuid}`,
+        "ok"
+      );
+      break;
+    }
+    default:
+      showNotice(`Aksi belum didukung: ${type}`, "error");
+  }
+}
+
 watch(
   socketStatus,
   (value) => {
@@ -136,12 +443,14 @@ async function refreshDashboardByDate() {
     localDate.value = end;
     await loadDashboardRange(start, end, { shift });
     connect(end, shift);
+    await refreshAiInsight({ silent: true });
     return;
   }
 
   localDate.value = start;
   await loadDashboard(start, { shift });
   connect(start, shift);
+  await refreshAiInsight({ silent: true });
 }
 
 function openEditModal(machine) {
@@ -228,6 +537,19 @@ async function handleDeleteMachineSetting(uuid) {
   }
 }
 
+watch(locationFilter, () => {
+  refreshAiInsight({ silent: true });
+});
+
+watch(
+  [aiInsight, () => filteredMachines.value?.length, isAdmin],
+  () => {
+    if (isAdmin.value) {
+      refreshExecutivePack({ silent: true });
+    }
+  }
+);
+
 onMounted(async () => {
   isAdmin.value = await Promise.resolve(getInitialAdminMode());
 
@@ -235,10 +557,16 @@ onMounted(async () => {
   emit("socket-status-change", socketStatus.value);
 
   await refreshDashboardByDate();
+  startAiAutoRefresh();
+  if (isAdmin.value) {
+    await refreshExecutivePack({ silent: true });
+  }
 });
 
 onUnmounted(() => {
   close();
+  stopAiAutoRefresh();
+  closePresentation();
 
   if (noticeTimer) {
     clearTimeout(noticeTimer);
@@ -262,7 +590,7 @@ onUnmounted(() => {
 
     <KpiCards :summary="summary" />
 
-    <section class="content-grid" :class="{ 'user-view': !isAdmin }">
+    <section v-if="isAdmin" class="content-grid">
       <RankingPanel
         class="panel-large"
         :machines="rankingMachines"
@@ -271,7 +599,6 @@ onUnmounted(() => {
 
       <div class="right-stack">
         <StatusDistribution
-          v-if="isAdmin"
           :summary="summary"
           :donut-style="donutStyle"
         />
@@ -340,6 +667,61 @@ onUnmounted(() => {
       :end-date="endDate"
       :shift="productivityShift"
       @close="closeChartModal"
+    />
+
+    <AiWhyBadModal
+      v-if="isAdmin"
+      :show="whyBadModalOpen"
+      :item="selectedWhyBadItem"
+      :machine="selectedWhyBadMachine"
+      @close="closeWhyBadModal"
+      @filter="handleWhyBadFilter"
+      @open-chart="handleWhyBadChart"
+      @ask-ai="handleWhyBadAsk"
+    />
+
+    <AiCopilotPanel
+      v-if="isAdmin"
+      v-model:open="copilotOpen"
+      v-model="copilotInput"
+      :sending="copilotSending"
+      :messages="copilotMessages"
+      :error-message="copilotError"
+      :insight="aiInsight"
+      :insight-loading="aiLoading"
+      :insight-error="aiErrorMessage"
+      :insight-updated-at="aiLastUpdatedAt"
+      :executive="executive"
+      :executive-loading="executiveLoading"
+      :chat-focus-tick="chatFocusTick"
+      @send="sendCopilotQuestion()"
+      @quick="sendCopilotQuestion"
+      @apply-action="applyCopilotAction"
+      @refresh-insight="refreshAiInsight()"
+      @open-insight="refreshAiInsight({ silent: true })"
+      @briefing="showBriefingToChat"
+      @compare-yesterday="showCompareToChat"
+      @open-presentation="openPresentationMode"
+      @refresh-executive="refreshExecutivePack()"
+      @change-since="showChangeSinceToChat"
+      @insight-filter="handleInsightFilter"
+      @insight-chart="handleInsightChart"
+      @insight-ask="handleInsightAsk"
+      @insight-why-bad="handleInsightWhyBad"
+    />
+
+    <AiPresentationMode
+      v-if="isAdmin"
+      :open="presentationOpen"
+      :loading="executiveLoading"
+      :executive="executive"
+      :error-message="executiveError"
+      @close="closePresentation"
+      @refresh="refreshExecutivePack()"
+      @briefing="showBriefingToChat"
+      @change-since="showChangeSinceToChat"
+      @export-briefing="handleExportBriefing"
+      @copy-briefing="handleCopyBriefing"
     />
   </section>
 </template>

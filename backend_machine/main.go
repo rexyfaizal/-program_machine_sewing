@@ -181,6 +181,9 @@ func main() {
 		if err := repo.EnsureOperatorCtStyleSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema operator_ct_style:", err)
 		}
+		if err := repo.EnsureAiInsightSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema ai_insight_log:", err)
+		}
 		cancel()
 	}
 
@@ -244,6 +247,11 @@ func main() {
 	mux.HandleFunc("/api/process-style/import", api.ProcessStyleImport)
 	mux.HandleFunc("/api/process-style", api.ProcessStyleCreate)
 	mux.HandleFunc("/api/process-style/", api.ProcessStyleByID)
+
+	mux.HandleFunc("/api/ai/insight", api.AiInsightAnalyze)
+	mux.HandleFunc("/api/ai/insight/latest", api.AiInsightLatest)
+	mux.HandleFunc("/api/ai/chat", api.AiChat)
+	mux.HandleFunc("/api/ai/executive", api.AiExecutive)
 
 	mux.HandleFunc("/ws/productivity", api.ProductivityWS)
 	mux.Handle("/", http.FileServer(http.Dir("./public")))

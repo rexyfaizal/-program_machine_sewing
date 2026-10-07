@@ -194,6 +194,7 @@ watch(activePage, (newPage) => {
         v-model:selectedDate="selectedDate"
         @socket-status-change="updateGlobalSocketStatus"
         @admin-mode-change="updateGlobalAdminMode"
+        @navigate-page="changePage"
       />
 
       <ProcessDetailPage

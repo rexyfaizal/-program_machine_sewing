@@ -2,7 +2,11 @@
 import { computed, ref, watch } from "vue";
 import VueApexCharts from "vue3-apexcharts";
 
-import { getMachineOperatorReport, getProductivity } from "../../api/machineApi";
+import {
+  getMachineOperatorReport,
+  getProcessDetail,
+  getProductivity,
+} from "../../api/machineApi";
 
 const props = defineProps({
   show: {
@@ -35,6 +39,8 @@ const categories = ref([]);
 const productivityData = ref([]);
 const operatorLabels = ref([]);
 const isoDates = ref([]);
+const chartMode = ref("day"); // day | hour
+const hourFocusDate = ref("");
 
 const machineUuid = computed(() => String(props.machine?.uuid || "").trim());
 
@@ -66,6 +72,9 @@ const bestDay = computed(() => pickExtreme("max"));
 const worstDay = computed(() => pickExtreme("min"));
 
 const hasData = computed(() => validValues.value.length > 0);
+const isHourMode = computed(() => chartMode.value === "hour");
+const axisTitle = computed(() => (isHourMode.value ? "Jam" : "Tanggal"));
+const listHeadLabel = computed(() => (isHourMode.value ? "Jam" : "Tanggal"));
 
 const THRESHOLD_GOOD = 90;
 const THRESHOLD_NORMAL = 80;
@@ -87,17 +96,21 @@ const chartOptions = computed(() => ({
   },
   colors: ["#2563eb"],
   stroke: { curve: "smooth", width: 3 },
-  markers: { size: 5, hover: { size: 7 } },
+  markers: { size: isHourMode.value ? 4 : 5, hover: { size: 7 } },
   dataLabels: {
-    enabled: true,
+    enabled: !isHourMode.value || categories.value.length <= 16,
     formatter: (val) => (val === null ? "" : `${Number(val).toFixed(0)}%`),
     style: { fontSize: "11px", fontWeight: 700 },
     background: { enabled: true, foreColor: "#0f172a", borderWidth: 0 },
   },
   xaxis: {
     categories: categories.value,
-    labels: { style: { fontWeight: 700 } },
-    title: { text: "Tanggal" },
+    labels: {
+      style: { fontWeight: 700 },
+      rotate: isHourMode.value ? -45 : 0,
+      rotateAlways: isHourMode.value,
+    },
+    title: { text: axisTitle.value },
   },
   yaxis: {
     min: 0,
@@ -288,6 +301,98 @@ function readProductivity(row) {
   return null;
 }
 
+function resolveFocusDate(dates = []) {
+  const end = String(props.endDate || "").trim();
+  const start = String(props.startDate || "").trim();
+  if (end && dates.includes(end)) return end;
+  if (start && dates.includes(start)) return start;
+  if (dates.length) return dates[dates.length - 1];
+  return end || start || "";
+}
+
+function hourProductivityPct(procSec) {
+  const sec = Number(procSec || 0);
+  if (!Number.isFinite(sec) || sec <= 0) return 0;
+  return Number(Math.min(100, (sec / 3600) * 100).toFixed(2));
+}
+
+function formatHourLabel(hourText) {
+  const raw = String(hourText || "").trim();
+  if (!raw) return "-";
+  // Backend biasanya "HH:00" atau "HH".
+  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
+  if (/^\d{1,2}$/.test(raw)) return `${String(raw).padStart(2, "0")}:00`;
+  return raw;
+}
+
+async function loadDayChart(uuid, dates, shift) {
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      try {
+        const [payload, operatorPayload] = await Promise.all([
+          getProductivity(date, { shift }),
+          getMachineOperatorReport(date),
+        ]);
+        const rows = extractRows(payload);
+        const match = rows.find(
+          (r) => String(r.uuid || r.UUID || "").trim().toLowerCase() === uuid
+        );
+        const value = match ? readProductivity(match) : null;
+        return {
+          value:
+            value === null || Number.isNaN(value)
+              ? null
+              : Number(Number(value).toFixed(2)),
+          operator: extractOperatorsForMachine(operatorPayload, uuid),
+        };
+      } catch {
+        return { value: null, operator: "Tidak ada operator" };
+      }
+    })
+  );
+
+  hourFocusDate.value = "";
+  isoDates.value = dates;
+  categories.value = dates.map(formatDateLabel);
+  productivityData.value = results.map((item) => item.value);
+  operatorLabels.value = results.map((item) => item.operator);
+}
+
+async function loadHourChart(uuid, dates) {
+  const focusDate = resolveFocusDate(dates);
+  if (!focusDate) {
+    throw new Error("Tanggal untuk mode per jam tidak valid.");
+  }
+
+  const [detail, operatorPayload] = await Promise.all([
+    getProcessDetail(focusDate, uuid),
+    getMachineOperatorReport(focusDate).catch(() => null),
+  ]);
+
+  const hours = Array.isArray(detail?.hours)
+    ? [...detail.hours]
+    : Array.isArray(detail?.Hours)
+      ? [...detail.Hours]
+      : [];
+
+  hours.sort((a, b) =>
+    String(a?.hour || a?.Hour || "").localeCompare(String(b?.hour || b?.Hour || ""))
+  );
+
+  const operator = extractOperatorsForMachine(operatorPayload || {}, uuid);
+  hourFocusDate.value = focusDate;
+  isoDates.value = hours.map((h) => String(h?.hour || h?.Hour || focusDate));
+  categories.value = hours.map((h) => formatHourLabel(h?.hour || h?.Hour));
+  productivityData.value = hours.map((h) =>
+    hourProductivityPct(h?.procSec ?? h?.ProcSec ?? 0)
+  );
+  operatorLabels.value = hours.map(() => operator);
+
+  if (!hours.length) {
+    errorMessage.value = `Belum ada data proses per jam pada ${formatDateLabel(focusDate)}.`;
+  }
+}
+
 async function loadChart() {
   const uuid = String(props.machine?.uuid || "").trim().toLowerCase();
   if (!uuid) {
@@ -308,36 +413,11 @@ async function loadChart() {
   const shift = String(props.shift || "").trim();
 
   try {
-    const results = await Promise.all(
-      dates.map(async (date) => {
-        try {
-          const [payload, operatorPayload] = await Promise.all([
-            getProductivity(date, { shift }),
-            getMachineOperatorReport(date),
-          ]);
-          const rows = extractRows(payload);
-          const match = rows.find(
-            (r) =>
-              String(r.uuid || r.UUID || "").trim().toLowerCase() === uuid
-          );
-          const value = match ? readProductivity(match) : null;
-          return {
-            value:
-              value === null || Number.isNaN(value)
-                ? null
-                : Number(Number(value).toFixed(2)),
-            operator: extractOperatorsForMachine(operatorPayload, uuid),
-          };
-        } catch (err) {
-          return { value: null, operator: "Tidak ada operator" };
-        }
-      })
-    );
-
-    isoDates.value = dates;
-    categories.value = dates.map(formatDateLabel);
-    productivityData.value = results.map((item) => item.value);
-    operatorLabels.value = results.map((item) => item.operator);
+    if (chartMode.value === "hour") {
+      await loadHourChart(uuid, dates);
+    } else {
+      await loadDayChart(uuid, dates, shift);
+    }
   } catch (err) {
     errorMessage.value = `Gagal memuat grafik: ${err.message}`;
   } finally {
@@ -345,12 +425,34 @@ async function loadChart() {
   }
 }
 
+function setChartMode(mode) {
+  const next = mode === "hour" ? "hour" : "day";
+  if (chartMode.value === next) return;
+  chartMode.value = next;
+}
+
 function close() {
   emit("close");
 }
 
 watch(
-  () => [props.show, props.machine?.uuid, props.startDate, props.endDate, props.shift],
+  () => props.show,
+  (visible, wasVisible) => {
+    if (visible && !wasVisible) {
+      chartMode.value = "day";
+    }
+  }
+);
+
+watch(
+  () => [
+    props.show,
+    props.machine?.uuid,
+    props.startDate,
+    props.endDate,
+    props.shift,
+    chartMode.value,
+  ],
   () => {
     if (props.show && props.machine?.uuid) {
       loadChart();
@@ -372,9 +474,30 @@ watch(
             <span class="range"> · {{ rangeLabel }}</span>
           </p>
           <p v-if="machineUuid" class="uuid-line">UUID: {{ machineUuid }}</p>
+          <p v-if="isHourMode && hourFocusDate" class="uuid-line">
+            Mode per jam: {{ formatDateLabel(hourFocusDate) }} · % = waktu proses / 1 jam
+          </p>
         </div>
 
-        <button type="button" class="btn-close" @click="close">✕</button>
+        <div class="chart-head-right">
+          <div class="mode-toggle" role="group" aria-label="Mode grafik">
+            <button
+              type="button"
+              :class="{ active: chartMode === 'day' }"
+              @click="setChartMode('day')"
+            >
+              Per Hari
+            </button>
+            <button
+              type="button"
+              :class="{ active: chartMode === 'hour' }"
+              @click="setChartMode('hour')"
+            >
+              Per Jam
+            </button>
+          </div>
+          <button type="button" class="btn-close" @click="close">✕</button>
+        </div>
       </div>
 
       <div v-if="loading" class="chart-state">Mengambil data grafik...</div>
@@ -416,7 +539,7 @@ watch(
 
         <div v-if="hasData" class="day-list">
           <div class="day-list-head">
-            <span>Tanggal</span>
+            <span>{{ listHeadLabel }}</span>
             <span>Produktivitas</span>
             <span>Operator</span>
           </div>
@@ -493,6 +616,38 @@ watch(
   color: #64748b !important;
   font-size: 12px !important;
   font-weight: 700 !important;
+}
+
+.chart-head-right {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.mode-toggle {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+.mode-toggle button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mode-toggle button.active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
 .btn-close {

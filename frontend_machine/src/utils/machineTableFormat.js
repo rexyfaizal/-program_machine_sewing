@@ -61,6 +61,20 @@ export function getOperatorNoteItems(machine) {
 
   if (fromRows.length) return fromRows;
 
+  // Fallback: note tersimpan di baris operator (bukan field machine.operatorNotes).
+  const fromRowNotes = rows
+    .map((row) => String(row?.note || "").trim())
+    .filter((text) => text && text !== "-");
+  if (fromRowNotes.length) {
+    return fromRowNotes.map((text) => ({
+      text,
+      timeRange: "",
+      reasonName: "",
+      body: text,
+      isActive: false,
+    }));
+  }
+
   const raw = String(getOperatorNote(machine) || "").trim();
   if (!raw || raw === "-") return [];
 
@@ -69,6 +83,30 @@ export function getOperatorNoteItems(machine) {
     .map((text) => text.trim())
     .filter(Boolean)
     .map((text) => ({ text, timeRange: "", reasonName: "", body: text, isActive: false }));
+}
+
+/** Gabungan keterangan loss/note seperti yang tampil di tabel dashboard. */
+export function collectMachineOperatorNotes(machine) {
+  const items = getOperatorNoteItems(machine);
+  if (items.length) {
+    return items
+      .map((note) => {
+        const line =
+          [
+            [note.reasonName, note.body].filter(Boolean).join(" "),
+            note.timeRange,
+          ]
+            .filter(Boolean)
+            .join(" | ") || String(note.text || "").trim();
+        return String(line || "").trim();
+      })
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  return String(machine?.operatorNotes || machine?.operatorNote || "")
+    .trim()
+    .replace(/^-$/, "");
 }
 
 export function getOperatorName(machine) {

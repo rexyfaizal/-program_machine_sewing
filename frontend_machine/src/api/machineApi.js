@@ -733,3 +733,78 @@ export async function doneMechanicBrokenMachine(payload) {
 
   return await readResponse(res);
 }
+
+export async function analyzeAiInsight(payload) {
+  const res = await fetch("/api/ai/insight", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      date: String(payload?.date || "").trim(),
+      shift: String(payload?.shift || "").trim(),
+      location: String(payload?.location || "").trim(),
+      machines: Array.isArray(payload?.machines) ? payload.machines : [],
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getLatestAiInsight(options = {}) {
+  const params = new URLSearchParams();
+  const date = String(options.date || "").trim();
+  const location = String(options.location || "").trim();
+  if (date) params.set("date", date);
+  if (location) params.set("location", location);
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/ai/insight/latest${query}`);
+  return await readResponse(res);
+}
+
+export async function postAiChat(payload) {
+  const res = await fetch("/api/ai/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      question: String(payload?.question || "").trim(),
+      page: String(payload?.page || "dashboard").trim(),
+      date: String(payload?.date || "").trim(),
+      shift: String(payload?.shift || "").trim(),
+      location: String(payload?.location || "").trim(),
+      status: String(payload?.status || "").trim(),
+      history: Array.isArray(payload?.history) ? payload.history : [],
+      machines: Array.isArray(payload?.machines) ? payload.machines : [],
+      insight: payload?.insight || null,
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function postAiExecutive(payload) {
+  const res = await fetch("/api/ai/executive", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      date: String(payload?.date || "").trim(),
+      compareDate: String(payload?.compareDate || "").trim(),
+      shift: String(payload?.shift || "").trim(),
+      location: String(payload?.location || "").trim(),
+      machinesToday: Array.isArray(payload?.machinesToday)
+        ? payload.machinesToday
+        : [],
+      machinesYesterday: Array.isArray(payload?.machinesYesterday)
+        ? payload.machinesYesterday
+        : [],
+      insight: payload?.insight || null,
+    }),
+  });
+
+  return await readResponse(res);
+}
