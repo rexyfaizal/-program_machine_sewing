@@ -111,7 +111,10 @@ const {
   errorMessage: aiErrorMessage,
   insight: aiInsight,
   lastUpdatedAt: aiLastUpdatedAt,
+  risenKeys: aiRisenKeys,
+  changeSummary: aiChangeSummary,
   refreshAiInsight,
+  checkChangesSince,
   startAutoRefresh: startAiAutoRefresh,
   stopAutoRefresh: stopAiAutoRefresh,
 } = useAiInsight({
@@ -291,6 +294,67 @@ function handleInsightWhyBad(item) {
   selectedWhyBadItem.value = item;
   selectedWhyBadMachine.value = findMachineByUuid(uuid);
   whyBadModalOpen.value = true;
+}
+
+function machineToInsightItem(machine) {
+  const uuid = String(machine?.uuid || "").trim();
+  const list = Array.isArray(aiInsight.value?.items) ? aiInsight.value.items : [];
+  const found =
+    list.find(
+      (item) => String(item?.uuid || "").trim().toLowerCase() === uuid.toLowerCase()
+    ) || null;
+  if (found) return found;
+
+  const util = Number(machine?.productivityPct ?? machine?.productivity ?? 0) || 0;
+  const status = String(machine?.status || "").trim().toUpperCase();
+  return {
+    uuid,
+    machineName:
+      machine?.displayMachineName ||
+      machine?.machineName ||
+      machine?.customName ||
+      "",
+    location: machine?.location || "",
+    scope: "MESIN",
+    priority: status === "BAD" || util < 55 ? "HIGH" : status === "NORMAL" ? "MEDIUM" : "LOW",
+    utilPct: util,
+    status,
+  };
+}
+
+function handleTableAskAi(machine) {
+  if (!isAdmin.value) return;
+  const item = machineToInsightItem(machine);
+  const title =
+    String(item?.machineName || machine?.displayMachineName || machine?.machineName || "mesin ini")
+      .trim() || "mesin ini";
+  const util = Number(item?.utilPct ?? machine?.productivity ?? 0) || 0;
+  const status = String(machine?.status || item?.status || "-").trim() || "-";
+  const q = `Jelaskan kondisi mesin ${title} (util ${util.toFixed(1)}%, status ${status}). Apa yang harus dicek 1 jam ke depan?`;
+  chatFocusTick.value += 1;
+  copilotOpen.value = true;
+  sendCopilotQuestion(q);
+}
+
+function handleTableWhyBad(machine) {
+  if (!isAdmin.value) return;
+  const uuid = String(machine?.uuid || "").trim();
+  if (!uuid) {
+    showNotice("Mesin ini belum punya UUID untuk dianalisa.", "error");
+    return;
+  }
+  selectedWhyBadItem.value = machineToInsightItem(machine);
+  selectedWhyBadMachine.value = machine;
+  whyBadModalOpen.value = true;
+}
+
+async function handleInsightCheckChanges() {
+  try {
+    const result = await checkChangesSince();
+    showNotice(result?.summary || "Cek perubahan selesai.", "ok");
+  } catch (err) {
+    showNotice(err?.message || "Gagal cek perubahan Insight.", "error");
+  }
 }
 
 function closeWhyBadModal() {
@@ -642,6 +706,8 @@ onUnmounted(() => {
       @download="downloadExcel"
       @edit="openEditModal"
       @chart="openChartModal"
+      @ask-ai="handleTableAskAi"
+      @why-bad="handleTableWhyBad"
     />
 
     <MachineEditModal
@@ -691,6 +757,8 @@ onUnmounted(() => {
       :insight-loading="aiLoading"
       :insight-error="aiErrorMessage"
       :insight-updated-at="aiLastUpdatedAt"
+      :insight-risen-keys="aiRisenKeys"
+      :insight-change-summary="aiChangeSummary"
       :executive="executive"
       :executive-loading="executiveLoading"
       :chat-focus-tick="chatFocusTick"
@@ -708,6 +776,7 @@ onUnmounted(() => {
       @insight-chart="handleInsightChart"
       @insight-ask="handleInsightAsk"
       @insight-why-bad="handleInsightWhyBad"
+      @insight-check-changes="handleInsightCheckChanges"
     />
 
     <AiPresentationMode

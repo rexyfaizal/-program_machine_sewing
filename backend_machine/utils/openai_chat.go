@@ -145,6 +145,7 @@ Aturan ketat:
 - Analisa mesin dari: power on (runtimeSec), process (procSec), lossTimeSec, macState, status, operator, note, dan blok insight (bukti rule).
 - Jika data kurang, katakan kurang — JANGAN spekulasi penyebab (hanca/material/rusak/operator malas) kecuali lossReasonCode/note/insight evidence menyebutnya.
 - Kode IDLE_NO_NOTE = celah data (belum ada keterangan). Aksi yang benar: minta isi keterangan. DILARANG menebak tunggu hanca/mesin rusak.
+- Kode NO_LOGIN_RUNNING / NO_OPERATOR = mesin ON atau ada Power On/Process, tapi operator belum login. Aksi: suruh login atau matikan mesin. Jangan spekulasi penyebab util rendah lain.
 - Kode FREQUENT_BROKEN / field brokenCount7d = mesin sering rusak (riwayat tercatat). Sarankan preventive: cek teknis sebelum shift berikutnya, spare/mekanik standby — jangan tebak jenis kerusakan.
 - Jawaban harus spesifik per mesin: sebut nama/line + util% + power on/process dari data. Dilarang template teks sama untuk semua mesin.
 - Pertanyaan "apa yang harus dilakukan 1 jam ke depan / prioritas": WAJIB jawab dari insightItems (decision + improvement + evidence). Format bernomor, sebut line/mesin + aksi konkret + angka.
@@ -929,6 +930,7 @@ func BuildAiChatContextJSON(req models.AiChatRequest) (string, error) {
 			"machineCountActive = mesin dengan Power On/Process/produktivitas > 0 (bukan sama dengan ON)",
 			"Jangan bilang total = panjang machines[] saja",
 			"IDLE_NO_NOTE = minta isi keterangan, bukan tebak penyebab",
+			"NO_LOGIN_RUNNING = mesin ON/jalan tanpa login → suruh login atau matikan",
 			"Sebut nama mesin + util% + runtime/proc saat menganalisa",
 		},
 	}

@@ -255,7 +255,57 @@ func evaluateAiMachineDecision(ctx aiMachineContext) (models.AiInsightItem, bool
 		return item, true
 	}
 
-	// 2) Loss aktif + note
+	// 2) Mesin ON / power on / process jalan, tapi operator belum login
+	if !ctx.hasLogin && isNoLoginRunning(ctx) {
+		item := base
+		item.Code = "NO_LOGIN_RUNNING"
+		running := ctx.input.ProcSec > 0 || ctx.macState == "2"
+		item.Priority = AiPriorityMedium
+		item.RiskScore = 74
+		activity := "menyala/online"
+		if running {
+			item.Priority = AiPriorityHigh
+			item.RiskScore = 88
+			activity = "berjalan (process aktif)"
+		}
+		item.Signal = fmt.Sprintf("%s %s tanpa sesi operator login", name, activity)
+		item.Evidence = joinAiParts(
+			fmt.Sprintf("MacState=%s · tidak ada login aktif", fallbackText(ctx.macState, "-")),
+			fmt.Sprintf(
+				"Power On %s · Process %s · Utilisasi dashboard %.1f%%",
+				formatAiDuration(ctx.input.RuntimeSec),
+				formatAiDuration(ctx.input.ProcSec),
+				ctx.utilPct,
+			),
+			"Anomali: mesin ON/jalan tanpa operator terikat",
+		)
+		if running {
+			item.Prediction1h = fmt.Sprintf(
+				"Process %s di %s tidak terikat operator — risiko output tidak accountable 1 jam ke depan",
+				formatAiDuration(ctx.input.ProcSec),
+				name,
+			)
+			item.Decision = fmt.Sprintf(
+				"Segera login operator atau hentikan pemakaian %s — mesin jalan tanpa login",
+				name,
+			)
+			item.Improvement = fmt.Sprintf(
+				"1. Line leader cek siapa yang pakai %s di %s\n2. Paksa login operator aktif\n3. Jika tidak dipakai: matikan mesin",
+				name,
+				fallbackText(loc, "area mesin"),
+			)
+		} else {
+			item.Prediction1h = "Produktivitas tidak terikat operator; risiko nyala sia-sia 1 jam ke depan"
+			item.Decision = "Rapikan disiplin login atau matikan mesin yang tidak dipakai"
+			item.Improvement = fmt.Sprintf(
+				"1. Pastikan %s di-login operator\n2. Atau matikan jika tidak dipakai",
+				name,
+			)
+		}
+		return item, true
+	}
+
+	// 3) Loss aktif + note
 	if ctx.loss != nil {
 		code := strings.ToUpper(strings.TrimSpace(ctx.loss.ReasonCode))
 		label := strings.TrimSpace(ctx.loss.ReasonLabel)
@@ -411,7 +461,7 @@ func evaluateAiMachineDecision(ctx aiMachineContext) (models.AiInsightItem, bool
 		return item, true
 	}
 
-	// 3) Ada note terbaru tapi util rendah → pakai note sebagai konteks
+	// 4) Ada note terbaru tapi util rendah → pakai note sebagai konteks
 	if noteSummary != "" &&
 		ctx.input.RuntimeSec >= AiMinRuntimeForIdleSec &&
 		ctx.utilPct < AiLowUtilPct {
@@ -456,20 +506,6 @@ func evaluateAiMachineDecision(ctx aiMachineContext) (models.AiInsightItem, bool
 			item.Priority = AiPriorityHigh
 			item.RiskScore = 86
 		}
-		return item, true
-	}
-
-	// 4) Nyala tanpa operator
-	if (ctx.macState == "1" || ctx.macState == "2") && !ctx.hasLogin {
-		item := base
-		item.Priority = AiPriorityMedium
-		item.Code = "NO_OPERATOR"
-		item.Signal = fmt.Sprintf("%s menyala/online tanpa sesi operator aktif", name)
-		item.Evidence = fmt.Sprintf("MacState=%s · tidak ada login aktif", ctx.macState)
-		item.Prediction1h = "Produktivitas tidak terikat operator; risiko nyala sia-sia 1 jam ke depan"
-		item.Decision = "Rapikan disiplin login atau matikan mesin yang tidak dipakai"
-		item.Improvement = fmt.Sprintf("Line leader pastikan %s di-login atau dimatikan", name)
-		item.RiskScore = 72
 		return item, true
 	}
 
@@ -620,7 +656,7 @@ func mapCodeToFinding(code, lossCode, lossLabel string) string {
 	switch code {
 	case "MACHINE_OFFLINE":
 		return "offline"
-	case "NO_OPERATOR":
+	case "NO_LOGIN_RUNNING", "NO_OPERATOR":
 		return "no_login"
 	case "IDLE_NO_NOTE":
 		return "idle"
@@ -640,6 +676,24 @@ func mapCodeToFinding(code, lossCode, lossLabel string) string {
 	default:
 		return "other"
 	}
+}
+
+// isNoLoginRunning: operator belum login, tapi mesin ON / ada power-on / ada process.
+func isNoLoginRunning(ctx aiMachineContext) bool {
+	if ctx.hasLogin {
+		return false
+	}
+	if ctx.macState == "1" || ctx.macState == "2" {
+		return true
+	}
+	// Cadangan jika MacState kosong/tidak sinkron, tapi jejak kerja ada.
+	if ctx.input.ProcSec > 0 {
+		return true
+	}
+	if ctx.input.RuntimeSec >= AiMinRuntimeForIdleSec {
+		return true
+	}
+	return false
 }
 
 func classifyLoss(code, label string) string {
@@ -928,14 +982,14 @@ func buildLineDecisionCopy(line string, bucket *lineBucket, total int) lineDecis
 
 	if n := len(noLogin); n > 0 {
 		machines := shortMachineNames(noLogin, 2)
-		part := fmt.Sprintf("%d tanpa login", n)
+		part := fmt.Sprintf("%d tanpa login (ON/jalan)", n)
 		if len(machines) > 0 {
 			part += " (" + strings.Join(machines, ", ") + ")"
 		}
 		parts = append(parts, part)
-		actions = append(actions, shortStep("Login atau matikan", machines, "mesin nyala"))
-		decisionBits = append(decisionBits, fmt.Sprintf("%d nyala tanpa login", n))
-		risk += 4
+		actions = append(actions, shortStep("Login atau matikan", machines, "mesin ON/jalan tanpa login"))
+		decisionBits = append(decisionBits, fmt.Sprintf("%d mesin ON/jalan tanpa login", n))
+		risk += 10
 	}
 
 	if len(parts) == 0 {

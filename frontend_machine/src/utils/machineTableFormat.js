@@ -133,3 +133,35 @@ export function getOperatorDisplayRows(machine) {
     },
   ];
 }
+
+/** Operator belum login, tapi mesin ON / ada power-on / ada process. */
+export function isNoLoginRunning(machine) {
+  const rows = getOperatorDisplayRows(machine);
+  const hasLogin = rows.some((row) => {
+    const label = String(row?.label || "").trim();
+    if (!label) return false;
+    return !/^not\s*logged\s*in$/i.test(label);
+  });
+  if (hasLogin) return false;
+
+  const mac = String(
+    machine?.macState ?? machine?.MacState ?? machine?.mac_state ?? ""
+  ).trim();
+  if (mac === "1" || mac === "2") return true;
+
+  const runtime = toNumber(machine?.runtime ?? machine?.runtimeSec);
+  const proc = toNumber(machine?.procTime ?? machine?.procSec);
+  if (proc > 0) return true;
+  // Power on ≥ 1 menit sebagai sinyal mesin sempat/masih nyala.
+  if (runtime >= 60) return true;
+  return false;
+}
+
+export function noLoginRunningLabel(machine) {
+  const proc = toNumber(machine?.procTime ?? machine?.procSec);
+  const mac = String(
+    machine?.macState ?? machine?.MacState ?? machine?.mac_state ?? ""
+  ).trim();
+  if (proc > 0 || mac === "2") return "Tanpa login · mesin jalan";
+  return "Tanpa login · mesin ON";
+}

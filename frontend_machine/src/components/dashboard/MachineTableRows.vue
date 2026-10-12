@@ -1,4 +1,5 @@
 <script setup>
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
   downTimeSec,
   formatHour,
@@ -6,7 +7,9 @@ import {
   getDisplayMachineName,
   getOperatorDisplayRows,
   getOperatorNoteItems,
+  isNoLoginRunning,
   isUsingProcessName,
+  noLoginRunningLabel,
   statusClass,
 } from "../../utils/machineTableFormat";
 
@@ -33,7 +36,9 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["edit", "chart"]);
+const emit = defineEmits(["edit", "chart", "ask-ai", "why-bad"]);
+
+const ctxMenu = ref(null);
 
 function editMachine(machine) {
   emit("edit", machine);
@@ -42,6 +47,44 @@ function editMachine(machine) {
 function chartMachine(machine) {
   emit("chart", machine);
 }
+
+function askAiMachine(machine) {
+  closeCtxMenu();
+  emit("ask-ai", machine);
+}
+
+function whyBadMachine(machine) {
+  closeCtxMenu();
+  emit("why-bad", machine);
+}
+
+function closeCtxMenu() {
+  ctxMenu.value = null;
+}
+
+function onRowContextMenu(event, machine) {
+  if (!props.showActions) return;
+  event.preventDefault();
+  ctxMenu.value = {
+    x: event.clientX,
+    y: event.clientY,
+    machine,
+  };
+}
+
+function onGlobalClick() {
+  closeCtxMenu();
+}
+
+onMounted(() => {
+  window.addEventListener("click", onGlobalClick);
+  window.addEventListener("scroll", onGlobalClick, true);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("click", onGlobalClick);
+  window.removeEventListener("scroll", onGlobalClick, true);
+});
 </script>
 
 <template>
@@ -76,6 +119,7 @@ function chartMachine(machine) {
           <th>Program Dominan</th>
           <th>UUID / Table</th>
           <th class="center">Action</th>
+          <th class="center">AI</th>
           <th class="center">Grafik</th>
         </tr>
 
@@ -107,6 +151,8 @@ function chartMachine(machine) {
         <tr
           v-for="(m, index) in props.pagedMachines"
           :key="`${m.uuid}-${index}`"
+          :class="{ 'row-no-login': isNoLoginRunning(m) }"
+          @contextmenu="onRowContextMenu($event, m)"
         >
           <template v-if="props.showActions">
             <td class="right">
@@ -159,9 +205,12 @@ function chartMachine(machine) {
                 </div>
               </template>
 
-              <strong v-else class="operator-empty">
-                Not logged in
-              </strong>
+              <div v-else class="operator-empty-wrap">
+                <strong class="operator-empty">Not logged in</strong>
+                <span v-if="isNoLoginRunning(m)" class="badge-no-login">
+                  {{ noLoginRunningLabel(m) }}
+                </span>
+              </div>
             </td>
 
             <td class="note-cell">
@@ -245,6 +294,25 @@ function chartMachine(machine) {
               </button>
             </td>
 
+            <td class="center ai-actions">
+              <button
+                class="btn-ai"
+                type="button"
+                title="Tanya AI tentang mesin ini"
+                @click="askAiMachine(m)"
+              >
+                Tanya AI
+              </button>
+              <button
+                class="btn-why"
+                type="button"
+                title="Kenapa jelek"
+                @click="whyBadMachine(m)"
+              >
+                Kenapa
+              </button>
+            </td>
+
             <td class="center">
               <button class="btn-chart" type="button" @click="chartMachine(m)">
                 Grafik
@@ -295,9 +363,12 @@ function chartMachine(machine) {
                 </div>
               </template>
 
-              <strong v-else class="operator-empty">
-                Not logged in
-              </strong>
+              <div v-else class="operator-empty-wrap">
+                <strong class="operator-empty">Not logged in</strong>
+                <span v-if="isNoLoginRunning(m)" class="badge-no-login">
+                  {{ noLoginRunningLabel(m) }}
+                </span>
+              </div>
             </td>
 
             <td class="note-cell">
@@ -367,5 +438,18 @@ function chartMachine(machine) {
         </tr>
       </tbody>
     </table>
+
+    <div
+      v-if="ctxMenu"
+      class="row-ctx"
+      :style="{ left: `${ctxMenu.x}px`, top: `${ctxMenu.y}px` }"
+      @click.stop
+    >
+      <button type="button" @click="askAiMachine(ctxMenu.machine)">Tanya AI</button>
+      <button type="button" @click="whyBadMachine(ctxMenu.machine)">Kenapa jelek</button>
+      <button type="button" @click="chartMachine(ctxMenu.machine); closeCtxMenu()">
+        Grafik
+      </button>
+    </div>
   </div>
 </template>

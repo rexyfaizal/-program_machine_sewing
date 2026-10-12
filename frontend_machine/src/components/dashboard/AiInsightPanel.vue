@@ -18,6 +18,14 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  risenKeys: {
+    type: Array,
+    default: () => [],
+  },
+  changeSummary: {
+    type: String,
+    default: "",
+  },
   embedded: {
     type: Boolean,
     default: false,
@@ -38,9 +46,11 @@ const emit = defineEmits([
   "open-chart",
   "ask-ai",
   "why-bad",
+  "check-changes",
 ]);
 
 const expandedKey = ref("");
+const activeToneFilter = ref("");
 
 const items = computed(() =>
   Array.isArray(props.insight?.items) ? props.insight.items : []
@@ -50,8 +60,26 @@ const highCount = computed(() => Number(props.insight?.highCount || 0));
 const mediumCount = computed(() => Number(props.insight?.mediumCount || 0));
 const machineCount = computed(() => Number(props.insight?.machineCount || 0));
 
+const risenSet = computed(() => new Set(props.risenKeys || []));
+
+function itemIdentity(item) {
+  const uuid = String(item?.uuid || "").trim().toLowerCase();
+  if (uuid) return `u:${uuid}`;
+  return [
+    "x",
+    String(item?.scope || "").trim().toUpperCase(),
+    String(item?.location || "").trim().toLowerCase(),
+    String(item?.code || "").trim().toUpperCase(),
+    String(item?.machineName || "").trim().toLowerCase(),
+  ].join("|");
+}
+
 function itemKey(item, index) {
   return `${item.code}-${item.uuid || item.location || index}`;
+}
+
+function isRisen(item) {
+  return risenSet.value.has(itemIdentity(item));
 }
 
 function toggleExpand(key) {
@@ -108,6 +136,7 @@ function findingTone(item) {
 
   if (code === "FREQUENT_BROKEN" || isFrequentBroken(item)) return "code-broken";
   if (code === "MACHINE_OFFLINE") return "code-offline";
+  if (code === "NO_LOGIN_RUNNING" || code === "NO_OPERATOR") return "code-nologin";
   if (code === "IDLE_NO_NOTE") return "code-note";
   if (code === "LINE_DECISION" || String(item?.scope || "").toUpperCase() === "LINE") {
     return "code-line";
@@ -134,12 +163,45 @@ function findingLabel(item) {
     return n > 0 ? `Rusak ${n}x` : "Rusak";
   }
   if (tone === "code-offline") return "Offline";
+  if (tone === "code-nologin") return "Tanpa login";
   if (tone === "code-note") return "Tanpa note";
   if (tone === "code-context") return "Ada note";
   if (tone === "code-hanca") return "Hanca";
   if (tone === "code-line") return "Line";
   if (tone === "code-loss") return "Loss aktif";
   return "";
+}
+
+const filterChips = computed(() => {
+  const all = items.value;
+  const countTone = (tone) => all.filter((item) => findingTone(item) === tone).length;
+  return [
+    { key: "", label: "Semua", count: all.length, cls: "chip-all" },
+    { key: "code-broken", label: "Rusak", count: countTone("code-broken"), cls: "chip-broken" },
+    { key: "code-offline", label: "Offline", count: countTone("code-offline"), cls: "chip-offline" },
+    { key: "code-nologin", label: "Tanpa login", count: countTone("code-nologin"), cls: "chip-nologin" },
+    { key: "code-note", label: "Tanpa note", count: countTone("code-note"), cls: "chip-note" },
+    { key: "code-hanca", label: "Hanca", count: countTone("code-hanca"), cls: "chip-hanca" },
+  ];
+});
+
+const visibleItems = computed(() => {
+  const tone = activeToneFilter.value;
+  if (!tone) return items.value;
+  return items.value.filter((item) => findingTone(item) === tone);
+});
+
+function setToneFilter(key) {
+  if (!key) {
+    activeToneFilter.value = "";
+    return;
+  }
+  activeToneFilter.value = activeToneFilter.value === key ? "" : key;
+}
+
+function onCheckChanges(event) {
+  event?.stopPropagation?.();
+  emit("check-changes");
 }
 
 function scopeLabel(item) {
@@ -205,14 +267,24 @@ function onWhyBad(item, event) {
         <span class="ai-ins__pill ai-ins__pill--medium">{{ mediumCount }} perhatian</span>
         <span class="ai-ins__pill ai-ins__pill--mute">{{ machineCount }} aktif</span>
       </div>
-      <button
-        type="button"
-        class="ai-ins__refresh"
-        :disabled="loading"
-        @click="emit('refresh')"
-      >
-        {{ loading ? "Analisa..." : "Refresh" }}
-      </button>
+      <div class="ai-ins__toolbar-actions">
+        <button
+          type="button"
+          class="ai-ins__refresh ai-ins__refresh--soft"
+          :disabled="loading"
+          @click="onCheckChanges"
+        >
+          Berubah sejak tadi?
+        </button>
+        <button
+          type="button"
+          class="ai-ins__refresh"
+          :disabled="loading"
+          @click="emit('refresh')"
+        >
+          {{ loading ? "Analisa..." : "Refresh" }}
+        </button>
+      </div>
     </div>
 
     <div v-else class="ai-ins__stats ai-ins__stats--bar">
@@ -220,9 +292,33 @@ function onWhyBad(item, event) {
       <span class="ai-ins__pill ai-ins__pill--medium">{{ mediumCount }} perhatian</span>
       <span class="ai-ins__pill ai-ins__pill--mute">{{ machineCount }} aktif</span>
       <span v-if="lastUpdatedAt" class="ai-ins__meta">Update {{ lastUpdatedAt }}</span>
+      <button
+        type="button"
+        class="ai-ins__change-btn"
+        :disabled="loading"
+        @click="onCheckChanges"
+      >
+        Berubah sejak tadi?
+      </button>
     </div>
 
     <p v-if="lastUpdatedAt && !hideToolbar" class="ai-ins__meta">Update {{ lastUpdatedAt }}</p>
+
+    <div class="ai-ins__chips" role="toolbar" aria-label="Filter Insight">
+      <button
+        v-for="chip in filterChips"
+        :key="chip.key || 'all'"
+        type="button"
+        class="ai-ins__chip"
+        :class="[chip.cls, { 'is-active': activeToneFilter === chip.key }]"
+        @click="setToneFilter(chip.key)"
+      >
+        {{ chip.label }}
+        <em>{{ chip.count }}</em>
+      </button>
+    </div>
+
+    <p v-if="changeSummary" class="ai-ins__change">{{ changeSummary }}</p>
 
     <p v-if="errorMessage" class="ai-ins__error">{{ errorMessage }}</p>
 
@@ -233,13 +329,16 @@ function onWhyBad(item, event) {
 
     <div class="ai-ins__grid">
       <article
-        v-for="(item, index) in items"
+        v-for="(item, index) in visibleItems"
         :key="itemKey(item, index)"
         class="ai-ins__item"
         :class="[
           priorityTone(item.priority),
           findingTone(item),
-          { 'is-open': expandedKey === itemKey(item, index) },
+          {
+            'is-open': expandedKey === itemKey(item, index),
+            'is-risen': isRisen(item),
+          },
         ]"
         @click="toggleExpand(itemKey(item, index))"
       >
@@ -247,6 +346,7 @@ function onWhyBad(item, event) {
           <span class="ai-ins__status" aria-hidden="true" />
           <h4 class="ai-ins__title">{{ titleOf(item) }}</h4>
           <div class="ai-ins__tags">
+            <span v-if="isRisen(item)" class="ai-ins__tag ai-ins__tag--risen">Baru naik</span>
             <span class="ai-ins__tag ai-ins__tag--scope">{{ scopeLabel(item) }}</span>
             <span
               v-if="findingLabel(item)"
@@ -325,8 +425,12 @@ function onWhyBad(item, event) {
         </span>
       </article>
 
-      <div v-if="!loading && !items.length && !errorMessage" class="ai-ins__empty">
-        Situasi relatif aman. Tidak ada prioritas mendesak saat ini.
+      <div v-if="!loading && !visibleItems.length && !errorMessage" class="ai-ins__empty">
+        {{
+          items.length && activeToneFilter
+            ? "Tidak ada kartu untuk filter ini."
+            : "Situasi relatif aman. Tidak ada prioritas mendesak saat ini."
+        }}
       </div>
     </div>
   </section>
@@ -357,6 +461,13 @@ function onWhyBad(item, event) {
   flex-shrink: 0;
 }
 
+.ai-ins__toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .ai-ins__stats {
   display: flex;
   flex-wrap: wrap;
@@ -366,6 +477,136 @@ function onWhyBad(item, event) {
 
 .ai-ins__stats--bar {
   flex-shrink: 0;
+}
+
+.ai-ins__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ai-ins__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+}
+
+.ai-ins__chip em {
+  font-style: normal;
+  font-weight: 900;
+  opacity: 0.85;
+}
+
+.ai-ins__chip.chip-all.is-active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ai-ins__chip.chip-broken {
+  border-color: #fecaca;
+  color: #991b1b;
+}
+.ai-ins__chip.chip-broken.is-active {
+  background: #fee2e2;
+}
+
+.ai-ins__chip.chip-offline {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+.ai-ins__chip.chip-offline.is-active {
+  background: #e2e8f0;
+}
+
+.ai-ins__chip.chip-nologin {
+  border-color: #fdba74;
+  color: #9a3412;
+}
+.ai-ins__chip.chip-nologin.is-active {
+  background: #ffedd5;
+}
+
+.ai-ins__chip.chip-note {
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.ai-ins__chip.chip-note.is-active {
+  background: #fef3c7;
+}
+
+.ai-ins__chip.chip-hanca {
+  border-color: #67e8f9;
+  color: #155e75;
+}
+.ai-ins__chip.chip-hanca.is-active {
+  background: #cffafe;
+}
+
+.ai-ins__change {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ai-ins__change-btn {
+  margin-left: auto;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ai-ins__change-btn:disabled,
+.ai-ins__refresh--soft:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-ins__refresh--soft {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe;
+}
+
+.ai-ins__tag--risen {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.ai-ins__item.is-risen {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+  box-shadow:
+    inset 4px 0 0 #2563eb,
+    0 10px 24px rgba(37, 99, 235, 0.14);
+}
+
+.ai-ins__item.is-risen.is-open {
+  outline: 2px solid #2563eb;
+  box-shadow:
+    inset 4px 0 0 #2563eb,
+    0 12px 28px rgba(37, 99, 235, 0.18);
 }
 
 .ai-ins__pill {
@@ -516,6 +757,12 @@ function onWhyBad(item, event) {
   box-shadow: inset 4px 0 0 #64748b;
 }
 
+.ai-ins__item.code-nologin {
+  border-color: #fdba74;
+  background: linear-gradient(180deg, #fff7ed 0%, #fff 72%);
+  box-shadow: inset 4px 0 0 #ea580c;
+}
+
 .ai-ins__item.code-note {
   border-color: #fcd34d;
   background: linear-gradient(180deg, #fffbeb 0%, #fff 72%);
@@ -548,6 +795,7 @@ function onWhyBad(item, event) {
 
 .ai-ins__item.code-broken .ai-ins__status { background: #ef4444; }
 .ai-ins__item.code-offline .ai-ins__status { background: #64748b; }
+.ai-ins__item.code-nologin .ai-ins__status { background: #ea580c; }
 .ai-ins__item.code-note .ai-ins__status { background: #f59e0b; }
 .ai-ins__item.code-context .ai-ins__status { background: #ea580c; }
 .ai-ins__item.code-hanca .ai-ins__status { background: #0891b2; }
@@ -717,6 +965,12 @@ function onWhyBad(item, event) {
   background: #e2e8f0;
   color: #334155;
   border: 1px solid #cbd5e1;
+}
+
+.ai-ins__tag--code-nologin {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
 }
 
 .ai-ins__tag--code-note {

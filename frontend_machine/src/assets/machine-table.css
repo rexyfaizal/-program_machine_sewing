@@ -482,6 +482,111 @@
   background: #dbeafe;
 }
 
+.machine-table-panel .ai-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 88px;
+}
+
+.machine-table-panel .btn-ai,
+.machine-table-panel .btn-why {
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-weight: 900;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.machine-table-panel .btn-ai {
+  border: 1px solid #93c5fd;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+}
+
+.machine-table-panel .btn-ai:hover {
+  background: #1e40af;
+}
+
+.machine-table-panel .btn-why {
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.machine-table-panel .btn-why:hover {
+  background: #ffedd5;
+}
+
+.machine-table-panel .table-wrap {
+  position: relative;
+}
+
+.machine-table-panel .row-ctx {
+  position: fixed;
+  z-index: 14000;
+  min-width: 160px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid #bfdbfe;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.18);
+  display: grid;
+  gap: 4px;
+}
+
+.machine-table-panel .row-ctx button {
+  border: 0;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.machine-table-panel .row-ctx button:hover {
+  background: #dbeafe;
+}
+
+.machine-table-panel tr.row-no-login td {
+  background: linear-gradient(90deg, #fff7ed 0%, #fffaf5 55%, #ffffff 100%);
+}
+
+.machine-table-panel tr.row-no-login td:first-child {
+  box-shadow: inset 4px 0 0 #ea580c;
+}
+
+.machine-table-panel .operator-empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.machine-table-panel .badge-no-login {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: #9a3412;
+  background: #ffedd5;
+  border: 1px solid #fdba74;
+  white-space: nowrap;
+}
+
+.machine-table-panel tr.row-no-login .operator-empty {
+  color: #c2410c;
+  font-weight: 900;
+}
+
 .machine-table-panel .empty {
   text-align: center;
   padding: 30px;

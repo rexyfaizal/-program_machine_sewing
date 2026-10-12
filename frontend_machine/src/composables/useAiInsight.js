@@ -42,6 +42,49 @@ function toMachinePayload(machines = []) {
     .filter((m) => m.uuid);
 }
 
+function itemIdentity(item) {
+  const uuid = String(item?.uuid || "").trim().toLowerCase();
+  if (uuid) return `u:${uuid}`;
+  return [
+    "x",
+    String(item?.scope || "").trim().toUpperCase(),
+    String(item?.location || "").trim().toLowerCase(),
+    String(item?.code || "").trim().toUpperCase(),
+    String(item?.machineName || "").trim().toLowerCase(),
+  ].join("|");
+}
+
+function priorityRank(priority) {
+  const p = String(priority || "").toUpperCase();
+  if (p === "HIGH") return 3;
+  if (p === "MEDIUM") return 2;
+  return 1;
+}
+
+function buildPriorityMap(items = []) {
+  const map = {};
+  for (const item of Array.isArray(items) ? items : []) {
+    map[itemIdentity(item)] = priorityRank(item?.priority);
+  }
+  return map;
+}
+
+function computeRisenKeys(prevMap, items = []) {
+  const risen = [];
+  if (!prevMap || typeof prevMap !== "object") return risen;
+  for (const item of Array.isArray(items) ? items : []) {
+    const key = itemIdentity(item);
+    const rank = priorityRank(item?.priority);
+    const prev = prevMap[key];
+    if (prev === undefined) {
+      if (rank >= 2) risen.push(key);
+    } else if (rank > prev) {
+      risen.push(key);
+    }
+  }
+  return risen;
+}
+
 export function useAiInsight({
   selectedDate,
   locationFilter,
@@ -52,9 +95,12 @@ export function useAiInsight({
   const errorMessage = ref("");
   const insight = ref(null);
   const lastUpdatedAt = ref("");
+  const risenKeys = ref([]);
+  const changeSummary = ref("");
 
   let timer = null;
   let inFlight = false;
+  let previousPriorityMap = null;
 
   function resolveDate() {
     if (typeof selectedDate === "function") return selectedDate() || "";
@@ -97,6 +143,8 @@ export function useAiInsight({
           lowCount: 0,
           machineCount: 0,
         };
+        risenKeys.value = [];
+        changeSummary.value = "";
         return;
       }
 
@@ -107,6 +155,19 @@ export function useAiInsight({
         machines: machineRows,
       });
 
+      const nextItems = Array.isArray(data?.items) ? data.items : [];
+      if (previousPriorityMap) {
+        const risen = computeRisenKeys(previousPriorityMap, nextItems);
+        risenKeys.value = risen;
+        changeSummary.value = risen.length
+          ? `${risen.length} kartu naik prioritas / baru muncul sejak tadi.`
+          : "Tidak ada kartu yang naik prioritas sejak tadi.";
+      } else {
+        risenKeys.value = [];
+        changeSummary.value = "Acuan pertama tersimpan. Cek lagi nanti untuk lihat yang berubah.";
+      }
+      previousPriorityMap = buildPriorityMap(nextItems);
+
       insight.value = data;
       lastUpdatedAt.value = data?.generatedAt || new Date().toLocaleString("id-ID");
     } catch (err) {
@@ -115,6 +176,14 @@ export function useAiInsight({
       loading.value = false;
       inFlight = false;
     }
+  }
+
+  async function checkChangesSince() {
+    await refreshAiInsight({ silent: false });
+    return {
+      risenKeys: risenKeys.value,
+      summary: changeSummary.value,
+    };
   }
 
   function startAutoRefresh() {
@@ -140,7 +209,10 @@ export function useAiInsight({
     errorMessage,
     insight,
     lastUpdatedAt,
+    risenKeys,
+    changeSummary,
     refreshAiInsight,
+    checkChangesSince,
     startAutoRefresh,
     stopAutoRefresh,
   };

@@ -12,6 +12,8 @@ const props = defineProps({
   insightLoading: { type: Boolean, default: false },
   insightError: { type: String, default: "" },
   insightUpdatedAt: { type: String, default: "" },
+  insightRisenKeys: { type: Array, default: () => [] },
+  insightChangeSummary: { type: String, default: "" },
   initialTab: { type: String, default: "chat" },
   executive: { type: Object, default: null },
   executiveLoading: { type: Boolean, default: false },
@@ -35,6 +37,7 @@ const emit = defineEmits([
   "insight-chart",
   "insight-ask",
   "insight-why-bad",
+  "insight-check-changes",
 ]);
 
 const health = computed(() => props.executive?.health || null);
@@ -243,11 +246,14 @@ function openFromRobot() {
             :loading="insightLoading"
             :error-message="insightError"
             :last-updated-at="insightUpdatedAt"
+            :risen-keys="insightRisenKeys"
+            :change-summary="insightChangeSummary"
             @refresh="emit('refresh-insight')"
             @filter-item="emit('insight-filter', $event)"
             @open-chart="emit('insight-chart', $event)"
             @ask-ai="emit('insight-ask', $event)"
             @why-bad="emit('insight-why-bad', $event)"
+            @check-changes="emit('insight-check-changes')"
           />
         </div>
       </div>

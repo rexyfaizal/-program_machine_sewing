@@ -28,7 +28,7 @@ export function useMachineTable(props) {
   });
 
   const totalCols = computed(() => {
-    return props.showActions ? 19 : 11;
+    return props.showActions ? 20 : 11;
   });
 
   const visiblePages = computed(() => {
