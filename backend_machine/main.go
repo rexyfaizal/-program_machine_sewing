@@ -212,6 +212,7 @@ func main() {
 
 	mux.HandleFunc("/api/health", api.Health)
 	mux.HandleFunc("/api/productivity", api.Productivity)
+	mux.HandleFunc("/api/productivity/range", api.ProductivityRange)
 	mux.HandleFunc("/api/process/detail", api.ProcessDetail)
 	mux.HandleFunc("/api/machine-settings", api.MachineSettings)
 	mux.HandleFunc("/api/line-shift-config", api.LineShiftConfig)

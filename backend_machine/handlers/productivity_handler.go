@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -18,16 +20,23 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shiftParam := strings.TrimSpace(r.URL.Query().Get("shift"))
-	workDate, shiftCode := utils.ResolveRequestedShift(date, shiftParam, time.Now())
-
 	ctx, cancel := contextWithTimeout(r, 60*time.Second)
 	defer cancel()
+	resp, err := h.productivityForDate(ctx, date, shiftParam)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, resp)
+}
+
+func (h *Handler) productivityForDate(ctx context.Context, date, shiftParam string) (models.APIResponse, error) {
+	workDate, shiftCode := utils.ResolveRequestedShift(date, shiftParam, time.Now())
 
 	machines, err := h.Repo.GetMachines(ctx)
 	if err != nil {
 		log.Println("Gagal ambil data machineinfo:", err)
-		http.Error(w, "Gagal ambil data machineinfo: "+err.Error(), http.StatusInternalServerError)
-		return
+		return models.APIResponse{}, fmt.Errorf("Gagal ambil data machineinfo: %w", err)
 	}
 
 	settings, err := h.Repo.GetMachineSettings(ctx)
@@ -193,5 +202,8 @@ func (h *Handler) Productivity(w http.ResponseWriter, r *http.Request) {
 		Rows: rows,
 	}
 
-	writeJSON(w, resp)
+	if err := ctx.Err(); err != nil {
+		return models.APIResponse{}, err
+	}
+	return resp, nil
 }

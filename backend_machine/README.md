@@ -28,6 +28,19 @@ http://localhost:8080/process.html
 http://localhost:8080/api/health
 ```
 
+## API produktivitas rentang tanggal
+
+`GET /api/productivity/range?start_date=2026-10-01&end_date=2026-10-10&shift=ALL`
+
+- `start_date` dan `end_date` wajib menggunakan format `YYYY-MM-DD`.
+- Kedua tanggal termasuk dalam hasil; semua hari kalender termasuk Minggu diambil.
+- Maksimal 31 hari per request. Tanggal terbalik atau tidak valid menghasilkan HTTP 400.
+- `shift` opsional, default `ALL`; perhitungan mengikuti API produktivitas harian.
+- Respons: `{ "start_date": "2026-10-01", "end_date": "2026-10-10", "total_days": 10, "days": [...] }`.
+- Setiap elemen `days` berisi `summary` dan `rows` seperti `/api/productivity`; tanggal terdapat pada `summary.date`.
+- Data diambil berurutan dengan timeout total 5 menit. Kesalahan fatal menghasilkan HTTP 500 tanpa respons parsial. Seperti API harian, mesin yang gagal dihitung dapat dilewati.
+- Frontend dashboard dan export Excel masih menggunakan API harian.
+
 ## Environment variable opsional
 
 ```powershell
