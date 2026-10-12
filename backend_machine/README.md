@@ -41,6 +41,20 @@ http://localhost:8080/api/health
 - Data diambil berurutan dengan timeout total 5 menit. Kesalahan fatal menghasilkan HTTP 500 tanpa respons parsial. Seperti API harian, mesin yang gagal dihitung dapat dilewati.
 - Frontend dashboard dan export Excel masih menggunakan API harian.
 
+## Chat berdasarkan tanggal dari database
+
+`POST /api/ai/chat` membaca tanggal pada pertanyaan tentang mesin/produktivitas dan mengambil data SQL Server secara langsung menggunakan perhitungan API harian. Contoh body:
+
+```json
+{"question":"tanggal 9 Oktober 2026 apa mesin yang paling produktif", "date":"2026-10-12"}
+```
+
+Tanggal dalam pertanyaan mengalahkan tanggal dashboard. Format yang didukung: `9 Oktober 2026`, `2026-10-09`, `09/10/2026`, `09-10-2026`, `hari ini`, dan `kemarin` (WIB). Satu tanggal per pertanyaan; tanggal tidak valid, tidak lengkap, atau banyak tanggal menghasilkan HTTP 400.
+
+Filter `location`, `status`, dan shift tertentu dari dashboard tetap diterapkan. Shift kosong/`CURRENT` menjadi `ALL` untuk pertanyaan bertanggal. Insight dashboard dan status mesin live tidak dipakai sebagai data historis. Data operator historis belum dimuat pada jalur ini. Tanpa tanggal dalam pertanyaan, chat tetap memakai konteks dashboard.
+
+Ranking menyebutkan tanggal dan sumber data, default satu mesin (atau lima jika memakai kata `top`); gunakan `top 5` atau `5 mesin` untuk meminta beberapa mesin. Frasa `top mesin terbaik` dihitung sebagai ranking produktivitas oleh backend, tanpa meminta model menyusun angka. Pertanyaan lanjutan seperti `kalo hari Kamis tanggal 8 Oktober 2026?` meneruskan jenis ranking dan jumlah mesin dari pertanyaan user sebelumnya di `history`, lalu mengambil ulang data tanggal baru. Jika query database gagal, chat mengembalikan error tanpa memakai data dashboard sebagai pengganti. Jika tidak ada aktivitas, backend menyatakan data tidak tersedia. Perhitungan mesin yang gagal tetap dapat dilewati sebagaimana API harian.
+
 ## Environment variable opsional
 
 ```powershell

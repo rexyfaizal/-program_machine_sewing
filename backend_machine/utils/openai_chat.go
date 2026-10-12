@@ -48,7 +48,7 @@ type openAIChatAPIResponse struct {
 }
 
 type openAIStructuredReply struct {
-	Reply   string               `json:"reply"`
+	Reply   string                `json:"reply"`
 	Actions []models.AiChatAction `json:"actions"`
 }
 
@@ -134,7 +134,7 @@ Aturan ketat:
 - JANGAN mengarang angka produksi. Pakai hanya data di konteks JSON (machines + insightItems).
 - Utilisasi mesin = productivityPct/utilPct di JSON — sama dengan dashboard. Jangan hitung ulang dengan rumus lain.
 - Pertanyaan hari/tanggal/jam SAAT INI: jawab dari field now (nowDate, nowTime, dayNameId, timezone). JANGAN bilang "tidak ada info tanggal" jika field now ada.
-- Field date = tanggal filter dashboard (bisa beda dari hari ini). Jelaskan bedanya jika user tanya.
+- Field date = tanggal acuan data machines (bisa beda dari hari ini). Jika dataSource=database, data diambil untuk tanggal pertanyaan, bukan filter dashboard. Gunakan konteks ini sebagai acuan, bukan angka dari riwayat chat.
 - Pertanyaan jumlah/total mesin di dashboard: pakai machineCountTotal (semua mesin di filter). JANGAN pakai panjang array machines saja (bisa terpotong) atau hanya mesin aktif.
 - Pertanyaan mesin sedang ON/nyala/online: pakai machineCountOn (macState 1+2). Boleh sebut rincian working/online/offline.
 - machineCountActive = mesin yang punya Power On/Process/produktivitas terukur hari ini. Beda dari total dan beda dari ON.
@@ -213,6 +213,9 @@ func currentAiClock() aiClockInfo {
 
 func looksLikeClockQuestion(q string) bool {
 	ql := strings.ToLower(strings.TrimSpace(q))
+	if AiQuestionNeedsMachineData(ql) {
+		return false
+	}
 	if ql == "" {
 		return false
 	}
@@ -230,12 +233,12 @@ func looksLikeClockQuestion(q string) bool {
 }
 
 type machineCountStats struct {
-	Total    int
-	Active   int // punya jejak runtime/proc/produktivitas di filter tanggal
-	On       int // macState 1 (online) atau 2 (working)
-	Working  int // macState 2
-	Online   int // macState 1
-	Offline  int // macState 0 / kosong
+	Total   int
+	Active  int // punya jejak runtime/proc/produktivitas di filter tanggal
+	On      int // macState 1 (online) atau 2 (working)
+	Working int // macState 2
+	Online  int // macState 1
+	Offline int // macState 0 / kosong
 }
 
 func countMachinesInRequest(machines []models.AiInsightMachineInput) machineCountStats {
@@ -436,12 +439,16 @@ func answerClockQuestion(question, dashboardDate string) (string, bool) {
 	return b.String(), true
 }
 
-var topNRegex = regexp.MustCompile(`(?i)\b(\d{1,2})\b`)
+var topNRegex = regexp.MustCompile(`(?i)\b(?:top\s+|ranking\s+|peringkat\s+)?(\d{1,2})\s+mesin\b|\b(?:top|ranking|peringkat)\s+(\d{1,2})\b`)
 
 func parseTopN(q string, fallback int) int {
 	m := topNRegex.FindStringSubmatch(q)
-	if len(m) >= 2 {
-		n, err := strconv.Atoi(m[1])
+	if len(m) >= 3 {
+		value := m[1]
+		if value == "" {
+			value = m[2]
+		}
+		n, err := strconv.Atoi(value)
 		if err == nil && n > 0 {
 			if n > 20 {
 				return 20
@@ -456,6 +463,12 @@ func parseTopN(q string, fallback int) int {
 }
 
 func machineProductivityPct(m models.AiInsightMachineInput) float64 {
+	if m.ProductivityPct > 0 {
+		if m.ProductivityPct > 100 {
+			return 100
+		}
+		return m.ProductivityPct
+	}
 	return resolveAiUtilPct(m)
 }
 
@@ -476,6 +489,7 @@ func looksLikeTopProductiveQuestion(q string) bool {
 		return false
 	}
 	rankHint := strings.Contains(ql, "produktif") ||
+		(strings.Contains(ql, "mesin") && (strings.Contains(ql, "terbaik") || strings.Contains(ql, "top") || strings.Contains(ql, "tertinggi"))) ||
 		strings.Contains(ql, "produktivitas") ||
 		strings.Contains(ql, "ranking") ||
 		strings.Contains(ql, "rank ") ||
@@ -518,7 +532,7 @@ func looksLikeLowProductiveQuestion(q string) bool {
 func formatMachineRankReply(title string, machines []models.AiInsightMachineInput, limit int, ascending bool) string {
 	list := activeMachinesForRank(machines)
 	if len(list) == 0 {
-		return "Belum ada mesin aktif pada filter saat ini untuk di-ranking. Longgarkan filter atau refresh dashboard, lalu tanya lagi."
+		return "Tidak ada data aktivitas mesin untuk di-ranking pada tanggal dan filter tersebut."
 	}
 
 	sort.SliceStable(list, func(i, j int) bool {
@@ -565,27 +579,48 @@ func formatMachineRankReply(title string, machines []models.AiInsightMachineInpu
 		b.WriteString(line)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nAcuan: produktivitas mesin pada filter dashboard saat ini (bukan daftar prioritas Insight).")
 	return strings.TrimSpace(b.String())
 }
 
-func answerRankingQuestion(question string, machines []models.AiInsightMachineInput) (string, bool) {
-	n := parseTopN(question, 5)
+func answerRankingQuestion(req models.AiChatRequest) (string, bool) {
+	question, machines := req.Question, req.Machines
+	n := rankingLimit(question)
+	if count := len(activeMachinesForRank(machines)); count > 0 && n > count {
+		n = count
+	}
+	date := strings.TrimSpace(req.Date)
+	if date == "" {
+		date = currentAiClock().Date
+	}
+	source := "data filter dashboard"
+	if req.DataSource == "database" {
+		source = "data database"
+	}
+	acuan := fmt.Sprintf("\n\nAcuan: %s tanggal %s", source, date)
+	if req.Shift != "" {
+		acuan += " · shift " + req.Shift
+	}
+	if req.Location != "" {
+		acuan += " · lokasi " + req.Location
+	}
+	if req.Status != "" {
+		acuan += " · status " + req.Status
+	}
 	if looksLikeTopProductiveQuestion(question) {
 		return formatMachineRankReply(
-			fmt.Sprintf("%d mesin paling produktif saat ini:", n),
+			fmt.Sprintf("%d mesin paling produktif pada tanggal %s:", n, date),
 			machines,
 			n,
 			false,
-		), true
+		) + acuan, true
 	}
 	if looksLikeLowProductiveQuestion(question) {
 		return formatMachineRankReply(
-			fmt.Sprintf("%d mesin dengan produktivitas terendah saat ini:", n),
+			fmt.Sprintf("%d mesin dengan produktivitas terendah pada tanggal %s:", n, date),
 			machines,
 			n,
 			true,
-		), true
+		) + acuan, true
 	}
 	return "", false
 }
@@ -906,24 +941,25 @@ func BuildAiChatContextJSON(req models.AiChatRequest) (string, error) {
 	}
 
 	payload := map[string]any{
-		"page":               strings.TrimSpace(req.Page),
-		"date":               dashboardDate,
-		"now":                nowInfo,
-		"shift":              strings.TrimSpace(req.Shift),
-		"locationFilter":     strings.TrimSpace(req.Location),
-		"statusFilter":       strings.TrimSpace(req.Status),
-		"machineCount":       counts.Total, // alias total di filter dashboard
-		"machineCountTotal":  counts.Total,
-		"machineCountActive": counts.Active,
-		"machineCountOn":     counts.On,
+		"dataSource":          req.DataSource,
+		"page":                strings.TrimSpace(req.Page),
+		"date":                dashboardDate,
+		"now":                 nowInfo,
+		"shift":               strings.TrimSpace(req.Shift),
+		"locationFilter":      strings.TrimSpace(req.Location),
+		"statusFilter":        strings.TrimSpace(req.Status),
+		"machineCount":        counts.Total, // alias total di filter dashboard
+		"machineCountTotal":   counts.Total,
+		"machineCountActive":  counts.Active,
+		"machineCountOn":      counts.On,
 		"machineCountWorking": counts.Working,
-		"machineCountOnline": counts.Online,
+		"machineCountOnline":  counts.Online,
 		"machineCountOffline": counts.Offline,
-		"machinesInContext":  len(machines),
-		"machines":           machines,
-		"insightSummary":     insightSummary,
-		"insightItems":       insightItems,
-		"notes":              "Output/pcs dan tiket mekanik TIDAK disertakan. utilPct=productivityPct dashboard. Total=machineCountTotal. ON=machineCountOn (macState 1/2). machines[] bisa terpotong max 40. Field now = waktu server WIB.",
+		"machinesInContext":   len(machines),
+		"machines":            machines,
+		"insightSummary":      insightSummary,
+		"insightItems":        insightItems,
+		"notes":               "Output/pcs dan tiket mekanik TIDAK disertakan. utilPct=productivityPct dashboard. Total=machineCountTotal. ON=machineCountOn (macState 1/2). machines[] bisa terpotong max 40. Field now = waktu server WIB.",
 		"groundingRules": []string{
 			"Total mesin di dashboard/filter = machineCountTotal",
 			"Mesin sedang ON/nyala = machineCountOn (macState online+working)",
@@ -981,7 +1017,7 @@ func CallOpenAIChat(ctx context.Context, req models.AiChatRequest) (models.AiCha
 	}
 
 	// Ranking produktif: hitung dari data mesin, jangan pakai fallback Insight HIGH.
-	if reply, ok := answerRankingQuestion(question, req.Machines); ok {
+	if reply, ok := answerRankingQuestion(req); ok {
 		return models.AiChatResponse{
 			Status:  "ok",
 			Reply:   reply,
@@ -1044,7 +1080,7 @@ func CallOpenAIChat(ctx context.Context, req models.AiChatRequest) (models.AiCha
 			Role: "system",
 			Content: "PENTING: balas HANYA satu objek JSON valid. Field wajib: reply (string tidak kosong), actions (array). " +
 				`Jawaban HARUS sesuai pertanyaan user. Jika ranking produktif, pakai productivityPct/utilPct dari machines — jangan salin insightItems. ` +
-				`Contoh: {"reply":"5 mesin paling produktif: 1) Mesin A 80% ...","actions":[]}`,
+				`Jangan membuat nama mesin atau angka contoh. Jika data tidak tersedia, nyatakan data tidak tersedia. Format: {"reply":"jawaban berdasarkan konteks","actions":[]}`,
 		})
 	}
 
@@ -1201,7 +1237,7 @@ func BuildCopilotFallbackReply(req models.AiChatRequest) string {
 	if reply, ok := answerMachineCountQuestion(req.Question, req); ok {
 		return reply
 	}
-	if reply, ok := answerRankingQuestion(req.Question, req.Machines); ok {
+	if reply, ok := answerRankingQuestion(req); ok {
 		return reply
 	}
 	if reply, ok := answerClockQuestion(req.Question, req.Date); ok {

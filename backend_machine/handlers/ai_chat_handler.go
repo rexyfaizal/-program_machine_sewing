@@ -58,6 +58,18 @@ func (h *Handler) AiChat(w http.ResponseWriter, r *http.Request) {
 	if input.Date == "" {
 		input.Date = time.Now().Format("2006-01-02")
 	}
+	// Validate dates before querying; database failures must not reuse today's snapshot.
+	if _, _, err := utils.ExtractAiQuestionDate(input.Question, time.Now()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dataCtx, dataCancel := contextWithTimeout(r, 60*time.Second)
+	err := prepareAiChatDateContext(dataCtx, &input, time.Now(), h.productivityForDate)
+	dataCancel()
+	if err != nil {
+		http.Error(w, "Gagal mengambil data tanggal yang diminta: "+err.Error(), http.StatusBadGateway)
+		return
+	}
 
 	resp, err := utils.CallOpenAIChat(ctx, input)
 	if err != nil {
