@@ -57,6 +57,16 @@ Ranking menyebutkan tanggal dan sumber data, default satu mesin (atau lima jika 
 
 ## Environment variable opsional
 
+Untuk Docker Compose, backend memakai Ollama di `http://10.5.0.101:11434` secara default. Override melalui environment shell atau `.env` di root project (sejajar `docker-compose.yml`):
+
+```dotenv
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://10.5.0.101:11434
+OLLAMA_MODEL=llama3.2
+```
+
+`.env` dalam `backend_machine/` tidak otomatis dimuat oleh Compose atau disalin ke image runtime. Setelah mengganti konfigurasi, jalankan `docker compose up -d --build backend` dari root project. Periksa alamat yang aktif dengan `docker compose exec backend printenv OLLAMA_BASE_URL`, lalu koneksi dari container dengan `docker compose exec backend wget -qO- http://10.5.0.101:11434/api/tags`.
+
 ```powershell
 $env:DB_SERVER="10.5.0.107"
 $env:DB_PORT="1433"

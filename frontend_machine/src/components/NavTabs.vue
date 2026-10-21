@@ -82,6 +82,20 @@ onBeforeUnmount(() => {
 
       <button
         class="menu-item"
+        :class="{ active: modelValue === 'machine-utilization-resume' }"
+        @click="selectMenu('machine-utilization-resume')"
+      >
+        <span class="menu-icon">
+          <span class="icon-grid"><i></i><i></i><i></i><i></i></span>
+        </span>
+        <span>
+          <strong>Resume Utilisasi Mesin</strong>
+          <small>Perbandingan mingguan dan export Excel</small>
+        </span>
+      </button>
+
+      <button
+        class="menu-item"
         :class="{ active: modelValue === 'detail' }"
         @click="selectMenu('detail')"
       >

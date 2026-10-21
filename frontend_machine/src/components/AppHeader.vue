@@ -17,6 +17,15 @@ const activePageModel = computed({
 });
 
 const headerInfo = computed(() => {
+  if (activePageModel.value === "machine-utilization-resume") {
+    return {
+      kicker: "LAPORAN UTILISASI MESIN",
+      title: "Resume Utilisasi Mesin",
+      statusTitle: "Weekly Report",
+      statusText: "GM1 · GM2 · GM3",
+    };
+  }
+
   if (activePageModel.value === "mechanic") {
     return {
       kicker: "DASHBOARD MEKANIK",

@@ -10,6 +10,10 @@ services:
       DB_PASSWORD: "${DB_PASSWORD:-Satu1234!}"
       APP_HOST: "0.0.0.0"
       APP_PORT: "5500"
+      AI_PROVIDER: "${AI_PROVIDER:-ollama}"
+      # Ollama runs on the LAN server, not inside this backend container.
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://10.5.0.101:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.2}"
       # Origin yang boleh akses WebSocket/CORS. "*" = semua (tool internal).
       # Bisa dibatasi, contoh: "http://10.5.0.107:5175,http://103.24.148.59:5175"
       APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-*}"

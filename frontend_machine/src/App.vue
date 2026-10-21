@@ -11,10 +11,11 @@ import { getInitialAdminMode } from "./utils/adminMode";
 import ProcessStyleMasterPage from "./pages/ProcessStyleMasterPage.vue";
 import MechanicDashboardPage from "./pages/MechanicDashboardPage.vue";
 import OperatorProductivityPage from "./pages/OperatorProductivityPage.vue";
+import MachineUtilizationResumePage from "./pages/MachineUtilizationResumePage.vue";
 
 const STORAGE_KEY = "machineDashboardActivePage";
 const MECHANIC_PATH = "/mekanikggi";
-const MAIN_PAGES = ["dashboard", "detail", "location", "master-ie", "operator-productivity"];
+const MAIN_PAGES = ["dashboard", "detail", "location", "master-ie", "operator-productivity", "machine-utilization-resume"];
 
 const activePage = ref("dashboard");
 const selectedDate = ref(todayLocal());
@@ -214,6 +215,11 @@ watch(activePage, (newPage) => {
       <OperatorProductivityPage
         v-else-if="activePage === 'operator-productivity'"
         v-model:selectedDate="selectedDate"
+      />
+
+      <MachineUtilizationResumePage
+        v-else-if="activePage === 'machine-utilization-resume'"
+        :selected-date="selectedDate"
       />
 
       <MechanicDashboardPage

@@ -56,7 +56,7 @@ export async function getProductivity(date, options = {}) {
 
   const query = params.toString() ? `?${params.toString()}` : "";
 
-  const res = await fetch(`/api/productivity${query}`);
+  const res = await fetch(`/api/productivity${query}`, { signal: options.signal });
 
   return await readResponse(res);
 }
@@ -400,7 +400,9 @@ export async function getMachineOperatorReport(date, options = {}) {
     params.set("forExport", "1");
   }
 
-  const res = await fetch(`/api/machine-operator/report?${params.toString()}`);
+  const res = await fetch(`/api/machine-operator/report?${params.toString()}`, {
+    signal: options.signal,
+  });
 
   return await readResponse(res);
 }

@@ -2,9 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import KpiCards from "../components/dashboard/KpiCards.vue";
-import RankingPanel from "../components/dashboard/RankingPanel.vue";
-import StatusDistribution from "../components/dashboard/StatusDistribution.vue";
-import AttentionPanel from "../components/dashboard/AttentionPanel.vue";
 import AiCopilotPanel from "../components/dashboard/AiCopilotPanel.vue";
 import AiPresentationMode from "../components/dashboard/AiPresentationMode.vue";
 import MachineTable from "../components/dashboard/MachineTable.vue";
@@ -55,6 +52,7 @@ const isAdmin = ref(false);
 const chatFocusTick = ref(0);
 
 let noticeTimer = null;
+let dashboardRefreshSeq = 0;
 
 const {
   machines,
@@ -66,8 +64,6 @@ const {
   machineSettings,
   shiftConfigMap,
 } = useDashboard();
-
-const { socketStatus, connect, close } = useProductivitySocket(normalizeRows);
 
 const localDate = computed({
   get: () => props.selectedDate,
@@ -85,10 +81,7 @@ const {
   productivityShift,
   locationOptions,
   filteredMachines,
-  rankingMachines,
-  attentionMachines,
   summary,
-  donutStyle,
 } = useDashboardFilters(machines, shiftConfigMap);
 
 const {
@@ -104,6 +97,18 @@ const {
   showNotice,
   productivityShift,
   shiftConfigMap,
+});
+
+const isRangeSelection = computed(() => {
+  const start = String(startDate.value || localDate.value || "").trim();
+  const end = String(endDate.value || start).trim();
+  return Boolean(start && end && start !== end);
+});
+
+const { socketStatus, connect, close } = useProductivitySocket((data) => {
+  // Snapshot harian tidak boleh mengganti total mingguan/bulanan.
+  if (isRangeSelection.value || loading.value) return;
+  normalizeRows(data);
 });
 
 const {
@@ -501,18 +506,21 @@ async function refreshDashboardByDate() {
 
   if (!start) return;
 
+  const refreshSeq = ++dashboardRefreshSeq;
   const shift = productivityShift.value;
+  close();
 
   if (end && start !== end) {
     localDate.value = end;
     await loadDashboardRange(start, end, { shift });
-    connect(end, shift);
+    if (refreshSeq !== dashboardRefreshSeq) return;
     await refreshAiInsight({ silent: true });
     return;
   }
 
   localDate.value = start;
   await loadDashboard(start, { shift });
+  if (refreshSeq !== dashboardRefreshSeq) return;
   connect(start, shift);
   await refreshAiInsight({ silent: true });
 }
@@ -575,7 +583,7 @@ async function handleSaveMachineSetting(machine) {
     showNotice("Setting manual berhasil disimpan.", "ok");
     closeEditModal();
 
-    await loadDashboard(localDate.value, { shift: productivityShift.value });
+    await refreshDashboardByDate();
   } catch (err) {
     showNotice(`Gagal menyimpan setting mesin: ${err.message}`, "error");
   }
@@ -595,7 +603,7 @@ async function handleDeleteMachineSetting(uuid) {
     showNotice("Setting manual berhasil dihapus.", "ok");
     closeEditModal();
 
-    await loadDashboard(localDate.value, { shift: productivityShift.value });
+    await refreshDashboardByDate();
   } catch (err) {
     showNotice(`Gagal hapus: ${err.message}`, "error");
   }
@@ -628,6 +636,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  dashboardRefreshSeq += 1;
   close();
   stopAiAutoRefresh();
   closePresentation();
@@ -653,23 +662,6 @@ onUnmounted(() => {
     </div>
 
     <KpiCards :summary="summary" />
-
-    <section v-if="isAdmin" class="content-grid">
-      <RankingPanel
-        class="panel-large"
-        :machines="rankingMachines"
-        :selected-date="localDate"
-      />
-
-      <div class="right-stack">
-        <StatusDistribution
-          :summary="summary"
-          :donut-style="donutStyle"
-        />
-
-        <AttentionPanel :machines="attentionMachines" />
-      </div>
-    </section>
 
     <section v-if="isAdmin" class="qr-action-panel">
       <div>
@@ -816,35 +808,6 @@ onUnmounted(() => {
   border-color: #fecaca;
 }
 
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
-  gap: 18px;
-  align-items: stretch;
-  min-width: 0;
-}
-
-.content-grid.user-view {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.right-stack {
-  display: grid;
-  gap: 18px;
-  height: 100%;
-  min-width: 0;
-  align-content: stretch;
-}
-
-.right-stack > * {
-  height: 100%;
-}
-
-.panel-large {
-  height: 100%;
-  min-width: 0;
-}
-
 .qr-action-panel {
   display: flex;
   justify-content: space-between;
@@ -896,13 +859,6 @@ onUnmounted(() => {
 
 .btn-qr:active {
   transform: translateY(0);
-}
-
-@media (max-width: 1280px) {
-  .content-grid,
-  .content-grid.user-view {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 760px) {
