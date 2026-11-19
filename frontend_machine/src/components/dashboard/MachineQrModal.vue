@@ -137,17 +137,19 @@ function printQrCodes() {
     .map((item) => {
       return `
         <div class="qr-card">
-          <div class="qr-head">
-            <h3>${escapeHtml(item.machineName)}</h3>
-            <p>${escapeHtml(item.location)}</p>
+          <div class="qr-notice">
+            <strong>WAJIB SCAN QR</strong>
+            <span>AWAL MASUK/SETELAH</span>
+            <span>ISTIRAHAT/MESIN RUSAK/SHALAT</span>
           </div>
+
+          <p class="qr-location">${escapeHtml(item.location || "-")}</p>
 
           <img src="${item.qrDataUrl}" alt="QR ${escapeHtml(item.uuid)}" />
 
-          <div class="qr-info">
-            <p><b>UUID</b>: ${escapeHtml(item.uuid)}</p>
-            <p><b>IP</b>: ${escapeHtml(item.ip)}</p>
-            <p><b>URL</b>: ${escapeHtml(item.qrUrl)}</p>
+          <div class="qr-uuid">
+            <span>UUID</span>
+            <strong>${escapeHtml(item.uuid)}</strong>
           </div>
         </div>
       `;
@@ -179,56 +181,77 @@ function printQrCodes() {
             background: #ffffff;
           }
 
-          .page-title {
-            margin: 0 0 12px;
-            font-size: 18px;
-            font-weight: 800;
-          }
-
           .qr-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
+            gap: 12px;
           }
 
           .qr-card {
-            border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            padding: 10px;
+            border: 2px solid #0f172a;
+            border-radius: 8px;
+            padding: 12px 10px 14px;
             page-break-inside: avoid;
             break-inside: avoid;
+            text-align: center;
           }
 
-          .qr-head {
-            min-height: 52px;
-            margin-bottom: 8px;
+          .qr-notice {
+            display: grid;
+            gap: 1px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #0f172a;
           }
 
-          .qr-head h3 {
-            margin: 0;
+          .qr-notice strong,
+          .qr-notice span {
+            display: block;
+            font-size: 11px;
+            line-height: 1.2;
+            font-weight: 900;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+          }
+
+          .qr-location {
+            margin: 0 0 8px;
             font-size: 12px;
-            line-height: 1.25;
             font-weight: 800;
-          }
-
-          .qr-head p {
-            margin: 4px 0 0;
-            font-size: 10px;
-            color: #475569;
-            font-weight: 700;
+            color: #334155;
+            line-height: 1.25;
           }
 
           img {
             display: block;
             width: 100%;
-            max-width: 150px;
-            margin: 0 auto 8px;
+            max-width: 160px;
+            margin: 0 auto 10px;
           }
 
-          .qr-info p {
-            margin: 3px 0;
-            font-size: 8.5px;
-            line-height: 1.25;
+          .qr-uuid {
+            margin: 0 auto;
+            max-width: 180px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 7px 8px;
+          }
+
+          .qr-uuid span {
+            display: block;
+            font-size: 9px;
+            font-weight: 800;
+            color: #64748b;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+          }
+
+          .qr-uuid strong {
+            display: block;
+            font-size: 12px;
+            font-weight: 900;
             word-break: break-all;
           }
 
@@ -240,16 +263,11 @@ function printQrCodes() {
             .qr-grid {
               grid-template-columns: repeat(3, 1fr);
             }
-
-            .qr-card {
-              border-color: #111827;
-            }
           }
         </style>
       </head>
 
       <body>
-        <h1 class="page-title">QR Code Mesin - Input PIC & SPV</h1>
         <div class="qr-grid">
           ${htmlCards}
         </div>
@@ -295,7 +313,7 @@ watch(
           <p class="eyebrow">QR Code Mesin</p>
           <h3>Generate QR PIC & SPV</h3>
           <p>
-            QR berisi URL halaman operator berdasarkan UUID mesin.
+            Label cetak: keterangan scan + lokasi + QR + UUID (tanpa nama proses).
           </p>
         </div>
 
@@ -353,30 +371,20 @@ watch(
             :key="item.uuid"
             class="qr-card"
           >
-            <div class="qr-title">
-              <h4 :title="item.machineName">
-                {{ item.machineName }}
-              </h4>
-              <p>{{ item.location || "-" }}</p>
+            <div class="qr-notice">
+              <strong>WAJIB SCAN QR</strong>
+              <span>AWAL MASUK/SETELAH</span>
+              <span>ISTIRAHAT/MESIN RUSAK/SHALAT</span>
             </div>
+
+            <p class="qr-location">{{ item.location || "-" }}</p>
 
             <img :src="item.qrDataUrl" :alt="`QR ${item.uuid}`" />
 
-            <div class="qr-detail">
-              <div>
-                <span>UUID</span>
-                <strong>{{ item.uuid }}</strong>
-              </div>
-
-              <div>
-                <span>IP</span>
-                <strong>{{ item.ip || "-" }}</strong>
-              </div>
+            <div class="qr-uuid">
+              <span>UUID</span>
+              <strong>{{ item.uuid }}</strong>
             </div>
-
-            <p class="qr-url">
-              {{ item.qrUrl }}
-            </p>
           </article>
         </div>
       </div>
@@ -552,36 +560,39 @@ watch(
 
 .qr-card {
   min-width: 0;
-  border-radius: 18px;
-  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  border: 2px solid #0f172a;
   background: #ffffff;
-  padding: 14px;
+  padding: 14px 12px 16px;
+  text-align: center;
   box-shadow: 0 12px 22px rgba(15, 23, 42, 0.05);
 }
 
-.qr-title {
-  min-height: 54px;
+.qr-notice {
+  display: grid;
+  gap: 1px;
   margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #0f172a;
 }
 
-.qr-title h4 {
-  margin: 0;
+.qr-notice strong,
+.qr-notice span {
+  display: block;
   color: #0f172a;
-  font-size: 13px;
-  line-height: 1.3;
+  font-size: 11px;
+  line-height: 1.2;
   font-weight: 1000;
-  display: -webkit-box;
-  line-clamp: 2;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
-.qr-title p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
+.qr-location {
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.3;
 }
 
 .qr-card img {
@@ -591,44 +602,30 @@ watch(
   margin: 0 auto 12px;
 }
 
-.qr-detail {
-  display: grid;
-  gap: 7px;
-}
-
-.qr-detail div {
-  min-width: 0;
+.qr-uuid {
+  margin: 0 auto;
+  max-width: 180px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 7px 8px;
+  padding: 8px 10px;
 }
 
-.qr-detail span {
+.qr-uuid span {
   display: block;
   color: #64748b;
   font-size: 9px;
   font-weight: 1000;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
   margin-bottom: 3px;
 }
 
-.qr-detail strong {
+.qr-uuid strong {
   display: block;
   color: #0f172a;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qr-url {
-  margin: 9px 0 0;
-  color: #2563eb;
-  font-size: 9px;
-  line-height: 1.35;
-  font-weight: 800;
   word-break: break-all;
 }
 
