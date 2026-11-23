@@ -325,6 +325,35 @@
   white-space: nowrap;
 }
 
+.machine-table-panel .col-nik {
+  width: 88px;
+  min-width: 72px;
+  max-width: 96px;
+  white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.machine-table-panel th.col-nik {
+  text-align: left;
+}
+
+.machine-table-panel .col-proses-id {
+  width: 96px;
+  min-width: 80px;
+  max-width: 120px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.machine-table-panel .col-machine-id {
+  width: 110px;
+  min-width: 96px;
+  max-width: 130px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 .machine-table-panel .operator-cell {
   min-width: 180px;
   max-width: 280px;
@@ -454,6 +483,30 @@
   color: #991b1b;
 }
 
+.machine-table-panel .th-sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.machine-table-panel .th-sort:hover {
+  text-decoration: underline;
+}
+
+.machine-table-panel .th-sort__arrow {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.95;
+}
+
 .machine-table-panel .btn-edit {
   border: 1px solid #dbe4ef;
   background: #ffffff;
@@ -551,40 +604,6 @@
 
 .machine-table-panel .row-ctx button:hover {
   background: #dbeafe;
-}
-
-.machine-table-panel tr.row-no-login td {
-  background: linear-gradient(90deg, #fff7ed 0%, #fffaf5 55%, #ffffff 100%);
-}
-
-.machine-table-panel tr.row-no-login td:first-child {
-  box-shadow: inset 4px 0 0 #ea580c;
-}
-
-.machine-table-panel .operator-empty-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.machine-table-panel .badge-no-login {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1.2;
-  color: #9a3412;
-  background: #ffedd5;
-  border: 1px solid #fdba74;
-  white-space: nowrap;
-}
-
-.machine-table-panel tr.row-no-login .operator-empty {
-  color: #c2410c;
-  font-weight: 900;
 }
 
 .machine-table-panel .empty {

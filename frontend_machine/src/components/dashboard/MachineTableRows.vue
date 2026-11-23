@@ -7,11 +7,26 @@ import {
   getDisplayMachineName,
   getOperatorDisplayRows,
   getOperatorNoteItems,
-  isNoLoginRunning,
   isUsingProcessName,
-  noLoginRunningLabel,
   statusClass,
 } from "../../utils/machineTableFormat";
+import { parseLocationParts } from "../../utils/gm3Shift";
+
+function getBranchLabel(machine) {
+  const { factory } = parseLocationParts(machine?.location);
+  return factory || "-";
+}
+
+function getLocationLineLabel(machine) {
+  const raw = String(machine?.location || "").trim();
+  if (!raw || raw === "-") return "-";
+  const { lineName } = parseLocationParts(raw);
+  return lineName || raw;
+}
+
+function getProsesIdFromOperator(op, machine) {
+  return String(op?.prosesId || machine?.operatorProsesId || "").trim() || "-";
+}
 
 const props = defineProps({
   pagedMachines: {
@@ -34,9 +49,13 @@ const props = defineProps({
     type: Number,
     default: 10,
   },
+  utilSortDir: {
+    type: String,
+    default: "desc",
+  },
 });
 
-const emit = defineEmits(["edit", "chart", "ask-ai", "why-bad"]);
+const emit = defineEmits(["edit", "chart", "ask-ai", "why-bad", "toggle-util-sort"]);
 
 const ctxMenu = ref(null);
 
@@ -93,12 +112,27 @@ onBeforeUnmount(() => {
       <thead>
         <tr v-if="props.showActions">
           <th>No</th>
-          <th class="left">Machine Name</th>
-          <th>IP</th>
+          <th class="col-proses-id">Proses ID</th>
+          <th class="left">Process Name</th>
+          <th>Branch</th>
           <th>Location</th>
-          <th>Operator</th>
+          <th class="col-machine-id">Machine ID</th>
+          <th class="col-nik">NIK</th>
+          <th>Nama Operator</th>
           <th>Operator Note</th>
-          <th class="center">Utilisasi Mesin</th>
+          <th class="center">
+            <button
+              type="button"
+              class="th-sort"
+              :title="utilSortDir === 'desc' ? 'Urutkan naik' : 'Urutkan turun'"
+              @click="emit('toggle-util-sort')"
+            >
+              Utilisasi Mesin
+              <span class="th-sort__arrow" aria-hidden="true">
+                {{ utilSortDir === "desc" ? "↓" : "↑" }}
+              </span>
+            </button>
+          </th>
           <th>Status</th>
           <th class="center">
             Power On Duration
@@ -113,10 +147,6 @@ onBeforeUnmount(() => {
             <small class="th-sub">waktu terbuang</small>
           </th>
           <th>Output</th>
-          <th>Abnormal</th>
-          <th>Avg / Max Proses</th>
-          <th>Alarm</th>
-          <th>Program Dominan</th>
           <th>UUID / Table</th>
           <th class="center">Action</th>
           <th class="center">AI</th>
@@ -125,9 +155,13 @@ onBeforeUnmount(() => {
 
         <tr v-else>
           <th>No</th>
-          <th class="left">Machine Name</th>
+          <th class="col-proses-id">Proses ID</th>
+          <th class="left">Process Name</th>
+          <th>Branch</th>
           <th>Location</th>
-          <th>Operator</th>
+          <th class="col-machine-id">Machine ID</th>
+          <th class="col-nik">NIK</th>
+          <th>Nama Operator</th>
           <th>Operator Note</th>
           <th class="center">
             Power On Duration
@@ -141,7 +175,19 @@ onBeforeUnmount(() => {
             Loss Time
             <small class="th-sub">waktu terbuang</small>
           </th>
-          <th class="center">Utilisasi Mesin</th>
+          <th class="center">
+            <button
+              type="button"
+              class="th-sort"
+              :title="utilSortDir === 'desc' ? 'Urutkan naik' : 'Urutkan turun'"
+              @click="emit('toggle-util-sort')"
+            >
+              Utilisasi Mesin
+              <span class="th-sort__arrow" aria-hidden="true">
+                {{ utilSortDir === "desc" ? "↓" : "↑" }}
+              </span>
+            </button>
+          </th>
           <th class="center">Status</th>
           <th class="center">Grafik</th>
         </tr>
@@ -151,12 +197,24 @@ onBeforeUnmount(() => {
         <tr
           v-for="(m, index) in props.pagedMachines"
           :key="`${m.uuid}-${index}`"
-          :class="{ 'row-no-login': isNoLoginRunning(m) }"
           @contextmenu="onRowContextMenu($event, m)"
         >
           <template v-if="props.showActions">
             <td class="right">
               {{ props.startIndex + index + 1 }}
+            </td>
+
+            <td class="col-proses-id">
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-proses-id-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">{{ getProsesIdFromOperator(op, m) }}</strong>
+                </div>
+              </template>
+              <strong v-else class="operator-name">{{ m.operatorProsesId || "-" }}</strong>
             </td>
 
             <td>
@@ -174,12 +232,29 @@ onBeforeUnmount(() => {
               </small>
             </td>
 
-            <td class="mono">
-              {{ m.ip || "-" }}
+            <td>
+              <strong>{{ getBranchLabel(m) }}</strong>
             </td>
 
             <td>
-              <strong>{{ m.location || "-" }}</strong>
+              <strong>{{ getLocationLineLabel(m) }}</strong>
+            </td>
+
+            <td class="col-machine-id">
+              <strong>{{ m.machineId || "-" }}</strong>
+            </td>
+
+            <td class="col-nik">
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-nik-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">{{ op.nik || "-" }}</strong>
+                </div>
+              </template>
+              <strong v-else class="operator-empty">-</strong>
             </td>
 
             <td class="operator-cell">
@@ -190,7 +265,7 @@ onBeforeUnmount(() => {
                   class="operator-item"
                 >
                   <strong class="operator-name">
-                    {{ op.label }}
+                    {{ op.name || op.label || "-" }}
                     <span
                       v-if="op.shiftTag"
                       class="operator-shift-tag"
@@ -205,12 +280,7 @@ onBeforeUnmount(() => {
                 </div>
               </template>
 
-              <div v-else class="operator-empty-wrap">
-                <strong class="operator-empty">Not logged in</strong>
-                <span v-if="isNoLoginRunning(m)" class="badge-no-login">
-                  {{ noLoginRunningLabel(m) }}
-                </span>
-              </div>
+              <strong v-else class="operator-name">Not logged in</strong>
             </td>
 
             <td class="note-cell">
@@ -264,25 +334,6 @@ onBeforeUnmount(() => {
               <small>{{ m.complete || 0 }} complete</small>
             </td>
 
-            <td class="right">
-              {{ m.abnormal || 0 }}
-            </td>
-
-            <td class="right">
-              {{ Number(m.avgCT || 0).toFixed(2) }}s
-              <small>Max {{ Number(m.maxCT || 0).toFixed(0) }}s</small>
-            </td>
-
-            <td class="right">
-              {{ m.alarm || 0 }}
-              <small>{{ m.alarmTypes || "-" }}</small>
-            </td>
-
-            <td>
-              {{ m.program || "-" }}
-              <small>{{ m.firstProcess || "-" }} → {{ m.lastProcess || "-" }}</small>
-            </td>
-
             <td class="mono">
               {{ m.uuid || "-" }}
               <small>{{ m.tableName || "-" }}</small>
@@ -325,6 +376,19 @@ onBeforeUnmount(() => {
               {{ props.startIndex + index + 1 }}
             </td>
 
+            <td class="col-proses-id">
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-user-proses-id-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">{{ getProsesIdFromOperator(op, m) }}</strong>
+                </div>
+              </template>
+              <strong v-else class="operator-name">{{ m.operatorProsesId || "-" }}</strong>
+            </td>
+
             <td>
               <strong>{{ getDisplayMachineName(m) }}</strong>
 
@@ -337,7 +401,28 @@ onBeforeUnmount(() => {
             </td>
 
             <td>
-              {{ m.location || "-" }}
+              {{ getBranchLabel(m) }}
+            </td>
+
+            <td>
+              {{ getLocationLineLabel(m) }}
+            </td>
+
+            <td class="col-machine-id">
+              {{ m.machineId || "-" }}
+            </td>
+
+            <td class="col-nik">
+              <template v-if="getOperatorDisplayRows(m).length">
+                <div
+                  v-for="(op, opIndex) in getOperatorDisplayRows(m)"
+                  :key="`${m.uuid || index}-user-nik-${opIndex}`"
+                  class="operator-item"
+                >
+                  <strong class="operator-name">{{ op.nik || "-" }}</strong>
+                </div>
+              </template>
+              <strong v-else class="operator-empty">-</strong>
             </td>
 
             <td class="operator-cell">
@@ -348,7 +433,7 @@ onBeforeUnmount(() => {
                   class="operator-item"
                 >
                   <strong class="operator-name">
-                    {{ op.label }}
+                    {{ op.name || op.label || "-" }}
                     <span
                       v-if="op.shiftTag"
                       class="operator-shift-tag"
@@ -363,12 +448,7 @@ onBeforeUnmount(() => {
                 </div>
               </template>
 
-              <div v-else class="operator-empty-wrap">
-                <strong class="operator-empty">Not logged in</strong>
-                <span v-if="isNoLoginRunning(m)" class="badge-no-login">
-                  {{ noLoginRunningLabel(m) }}
-                </span>
-              </div>
+              <strong v-else class="operator-name">Not logged in</strong>
             </td>
 
             <td class="note-cell">

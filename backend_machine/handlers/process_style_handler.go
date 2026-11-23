@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"backend_machine/models"
 	"backend_machine/repository"
+	"backend_machine/utils"
 )
 
 func normalizeProcessStyleInput(input models.ProcessStyleRequest) models.ProcessStyleRequest {
@@ -43,7 +45,7 @@ func getProcessStyleIDFromPath(path string) (int64, error) {
 
 // ProcessStyleStyles godoc
 // @Summary Cari daftar style
-// @Description Mengambil daftar style dari tabel dt_proses_style
+// @Description Mengambil daftar style dari tabel gcc_smv_process
 // @Tags Process Style
 // @Produce json
 // @Param q query string false "Keyword style"
@@ -72,7 +74,7 @@ func (h *Handler) ProcessStyleStyles(w http.ResponseWriter, r *http.Request) {
 
 // ProcessStyleProcesses godoc
 // @Summary Cari proses berdasarkan style
-// @Description Mengambil daftar proses berdasarkan style dari tabel dt_proses_style
+// @Description Mengambil daftar proses berdasarkan style dari tabel gcc_smv_process
 // @Tags Process Style
 // @Produce json
 // @Param style query string true "Style"
@@ -284,4 +286,143 @@ func (h *Handler) ProcessStyleByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method tidak diizinkan", http.StatusMethodNotAllowed)
 	}
+}
+
+// ProcessStyleGccList godoc
+// @Summary List Master IE dari cache lokal gcc_smv_process
+// @Description Baca tabel lokal hasil sync GCC (cepat untuk UI & search)
+// @Tags Process Style
+// @Produce json
+// @Param page query int false "Halaman"
+// @Param limit query int false "Jumlah baris per halaman"
+// @Param q query string false "Filter style/proses/buyer/item/mesin"
+// @Success 200 {object} models.GccSmvListPageResponse
+// @Failure 500 {string} string
+// @Router /process-style/gcc [get]
+func (h *Handler) ProcessStyleGccList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method tidak diizinkan", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := contextWithTimeout(r, 30*time.Second)
+	defer cancel()
+
+	page, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page")))
+	limit, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("limit")))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	rows, total, err := h.Repo.ListGccSmvProcess(ctx, q, page, limit)
+	if err != nil {
+		http.Error(w, "Gagal ambil cache Master IE: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	lastPage := total / limit
+	if total%limit != 0 {
+		lastPage++
+	}
+	if lastPage <= 0 {
+		lastPage = 1
+	}
+	if page > lastPage {
+		page = lastPage
+	}
+	from := 0
+	to := 0
+	if total > 0 && len(rows) > 0 {
+		from = (page-1)*limit + 1
+		to = from + len(rows) - 1
+	}
+	var nextPage *int
+	var prevPage *int
+	if page < lastPage {
+		n := page + 1
+		nextPage = &n
+	}
+	if page > 1 {
+		p := page - 1
+		prevPage = &p
+	}
+
+	msg := "Data Master IE dari tabel lokal gcc_smv_process"
+	if q != "" {
+		msg = "Hasil pencarian dari tabel lokal gcc_smv_process"
+	}
+	if total == 0 {
+		msg = "Cache kosong. Klik Sinkron lokal dari GCC dulu."
+	}
+
+	writeJSON(w, models.GccSmvListPageResponse{
+		Status:  "ok",
+		Message: msg,
+		Source:  "local-cache",
+		Rows:    rows,
+		Pagination: models.GccSmvListPagination{
+			Total:       total,
+			PerPage:     limit,
+			CurrentPage: page,
+			LastPage:    lastPage,
+			From:        from,
+			To:          to,
+			NextPage:    nextPage,
+			PrevPage:    prevPage,
+		},
+	})
+}
+
+// ProcessStyleSyncGcc godoc
+// @Summary Sinkron Master IE dari GCC
+// @Description Ambil semua detail-proses GCC, replace total tabel gcc_smv_process
+// @Tags Process Style
+// @Produce json
+// @Success 200 {object} models.GccSmvSyncResponse
+// @Failure 500 {string} string
+// @Router /process-style/sync-gcc [post]
+func (h *Handler) ProcessStyleSyncGcc(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method tidak diizinkan", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Sync penuh: banyak halaman GCC + upsert DB (bisa puluhan menit).
+	ctx, cancel := contextWithTimeout(r, 45*time.Minute)
+	defer cancel()
+
+	rows, meta, headersFetched, err := utils.FetchAllGccSmvFlatRows(ctx)
+	if err != nil {
+		http.Error(w, "Gagal ambil data GCC: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	stats, err := h.Repo.UpsertGccSmvProcessFromGcc(ctx, rows)
+	if err != nil {
+		http.Error(w, "Gagal upsert gcc_smv_process: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, models.GccSmvSyncResponse{
+		Status: "ok",
+		Message: fmt.Sprintf(
+			"Sinkron incremental selesai. Baru: %d, update: %d, dihapus: %d.",
+			stats.Inserted,
+			stats.Updated,
+			stats.Deleted,
+		),
+		PagesFetched:   meta.CurrentPage,
+		HeadersFetched: headersFetched,
+		TotalHeaders:   meta.Total,
+		RowsPrepared:   len(rows),
+		StylesInserted: stats.Inserted,
+		StylesUpdated:  stats.Updated,
+		StylesDeleted:  stats.Deleted,
+		CtInserted:     stats.Inserted + stats.Updated,
+		SkippedEmpty:   stats.SkippedEmpty,
+	})
 }

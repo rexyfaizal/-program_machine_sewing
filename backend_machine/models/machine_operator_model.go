@@ -22,6 +22,7 @@ type MachineOperatorSession struct {
 	BranchDetail string `json:"branchdetail"`
 	ProcessName  string `json:"processName"`
 	StyleName    string `json:"styleName"`
+	ProsesID     string `json:"prosesId,omitempty"`
 	LoginTime    string `json:"loginTime"`
 	LogoutTime   string `json:"logoutTime"`
 	Status       string `json:"status"`
@@ -98,4 +99,17 @@ type MachineOperatorActiveResponse struct {
 	Active  bool                    `json:"active"`
 	Message string                  `json:"message"`
 	Session *MachineOperatorSession `json:"session"`
+}
+
+type MachineOperatorLastProcess struct {
+	UUID        string `json:"uuid"`
+	ProcessName string `json:"processName"`
+	StyleName   string `json:"styleName"`
+	ProsesID    string `json:"prosesId,omitempty"`
+	LoginTime   string `json:"loginTime,omitempty"`
+}
+
+type MachineOperatorLastProcessResponse struct {
+	Status string                                `json:"status"`
+	Items  map[string]MachineOperatorLastProcess `json:"items"`
 }

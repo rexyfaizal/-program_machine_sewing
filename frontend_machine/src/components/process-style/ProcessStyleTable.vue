@@ -3,10 +3,6 @@ import ProcessStylePagination from "./ProcessStylePagination.vue";
 import { formatCtNumber } from "../../utils/operatorCt";
 
 const props = defineProps({
-  isAdmin: {
-    type: Boolean,
-    default: false,
-  },
   loading: {
     type: Boolean,
     default: false,
@@ -15,11 +11,15 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  pagedRows: {
-    type: Array,
-    default: () => [],
-  },
   keyword: {
+    type: String,
+    default: "",
+  },
+  source: {
+    type: String,
+    default: "gcc-live",
+  },
+  sourceMessage: {
     type: String,
     default: "",
   },
@@ -52,34 +52,22 @@ const props = defineProps({
 const emit = defineEmits([
   "update:keyword",
   "search",
-  "edit",
-  "remove",
+  "schedule-search",
   "prev",
   "next",
   "go",
 ]);
 
-function formatDateTime(value) {
-  if (!value) return "-";
-
-  const d = new Date(value);
-
-  if (Number.isNaN(d.getTime())) {
-    return String(value).replace("T", " ").slice(0, 19);
-  }
-
-  return d.toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatNum(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return formatCtNumber(n);
 }
 
-function formatCt(value) {
-  if (value === null || value === undefined || value === "") return "-";
-  return formatCtNumber(value);
+function formatSmv(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return String(Number(n.toFixed(6)));
 }
 </script>
 
@@ -88,11 +76,16 @@ function formatCt(value) {
     <div class="table-toolbar">
       <div class="table-title-area">
         <div>
-          <h2>List Master IE</h2>
-
+          <h2>
+            {{ props.keyword ? "Hasil Pencarian Master IE" : "List Master IE (Lokal GCC)" }}
+          </h2>
           <p>
-            Menampilkan {{ props.totalRows ? props.startIndex + 1 : 0 }} -
-            {{ props.endIndex }} dari {{ props.totalRows }} data.
+            Sumber: tabel lokal <strong>gcc_smv_process</strong>.
+            Menampilkan {{ props.totalRows ? props.startIndex + 1 : 0 }}
+            - {{ props.endIndex }} dari {{ props.totalRows }} data.
+          </p>
+          <p v-if="props.sourceMessage" class="source-note">
+            {{ props.sourceMessage }}
           </p>
         </div>
 
@@ -105,76 +98,77 @@ function formatCt(value) {
         <input
           :value="props.keyword"
           type="text"
-          placeholder="Cari style / proses..."
-          @input="emit('update:keyword', $event.target.value)"
+          placeholder="Cari style / proses / proses id / buyer / mesin..."
+          @input="
+            emit('update:keyword', $event.target.value);
+            emit('schedule-search');
+          "
           @keyup.enter="emit('search')"
         />
 
         <button type="button" class="btn-primary small" @click="emit('search')">
-          Refresh
+          Cari
         </button>
       </div>
     </div>
 
     <div v-if="props.loading" class="loading-box">
-      Mengambil data...
+      Mengambil data lokal...
     </div>
 
     <div v-else class="table-wrap">
-      <table>
+      <table class="gcc-table">
         <thead>
           <tr>
             <th>No</th>
+            <th>Tanggal</th>
+            <th>Buyer</th>
             <th>Style</th>
-            <th>Proses</th>
-            <th>CT</th>
-            <th>Created At</th>
-            <th v-if="props.isAdmin">Action</th>
+            <th>Item</th>
+            <th>Nama Proses</th>
+            <th>Proses ID</th>
+            <th>Cycle Time</th>
+            <th>SMV Minute</th>
+            <th>Output/H</th>
+            <th>Mesin</th>
           </tr>
         </thead>
 
         <tbody>
           <tr v-if="!props.rows.length">
-            <td :colspan="props.isAdmin ? 6 : 5" class="empty">
-              Belum ada data.
+            <td colspan="11" class="empty">
+              {{
+                props.keyword
+                  ? "Tidak ketemu. Coba kata kunci lain atau Sinkron ulang."
+                  : "Cache kosong. Klik Sinkron GCC → Tabel Lokal dulu."
+              }}
             </td>
           </tr>
 
-          <tr v-for="(row, index) in props.pagedRows" :key="row.id">
-            <td>{{ props.startIndex + index + 1 }}</td>
-
+          <tr
+            v-for="(row, index) in props.rows"
+            :key="`${row.headerId}-${row.style}-${row.namaProses}-${index}`"
+          >
+            <td>{{ index + 1 }}</td>
+            <td>{{ row.tanggal || "-" }}</td>
+            <td>{{ row.buyer || "-" }}</td>
             <td>
-              <strong>{{ row.styleName }}</strong>
+              <strong>{{ row.style || "-" }}</strong>
             </td>
-
-            <td>{{ row.processName }}</td>
-
-            <td class="ct-cell">{{ formatCt(row.ctTotal) }}</td>
-
-            <td>{{ formatDateTime(row.createdAt) }}</td>
-
-            <td v-if="props.isAdmin">
-              <div class="actions">
-                <button type="button" class="btn-edit" @click="emit('edit', row)">
-                  Edit
-                </button>
-
-                <button
-                  type="button"
-                  class="btn-delete"
-                  @click="emit('remove', row)"
-                >
-                  Hapus
-                </button>
-              </div>
-            </td>
+            <td>{{ row.item || "-" }}</td>
+            <td>{{ row.namaProses || "-" }}</td>
+            <td>{{ row.prosesId || "-" }}</td>
+            <td class="ct-cell">{{ formatNum(row.cycleTime) }}</td>
+            <td class="ct-cell">{{ formatSmv(row.smvMinute) }}</td>
+            <td class="ct-cell">{{ formatNum(row.outputPerH) }}</td>
+            <td>{{ row.mesin || "-" }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <ProcessStylePagination
-      v-if="!props.loading && props.rows.length"
+      v-if="!props.loading && props.totalRows"
       :total-rows="props.totalRows"
       :start-index="props.startIndex"
       :end-index="props.endIndex"

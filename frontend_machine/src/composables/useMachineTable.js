@@ -2,6 +2,8 @@ import { computed, ref, watch } from "vue";
 
 export function useMachineTable(props) {
   const currentPage = ref(1);
+  /** @type {import('vue').Ref<'desc' | 'asc'>} */
+  const utilSortDir = ref("desc");
 
   const totalRows = computed(() => props.machines.length);
 
@@ -18,17 +20,26 @@ export function useMachineTable(props) {
   });
 
   const sortedMachines = computed(() => {
+    const dir = utilSortDir.value === "asc" ? 1 : -1;
     return [...props.machines].sort((a, b) => {
-      return Number(b.productivity || 0) - Number(a.productivity || 0);
+      const av = Number(a.productivity || 0);
+      const bv = Number(b.productivity || 0);
+      if (av === bv) return 0;
+      return av > bv ? dir : -dir;
     });
   });
+
+  function toggleUtilSort() {
+    utilSortDir.value = utilSortDir.value === "desc" ? "asc" : "desc";
+    currentPage.value = 1;
+  }
 
   const pagedMachines = computed(() => {
     return sortedMachines.value.slice(startIndex.value, endIndex.value);
   });
 
   const totalCols = computed(() => {
-    return props.showActions ? 20 : 11;
+    return props.showActions ? 19 : 15;
   });
 
   const visiblePages = computed(() => {
@@ -108,6 +119,7 @@ export function useMachineTable(props) {
 
   return {
     currentPage,
+    utilSortDir,
     totalRows,
     totalPages,
     startIndex,
@@ -116,6 +128,7 @@ export function useMachineTable(props) {
     pagedMachines,
     totalCols,
     visiblePages,
+    toggleUtilSort,
     nextPage,
     prevPage,
     goToPage,

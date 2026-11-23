@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import {
+  getMachineOperatorLastProcess,
   getMachineOperatorReport,
   getMachineSettings,
   getLineShiftConfig,
@@ -375,6 +376,9 @@ export function useDashboard() {
         getVal(row, "customName", "CustomName", "custom_name") || ""
       ).trim(),
       location: String(getVal(row, "location", "Location") || "").trim(),
+      machineId: String(
+        getVal(row, "machineId", "MachineId", "machine_id") || ""
+      ).trim(),
       pic: String(getVal(row, "pic", "PIC") || "").trim(),
       spv: String(getVal(row, "spv", "SPV") || "").trim(),
     };
@@ -543,6 +547,10 @@ export function useDashboard() {
       getVal(row, "styleName", "StyleName", "style_name") || ""
     ).trim();
 
+    const prosesId = String(
+      getVal(row, "prosesId", "ProsesId", "proses_id", "ProsesID") || ""
+    ).trim();
+
     const loginTime = String(
       getVal(row, "loginTime", "LoginTime", "login_time") || ""
     ).trim();
@@ -648,6 +656,7 @@ export function useDashboard() {
       ).trim(),
       processName,
       styleName,
+      prosesId,
       loginTime,
       logoutTime,
       status,
@@ -665,6 +674,20 @@ export function useDashboard() {
     sessionItem.operatorActiveText = usageDuration || activeDuration;
 
     return sessionItem;
+  }
+
+  function resolveLastProcessSession(sessions) {
+    const list = (Array.isArray(sessions) ? sessions : [])
+      .filter((item) => String(item?.processName || "").trim())
+      .slice()
+      .sort((a, b) => {
+        const timeCmp = String(b.loginTime || "").localeCompare(
+          String(a.loginTime || "")
+        );
+        if (timeCmp !== 0) return timeCmp;
+        return Number(b.id || 0) - Number(a.id || 0);
+      });
+    return list[0] || null;
   }
 
   function pickPrimaryOperatorSession(sessions) {
@@ -786,12 +809,15 @@ export function useDashboard() {
     const shiftTag = resolveOperatorShiftTag(location);
 
     return list.map((item) => ({
-      label: item.operatorLabel,
+      nik: item.operatorNik || "",
+      name: item.operatorName || "",
+      label: item.operatorName || item.operatorLabel || item.operatorNik || "",
       shiftTag: shiftTag.label,
       shiftTagCode: shiftTag.code,
       subText: item.operatorSubText || "",
       processName: item.processName || "",
       styleName: item.styleName || "",
+      prosesId: item.prosesId || "",
       status: item.status || "",
       note: resolveNoteTextForShift(item, window),
       noteItems: resolveNoteItemsForShift(item, window),
@@ -901,8 +927,20 @@ export function useDashboard() {
       const machineName =
         setting?.customName || backendName || originalMachineName || uuid;
 
-      const operatorProcessName = operator?.processName || "";
-      const displayMachineName = operatorProcessName || machineName;
+      const lastProcessSession = resolveLastProcessSession(operatorSessions);
+      const operatorProcessName = String(operator?.processName || "").trim();
+      const lastProcessName = String(
+        lastProcessSession?.processName || ""
+      ).trim();
+      // Process Name: proses aktif → proses login terakhir → "-" (jangan UUID).
+      const displayMachineName =
+        operatorProcessName || lastProcessName || "-";
+      const resolvedStyleName =
+        String(operator?.styleName || "").trim() ||
+        String(lastProcessSession?.styleName || "").trim();
+      const resolvedProsesId =
+        String(operator?.prosesId || "").trim() ||
+        String(lastProcessSession?.prosesId || "").trim();
 
       let runtime = toNumber(
         getVal(
@@ -989,6 +1027,7 @@ export function useDashboard() {
         displayMachineName,
         originalMachineName,
         customName: setting?.customName || "",
+        machineId: setting?.machineId || "",
         location,
         manualPic: setting?.pic || "",
         manualSpv: setting?.spv || "",
@@ -1046,8 +1085,9 @@ export function useDashboard() {
         operatorNik: operator?.operatorNik || "",
         operatorName: operator?.operatorName || "",
         operatorLabel: operator?.operatorLabel || "",
-        operatorProcessName,
-        operatorStyleName: operator?.styleName || "",
+        operatorProcessName: operatorProcessName || lastProcessName,
+        operatorStyleName: resolvedStyleName,
+        operatorProsesId: resolvedProsesId,
         operatorLoginTime: operator?.loginTime || "",
         operatorLogoutTime: operator?.logoutTime || "",
         operatorLoginClock: operator?.operatorLoginClock || "",
@@ -1076,8 +1116,52 @@ export function useDashboard() {
 
     machines.value = normalized;
     setLastUpdate();
+  }
 
-    return normalized;
+  async function enrichMachinesWithLastProcess() {
+    const needLookup = (machines.value || [])
+      .filter((item) => {
+        const display = String(item?.displayMachineName || "").trim();
+        return !display || display === "-";
+      })
+      .map((item) => String(item?.uuid || "").trim())
+      .filter(Boolean);
+
+    if (!needLookup.length) return;
+
+    try {
+      const result = await getMachineOperatorLastProcess(needLookup);
+      const items =
+        result?.items && typeof result.items === "object" ? result.items : {};
+
+      machines.value = (machines.value || []).map((item) => {
+        const display = String(item?.displayMachineName || "").trim();
+        if (display && display !== "-") return item;
+
+        const key = String(item?.uuid || "")
+          .trim()
+          .toLowerCase();
+        const last = items[key] || items[item?.uuid] || null;
+        const processName = String(last?.processName || "").trim();
+        if (!processName) {
+          return { ...item, displayMachineName: "-" };
+        }
+
+        return {
+          ...item,
+          displayMachineName: processName,
+          operatorProcessName: processName,
+          operatorStyleName:
+            String(item?.operatorStyleName || "").trim() ||
+            String(last?.styleName || "").trim(),
+          operatorProsesId:
+            String(item?.operatorProsesId || "").trim() ||
+            String(last?.prosesId || "").trim(),
+        };
+      });
+    } catch (err) {
+      console.warn("Gagal load proses login terakhir:", err);
+    }
   }
 
   function getManualSettingByUuid(uuid) {
@@ -1099,26 +1183,37 @@ export function useDashboard() {
       const output = Number(item.totalOutput || 0);
       const avgCT = Number(item.avgCT || 0);
       const operatorRows = Array.isArray(item.operatorRows) ? item.operatorRows : [];
-      const operatorDisplayRows = operatorRows.map((operatorRow) => ({
-        label: String(
-          operatorRow.operator ||
-            operatorRow.operatorName ||
-            operatorRow.operatorNik ||
-            ""
-        ).trim(),
-        shiftTag: String(operatorRow.shiftTag || "").trim(),
-        shiftTagCode: "",
-        subText: String(operatorRow.usageText || "").trim(),
-        processName: String(operatorRow.processName || "").trim(),
-        styleName: String(operatorRow.styleName || "").trim(),
-        status: "",
-        note: String(operatorRow.note || "").trim(),
-        noteItems: [],
-      }));
+      const operatorDisplayRows = operatorRows.map((operatorRow) => {
+        const nik = String(operatorRow.operatorNik || "").trim();
+        const name = String(
+          operatorRow.operatorName || operatorRow.operator || ""
+        ).trim();
+        return {
+          nik,
+          name,
+          label: name || nik,
+          shiftTag: String(operatorRow.shiftTag || "").trim(),
+          shiftTagCode: "",
+          subText: String(operatorRow.usageText || "").trim(),
+          processName: String(operatorRow.processName || "").trim(),
+          styleName: String(operatorRow.styleName || "").trim(),
+          status: "",
+          note: String(operatorRow.note || "").trim(),
+          noteItems: [],
+        };
+      });
       const primary = operatorRows[0];
       const machineName =
         setting?.customName || item.originalMesin || item.mesin || uuid;
-      const displayMachineName = item.mesin || machineName;
+      const primaryProcessName = String(primary?.processName || "").trim();
+      const lastProcessName = String(
+        [...operatorRows]
+          .reverse()
+          .map((row) => String(row?.processName || "").trim())
+          .find(Boolean) || ""
+      ).trim();
+      const displayMachineName =
+        primaryProcessName || lastProcessName || "-";
       const operatorNotes = operatorRows
         .map((operatorRow) => String(operatorRow.note || "").trim())
         .filter(Boolean)
@@ -1132,6 +1227,7 @@ export function useDashboard() {
         displayMachineName,
         originalMachineName: item.originalMesin || machineName,
         customName: setting?.customName || "",
+        machineId: setting?.machineId || "",
         location: item.location || "-",
         manualPic: setting?.pic || "",
         manualSpv: setting?.spv || "",
@@ -1169,8 +1265,11 @@ export function useDashboard() {
         operatorNik: primary?.operatorNik || "",
         operatorName: primary?.operatorName || "",
         operatorLabel: primary?.operator || primary?.operatorName || "",
-        operatorProcessName: primary?.processName || "",
-        operatorStyleName: primary?.styleName || item.styleName || "",
+        operatorProcessName: primaryProcessName || lastProcessName,
+        operatorStyleName:
+          String(primary?.styleName || "").trim() ||
+          String(item.styleName || "").trim(),
+        operatorProsesId: String(primary?.prosesId || "").trim(),
         operatorLoginTime: primary?.loginTime || "",
         operatorLogoutTime: primary?.logoutTime || "",
         operatorLoginClock: "",
@@ -1396,6 +1495,7 @@ export function useDashboard() {
       }
 
       normalizeRows(productivityResult.value);
+      await enrichMachinesWithLastProcess();
     })();
 
     inFlightRequest = request;

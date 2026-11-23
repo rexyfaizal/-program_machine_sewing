@@ -16,9 +16,9 @@ func (r *Repository) EnsureProcessStyleExists(ctx context.Context, styleName str
 	}
 
 	query := `
-		SELECT TOP 1 CAST([style] AS NVARCHAR(100))
-		FROM [sewingiot].[dbo].[dt_proses_style]
-		WHERE LOWER(LTRIM(RTRIM(CAST([style] AS NVARCHAR(100))))) = LOWER(LTRIM(RTRIM(@style)));
+		SELECT TOP 1 style
+		FROM dbo.gcc_smv_process
+		WHERE LOWER(LTRIM(RTRIM(style))) = LOWER(LTRIM(RTRIM(@style)));
 	`
 
 	var found string

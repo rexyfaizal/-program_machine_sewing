@@ -47,9 +47,9 @@ const headerInfo = computed(() => {
   if (activePageModel.value === "master-ie") {
     return {
       kicker: "MASTER IE",
-      title: "Master IE Style & Proses",
-      statusTitle: "Master Data",
-      statusText: "Style & Proses",
+      title: "Master IE dari GCC",
+      statusTitle: "Sumber Data",
+      statusText: "Sinkron GCC SMV",
     };
   }
 
@@ -124,20 +124,20 @@ const hasRightCard = computed(() => isMasterIePage.value || isMechanicPage.value
       <div class="master-info-list">
         <div class="master-info-item">
           <span>1</span>
-          <strong>Input Style</strong>
-          <small>Contoh: 1101482</small>
+          <strong>Sinkron GCC</strong>
+          <small>Isi tabel gcc_smv_process</small>
         </div>
 
         <div class="master-info-item">
           <span>2</span>
-          <strong>Input Proses</strong>
-          <small>Contoh: Quilting Front Kanan</small>
+          <strong>List Lokal</strong>
+          <small>Cepat, kolom seperti GCC</small>
         </div>
 
         <div class="master-info-item">
           <span>3</span>
-          <strong>Dipakai Operator</strong>
-          <small>Autocomplete saat scan QR</small>
+          <strong>Login Operator</strong>
+          <small>Style/proses dari tabel lokal</small>
         </div>
       </div>
     </section>

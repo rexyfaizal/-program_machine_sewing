@@ -576,6 +576,7 @@ async function handleSaveMachineSetting(machine) {
       uuid: machine.uuid,
       customName: machine.customName || "",
       location: machine.location || "",
+      machineId: machine.machineId || "",
       pic: machine.pic || "",
       spv: machine.spv || "",
     });

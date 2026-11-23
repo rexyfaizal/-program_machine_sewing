@@ -422,6 +422,25 @@
   white-space: nowrap;
 }
 
+.master-ie-page .table-wrap .gcc-table th,
+.master-ie-page .table-wrap .gcc-table td {
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 10px 12px;
+}
+
+.master-ie-page .table-wrap .gcc-table td:nth-child(6) {
+  white-space: normal;
+  min-width: 180px;
+}
+
+.master-ie-page .source-note {
+  margin: 6px 0 0;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .master-ie-page .actions {
   display: flex;
   gap: 8px;

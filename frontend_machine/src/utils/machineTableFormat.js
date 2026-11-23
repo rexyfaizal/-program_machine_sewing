@@ -117,17 +117,46 @@ export function getOperatorSubText(machine) {
   return machine?.operatorSubText || "";
 }
 
+function splitOperatorLabel(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return { nik: "", name: "" };
+  const match = text.match(/^(\d{5,})\s*[-–]\s*(.+)$/);
+  if (match) {
+    return { nik: match[1], name: String(match[2] || "").trim() };
+  }
+  return { nik: "", name: text };
+}
+
 export function getOperatorDisplayRows(machine) {
   if (Array.isArray(machine?.operatorDisplayRows) && machine.operatorDisplayRows.length) {
-    return machine.operatorDisplayRows;
+    return machine.operatorDisplayRows.map((row) => {
+      const fromLabel = splitOperatorLabel(row?.label);
+      const nik = String(row?.nik || machine?.operatorNik || fromLabel.nik || "").trim();
+      const name = String(
+        row?.name || fromLabel.name || machine?.operatorName || ""
+      ).trim();
+      const displayName = name || nik || String(row?.label || "").trim();
+      return {
+        ...row,
+        nik,
+        name: displayName,
+        label: displayName,
+      };
+    });
   }
 
-  const name = getOperatorName(machine);
-  if (!name) return [];
+  const nik = String(machine?.operatorNik || "").trim();
+  const nameOnly = String(machine?.operatorName || "").trim();
+  const fallback = splitOperatorLabel(getOperatorName(machine));
+  const name = nameOnly || fallback.name;
+  const resolvedNik = nik || fallback.nik;
+  if (!name && !resolvedNik) return [];
 
   return [
     {
-      label: name,
+      nik: resolvedNik,
+      name: name || resolvedNik,
+      label: name || resolvedNik,
       subText: getOperatorSubText(machine),
       note: getOperatorNote(machine),
     },

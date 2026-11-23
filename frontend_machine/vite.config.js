@@ -34,8 +34,9 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
           secure: false,
-          timeout: 120000,
-          proxyTimeout: 120000,
+          // Sync Master IE dari GCC bisa puluhan menit (paginasi + upsert DB).
+          timeout: 2700000,
+          proxyTimeout: 2700000,
         },
         "/ws": {
           target: wsTarget,

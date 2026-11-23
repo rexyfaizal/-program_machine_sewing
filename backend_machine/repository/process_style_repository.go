@@ -30,9 +30,9 @@ func (r *Repository) EnsureProcessStylePairExists(
 
 	query := `
 		SELECT TOP 1 [id]
-		FROM [sewingiot].[dbo].[dt_proses_style]
-		WHERE LOWER(LTRIM(RTRIM(CAST([style] AS NVARCHAR(100))))) = LOWER(LTRIM(RTRIM(@style)))
-		  AND LOWER(LTRIM(RTRIM(ISNULL([proses], '')))) = LOWER(LTRIM(RTRIM(@proses)));
+		FROM dbo.gcc_smv_process
+		WHERE LOWER(LTRIM(RTRIM(style))) = LOWER(LTRIM(RTRIM(@style)))
+		  AND LOWER(LTRIM(RTRIM(nama_proses))) = LOWER(LTRIM(RTRIM(@proses)));
 	`
 
 	var id int64
@@ -73,13 +73,10 @@ func (r *Repository) GetProcessStyleStyles(ctx context.Context, q string) ([]mod
 	q = strings.TrimSpace(q)
 
 	query := `
-		SELECT DISTINCT
-			CAST([style] AS NVARCHAR(100)) AS styleName
-		FROM [sewingiot].[dbo].[dt_proses_style]
-		WHERE
-			(@q = '' OR CAST([style] AS NVARCHAR(100)) LIKE '%' + @q + '%')
-		ORDER BY
-			CAST([style] AS NVARCHAR(100));
+		SELECT DISTINCT style AS styleName
+		FROM dbo.gcc_smv_process
+		WHERE (@q = '' OR style LIKE '%' + @q + '%')
+		ORDER BY style;
 	`
 
 	rows, err := r.DB.QueryContext(ctx, query, sql.Named("q", q))
@@ -107,15 +104,15 @@ func (r *Repository) GetProcessStyleProcesses(ctx context.Context, style string,
 
 	query := `
 		SELECT
-			[id],
-			[proses] AS processName,
-			CAST([style] AS NVARCHAR(100)) AS styleName
-		FROM [sewingiot].[dbo].[dt_proses_style]
+			id,
+			nama_proses AS processName,
+			style AS styleName
+		FROM dbo.gcc_smv_process
 		WHERE
-			CAST([style] AS NVARCHAR(100)) = @style
-			AND (@q = '' OR [proses] LIKE '%' + @q + '%')
+			style = @style
+			AND (@q = '' OR nama_proses LIKE '%' + @q + '%')
 		ORDER BY
-			[id];
+			nama_proses, id;
 	`
 
 	rows, err := r.DB.QueryContext(

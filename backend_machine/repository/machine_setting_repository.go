@@ -3,18 +3,28 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"backend_machine/models"
 )
 
+var jukiNumberPattern = regexp.MustCompile(`(?i)^JUKI-(\d+)$`)
+
 func (r *Repository) GetMachineSettings(ctx context.Context) (map[string]models.MachineSetting, error) {
+	if err := r.EnsureMachineSettingSchema(ctx); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT
 			uuid,
 			ISNULL(custom_name, '') AS custom_name,
 			ISNULL(location, '') AS location,
+			ISNULL(machine_id, '') AS machine_id,
 			ISNULL(pic, '') AS pic,
 			ISNULL(spv, '') AS spv,
 			CONVERT(VARCHAR(19), updated_at, 120) AS updated_at
@@ -36,6 +46,7 @@ func (r *Repository) GetMachineSettings(ctx context.Context) (map[string]models.
 			&item.UUID,
 			&item.CustomName,
 			&item.Location,
+			&item.MachineID,
 			&item.Pic,
 			&item.Spv,
 			&item.UpdatedAt,
@@ -44,7 +55,7 @@ func (r *Repository) GetMachineSettings(ctx context.Context) (map[string]models.
 			return nil, err
 		}
 
-		key := strings.ToLower(strings.TrimSpace(item.UUID))
+		key := normalizeMachineUUIDKey(item.UUID)
 		result[key] = item
 	}
 
@@ -52,6 +63,10 @@ func (r *Repository) GetMachineSettings(ctx context.Context) (map[string]models.
 }
 
 func (r *Repository) UpsertMachineSetting(ctx context.Context, input models.MachineSetting) error {
+	if err := r.EnsureMachineSettingSchema(ctx); err != nil {
+		return err
+	}
+
 	query := `
 		MERGE dbo.machine_setting_manual AS target
 		USING (
@@ -59,6 +74,7 @@ func (r *Repository) UpsertMachineSetting(ctx context.Context, input models.Mach
 				@uuid AS uuid,
 				@custom_name AS custom_name,
 				@location AS location,
+				@machine_id AS machine_id,
 				@pic AS pic,
 				@spv AS spv
 		) AS source
@@ -67,12 +83,16 @@ func (r *Repository) UpsertMachineSetting(ctx context.Context, input models.Mach
 			UPDATE SET
 				custom_name = source.custom_name,
 				location = source.location,
+				machine_id = CASE
+					WHEN LTRIM(RTRIM(source.machine_id)) = '' THEN target.machine_id
+					ELSE source.machine_id
+				END,
 				pic = source.pic,
 				spv = source.spv,
 				updated_at = SYSDATETIME()
 		WHEN NOT MATCHED THEN
-			INSERT (uuid, custom_name, location, pic, spv, updated_at)
-			VALUES (source.uuid, source.custom_name, source.location, source.pic, source.spv, SYSDATETIME());
+			INSERT (uuid, custom_name, location, machine_id, pic, spv, updated_at)
+			VALUES (source.uuid, source.custom_name, source.location, NULLIF(source.machine_id, ''), source.pic, source.spv, SYSDATETIME());
 	`
 
 	_, err := r.DB.ExecContext(
@@ -81,6 +101,7 @@ func (r *Repository) UpsertMachineSetting(ctx context.Context, input models.Mach
 		sql.Named("uuid", strings.TrimSpace(input.UUID)),
 		sql.Named("custom_name", strings.TrimSpace(input.CustomName)),
 		sql.Named("location", strings.TrimSpace(input.Location)),
+		sql.Named("machine_id", strings.TrimSpace(input.MachineID)),
 		sql.Named("pic", strings.TrimSpace(input.Pic)),
 		sql.Named("spv", strings.TrimSpace(input.Spv)),
 	)
@@ -103,6 +124,145 @@ func (r *Repository) DeleteMachineSetting(ctx context.Context, uuid string) erro
 	return err
 }
 
+func (r *Repository) listMachineInfoUUIDs(ctx context.Context) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT DISTINCT LTRIM(RTRIM(ISNULL(uuid, ''))) AS uuid
+		FROM dbo.machineinfo
+		WHERE LTRIM(RTRIM(ISNULL(uuid, ''))) <> ''
+		ORDER BY uuid
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 128)
+	for rows.Next() {
+		var uuid string
+		if err := rows.Scan(&uuid); err != nil {
+			return nil, err
+		}
+		uuid = strings.TrimSpace(uuid)
+		if uuid != "" {
+			out = append(out, uuid)
+		}
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) upsertMachineIDOnly(ctx context.Context, uuid, machineID string) error {
+	uuid = strings.TrimSpace(uuid)
+	machineID = strings.TrimSpace(machineID)
+	if uuid == "" || machineID == "" {
+		return nil
+	}
+
+	_, err := r.DB.ExecContext(ctx, `
+MERGE dbo.machine_setting_manual AS target
+USING (SELECT @uuid AS uuid, @machine_id AS machine_id) AS source
+ON LOWER(LTRIM(RTRIM(target.uuid))) = LOWER(LTRIM(RTRIM(source.uuid)))
+WHEN MATCHED THEN
+	UPDATE SET
+		machine_id = source.machine_id,
+		updated_at = SYSDATETIME()
+WHEN NOT MATCHED THEN
+	INSERT (uuid, machine_id, updated_at)
+	VALUES (source.uuid, source.machine_id, SYSDATETIME());
+`, sql.Named("uuid", uuid), sql.Named("machine_id", machineID))
+	return err
+}
+
+func nextJukiMachineID(used map[string]bool) string {
+	for n := 1; n < 100000; n++ {
+		id := fmt.Sprintf("JUKI-%04d", n)
+		if !used[strings.ToUpper(id)] {
+			return id
+		}
+	}
+	return fmt.Sprintf("JUKI-%d", len(used)+1)
+}
+
+// EnsureMachineIDs mengisi machine_id kosong: seed mapping IE dulu, sisanya JUKI-xxxx baru.
+func (r *Repository) EnsureMachineIDs(ctx context.Context) error {
+	if err := r.EnsureMachineSettingSchema(ctx); err != nil {
+		return err
+	}
+
+	uuids, err := r.listMachineInfoUUIDs(ctx)
+	if err != nil {
+		return err
+	}
+	settings, err := r.GetMachineSettings(ctx)
+	if err != nil {
+		return err
+	}
+
+	used := make(map[string]bool)
+	for _, item := range settings {
+		id := strings.ToUpper(strings.TrimSpace(item.MachineID))
+		if id != "" {
+			used[id] = true
+		}
+	}
+
+	// 1) Seed mapping yang masih kosong.
+	for _, uuid := range uuids {
+		key := normalizeMachineUUIDKey(uuid)
+		existing := strings.TrimSpace(settings[key].MachineID)
+		if existing != "" {
+			continue
+		}
+		seedID := strings.TrimSpace(machineIDSeedByUUID[key])
+		if seedID == "" {
+			continue
+		}
+		seedKey := strings.ToUpper(seedID)
+		if used[seedKey] {
+			continue
+		}
+		if err := r.upsertMachineIDOnly(ctx, uuid, seedID); err != nil {
+			return err
+		}
+		used[seedKey] = true
+		item := settings[key]
+		item.UUID = uuid
+		item.MachineID = seedID
+		settings[key] = item
+	}
+
+	// 2) Sisanya dapat JUKI-xxxx berikutnya.
+	for _, uuid := range uuids {
+		key := normalizeMachineUUIDKey(uuid)
+		existing := strings.TrimSpace(settings[key].MachineID)
+		if existing != "" {
+			continue
+		}
+		newID := nextJukiMachineID(used)
+		if err := r.upsertMachineIDOnly(ctx, uuid, newID); err != nil {
+			return err
+		}
+		used[strings.ToUpper(newID)] = true
+		item := settings[key]
+		item.UUID = uuid
+		item.MachineID = newID
+		settings[key] = item
+	}
+
+	return nil
+}
+
+func ParseJukiNumber(machineID string) (int, bool) {
+	match := jukiNumberPattern.FindStringSubmatch(strings.TrimSpace(machineID))
+	if len(match) != 2 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(match[1])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 // EnsureMachineSettingSchema melebarkan kolom teks agar layout line (JSON)
 // dan nama mesin panjang tidak kena truncation.
 func (r *Repository) EnsureMachineSettingSchema(ctx context.Context) error {
@@ -113,6 +273,7 @@ BEGIN
 		uuid NVARCHAR(100) NOT NULL PRIMARY KEY,
 		custom_name NVARCHAR(MAX) NULL,
 		location NVARCHAR(255) NULL,
+		machine_id NVARCHAR(50) NULL,
 		pic NVARCHAR(255) NULL,
 		spv NVARCHAR(MAX) NULL,
 		updated_at DATETIME2 NOT NULL CONSTRAINT DF_machine_setting_manual_updated_at DEFAULT SYSDATETIME()
@@ -160,6 +321,11 @@ BEGIN
 	)
 	BEGIN
 		ALTER TABLE dbo.machine_setting_manual ALTER COLUMN location NVARCHAR(255) NULL;
+	END
+
+	IF COL_LENGTH('dbo.machine_setting_manual', 'machine_id') IS NULL
+	BEGIN
+		ALTER TABLE dbo.machine_setting_manual ADD machine_id NVARCHAR(50) NULL;
 	END
 END
 `

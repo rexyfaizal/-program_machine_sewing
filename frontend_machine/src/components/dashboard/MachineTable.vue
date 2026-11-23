@@ -92,6 +92,7 @@ const emit = defineEmits([
 
 const {
   currentPage,
+  utilSortDir,
   totalRows,
   totalPages,
   startIndex,
@@ -99,6 +100,7 @@ const {
   pagedMachines,
   totalCols,
   visiblePages,
+  toggleUtilSort,
   nextPage,
   prevPage,
   goToPage,
@@ -146,6 +148,8 @@ const {
       :show-actions="props.showActions"
       :start-index="startIndex"
       :total-cols="totalCols"
+      :util-sort-dir="utilSortDir"
+      @toggle-util-sort="toggleUtilSort"
       @edit="emit('edit', $event)"
       @chart="emit('chart', $event)"
       @ask-ai="emit('ask-ai', $event)"

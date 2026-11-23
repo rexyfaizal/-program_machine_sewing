@@ -181,6 +181,9 @@ func main() {
 		if err := repo.EnsureOperatorCtStyleSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema operator_ct_style:", err)
 		}
+		if err := repo.EnsureGccSmvProcessSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema gcc_smv_process:", err)
+		}
 		if err := repo.EnsureAiInsightSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema ai_insight_log:", err)
 		}
@@ -223,6 +226,7 @@ func main() {
 	mux.HandleFunc("/api/machine-operator/note", api.MachineOperatorNote)
 	mux.HandleFunc("/api/machine-operator/active", api.MachineOperatorActive)
 	mux.HandleFunc("/api/machine-operator/report", api.MachineOperatorReport)
+	mux.HandleFunc("/api/machine-operator/last-process", api.MachineOperatorLastProcess)
 	mux.HandleFunc("/api/machine-operator/auto-logout/offline", api.MachineOperatorAutoLogoutOffline)
 	mux.HandleFunc("/api/machine-operator/loss-event/start", api.MachineOperatorLossEventStart)
 	mux.HandleFunc("/api/machine-operator/loss-event/finish", api.MachineOperatorLossEventFinish)
@@ -246,6 +250,8 @@ func main() {
 	mux.HandleFunc("/api/process-style/processes", api.ProcessStyleProcesses)
 	mux.HandleFunc("/api/process-style/list", api.ProcessStyleList)
 	mux.HandleFunc("/api/process-style/import", api.ProcessStyleImport)
+	mux.HandleFunc("/api/process-style/gcc", api.ProcessStyleGccList)
+	mux.HandleFunc("/api/process-style/sync-gcc", api.ProcessStyleSyncGcc)
 	mux.HandleFunc("/api/process-style", api.ProcessStyleCreate)
 	mux.HandleFunc("/api/process-style/", api.ProcessStyleByID)
 

@@ -15,6 +15,11 @@ func (h *Handler) MachineSettings(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if err := h.Repo.EnsureMachineIDs(ctx); err != nil {
+			http.Error(w, "Gagal ensure machine_id: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data, err := h.Repo.GetMachineSettings(ctx)
 		if err != nil {
 			http.Error(w, "Gagal ambil machine setting: "+err.Error(), http.StatusInternalServerError)
@@ -39,6 +44,7 @@ func (h *Handler) MachineSettings(w http.ResponseWriter, r *http.Request) {
 		input.UUID = strings.TrimSpace(input.UUID)
 		input.CustomName = strings.TrimSpace(input.CustomName)
 		input.Location = strings.TrimSpace(input.Location)
+		input.MachineID = strings.TrimSpace(input.MachineID)
 		input.Pic = strings.TrimSpace(input.Pic)
 		input.Spv = strings.TrimSpace(input.Spv)
 

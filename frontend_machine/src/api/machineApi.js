@@ -107,6 +107,7 @@ export async function saveMachineSetting(payload) {
       uuid: String(payload.uuid || "").trim(),
       customName: String(payload.customName || "").trim(),
       location: String(payload.location || "").trim(),
+      machineId: String(payload.machineId || "").trim(),
       pic: String(payload.pic || "").trim(),
       spv: String(payload.spv || "").trim(),
     }),
@@ -129,6 +130,7 @@ export async function updateMachineSetting(payload) {
       uuid: String(payload.uuid || "").trim(),
       customName: String(payload.customName || "").trim(),
       location: String(payload.location || "").trim(),
+      machineId: String(payload.machineId || "").trim(),
       pic: String(payload.pic || "").trim(),
       spv: String(payload.spv || "").trim(),
     }),
@@ -407,6 +409,25 @@ export async function getMachineOperatorReport(date, options = {}) {
   return await readResponse(res);
 }
 
+export async function getMachineOperatorLastProcess(uuids = [], options = {}) {
+  const list = (Array.isArray(uuids) ? uuids : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+
+  if (!list.length) {
+    return { status: "ok", items: {} };
+  }
+
+  const res = await fetch("/api/machine-operator/last-process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uuids: list }),
+    signal: options.signal,
+  });
+
+  return await readResponse(res);
+}
+
 export async function getProcessStyleList(query = "") {
   const q = String(query || "").trim();
   const res = await fetch(`/api/process-style/list?q=${encodeURIComponent(q)}`);
@@ -543,6 +564,28 @@ export async function importProcessStyles(rows) {
     }),
   });
 
+  return await readResponse(res);
+}
+
+export async function syncProcessStylesFromGcc() {
+  const res = await fetch("/api/process-style/sync-gcc", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  return await readResponse(res);
+}
+
+export async function getProcessStyleGccList({ page = 1, limit = 20, q = "" } = {}) {
+  const params = new URLSearchParams();
+  params.set("page", String(Math.max(1, Number(page) || 1)));
+  params.set("limit", String(Math.max(1, Number(limit) || 20)));
+  const keyword = String(q || "").trim();
+  if (keyword) params.set("q", keyword);
+
+  const res = await fetch(`/api/process-style/gcc?${params.toString()}`);
   return await readResponse(res);
 }
 

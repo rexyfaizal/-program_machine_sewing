@@ -522,5 +522,9 @@ func (r *Repository) GetMachineOperatorReportFiltered(
 		r.enrichOperatorReportSessionStats(ctx, report, clipStart, clipEnd)
 	}
 
+	if err := r.EnrichOperatorReportProsesID(ctx, report); err != nil {
+		log.Printf("operator report: gagal lookup proses_id Master IE: %v", err)
+	}
+
 	return report, nil
 }

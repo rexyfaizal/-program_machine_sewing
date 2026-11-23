@@ -16,6 +16,7 @@ const emit = defineEmits(["close", "save", "delete"]);
 
 const customName = ref("");
 const location = ref("");
+const machineId = ref("");
 const pic = ref("");
 const spv = ref("");
 
@@ -24,6 +25,7 @@ watch(
   (machine) => {
     customName.value = machine?.customName || "";
     location.value = machine?.location === "-" ? "" : machine?.location || "";
+    machineId.value = machine?.machineId || "";
     pic.value = machine?.pic === "-" ? "" : machine?.pic || "";
     spv.value = machine?.spv === "-" ? "" : machine?.spv || "";
   },
@@ -41,6 +43,7 @@ function saveData() {
     uuid: props.machine.uuid,
     customName: customName.value.trim(),
     location: location.value.trim(),
+    machineId: machineId.value.trim(),
     pic: pic.value.trim(),
     spv: spv.value.trim(),
   });
@@ -97,6 +100,14 @@ function deleteData() {
           <input
             v-model="location"
             placeholder="Contoh: GM1 LINE 1"
+          />
+        </div>
+
+        <div class="field">
+          <label>Machine ID</label>
+          <input
+            v-model="machineId"
+            placeholder="Contoh: JUKI-0001"
           />
         </div>
 

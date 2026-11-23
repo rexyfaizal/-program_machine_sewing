@@ -1,92 +1,77 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
-import ProcessStyleFormCard from "../components/process-style/ProcessStyleFormCard.vue";
-import ProcessStyleImportPanel from "../components/process-style/ProcessStyleImportPanel.vue";
-import ProcessStyleCtImportPanel from "../components/process-style/ProcessStyleCtImportPanel.vue";
+import ProcessStyleGccSyncPanel from "../components/process-style/ProcessStyleGccSyncPanel.vue";
 import ProcessStyleTable from "../components/process-style/ProcessStyleTable.vue";
 
-import { useProcessStyleImport } from "../composables/useProcessStyleImport";
-import { useOperatorCtStyleImport } from "../composables/useOperatorCtStyleImport";
-import { useProcessStyleMaster } from "../composables/useProcessStyleMaster";
+import { syncProcessStylesFromGcc } from "../api/machineApi";
+import { useProcessStyleGccLive } from "../composables/useProcessStyleGccLive";
 import { getInitialAdminMode } from "../utils/adminMode";
 
 import "../assets/process-style-master.css";
 
 const isAdmin = ref(false);
+const syncing = ref(false);
+const syncErrorMessage = ref("");
+const syncSuccessMessage = ref("");
+const syncResult = ref(null);
+
+let syncSuccessTimer = null;
 
 const {
   loading,
-  saving,
   errorMessage,
-  successMessage,
   keyword,
   rows,
-  form,
+  source,
+  sourceMessage,
   currentPage,
-  isEditMode,
   totalRows,
   totalPages,
   startIndex,
   endIndex,
-  pagedRows,
   visiblePages,
   loadRows,
   handleSearch,
-  resetForm,
-  editRow,
-  saveData,
-  removeRow,
+  scheduleSearch,
   prevPage,
   nextPage,
   goToPage,
-  cleanupProcessStyleMaster,
-} = useProcessStyleMaster({
-  isAdmin,
-});
+  cleanup,
+} = useProcessStyleGccLive();
 
-const {
-  importing,
-  importInputKey,
-  importFileName,
-  importPreviewRows,
-  importPreviewDisplayRows,
-  importDuplicateRows,
-  importStats,
-  importErrorMessage,
-  importSuccessMessage,
-  resetImport,
-  handleImportFileChange,
-  submitImportExcel,
-  cleanupProcessStyleImport,
-} = useProcessStyleImport({
-  isAdmin,
-  onImported: async () => {
-    currentPage.value = 1;
-    await loadRows();
-  },
-});
+async function handleSyncGcc() {
+  if (!isAdmin.value || syncing.value) return;
 
-const {
-  importing: ctStyleImporting,
-  importInputKey: ctStyleImportInputKey,
-  importFileName: ctStyleImportFileName,
-  importPreviewRows: ctStyleImportPreviewRows,
-  importPreviewDisplayRows: ctStyleImportPreviewDisplayRows,
-  importDuplicateRows: ctStyleImportDuplicateRows,
-  importStats: ctStyleImportStats,
-  importErrorMessage: ctStyleImportErrorMessage,
-  importSuccessMessage: ctStyleImportSuccessMessage,
-  resetImport: resetCtStyleImport,
-  handleImportFileChange: handleCtStyleImportFileChange,
-  submitImportExcel: submitCtStyleImportExcel,
-  cleanupOperatorCtStyleImport,
-} = useOperatorCtStyleImport({
-  isAdmin,
-  onImported: async () => {
+  const ok = window.confirm(
+    "Sinkron incremental GCC → gcc_smv_process.\n\n- Data baru: ditambah\n- Data lama: diupdate jika berubah\n- Yang hilang di GCC: dihapus\n\nLanjutkan?"
+  );
+  if (!ok) return;
+
+  syncing.value = true;
+  syncErrorMessage.value = "";
+  syncSuccessMessage.value = "";
+  syncResult.value = null;
+
+  try {
+    const result = await syncProcessStylesFromGcc();
+    syncResult.value = result || null;
+    syncSuccessMessage.value =
+      result?.message ||
+      `Sinkron lokal selesai. ${Number(result?.stylesInserted || 0)} baris tersimpan untuk login.`;
+
+    if (syncSuccessTimer) clearTimeout(syncSuccessTimer);
+    syncSuccessTimer = setTimeout(() => {
+      syncSuccessMessage.value = "";
+    }, 5000);
+
     await loadRows();
-  },
-});
+  } catch (err) {
+    syncErrorMessage.value = err?.message || "Gagal sinkron lokal dari GCC.";
+  } finally {
+    syncing.value = false;
+  }
+}
 
 onMounted(async () => {
   isAdmin.value = await Promise.resolve(getInitialAdminMode());
@@ -94,9 +79,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  cleanupProcessStyleMaster();
-  cleanupProcessStyleImport();
-  cleanupOperatorCtStyleImport();
+  cleanup();
+  if (syncSuccessTimer) clearTimeout(syncSuccessTimer);
 });
 </script>
 
@@ -110,61 +94,21 @@ onBeforeUnmount(() => {
       {{ errorMessage }}
     </div>
 
-    <div v-if="successMessage" class="alert success">
-      {{ successMessage }}
-    </div>
-
-    <div class="import-grid">
-      <ProcessStyleImportPanel
-        :is-admin="isAdmin"
-        :importing="importing"
-        :import-input-key="importInputKey"
-        :import-file-name="importFileName"
-        :import-preview-rows="importPreviewRows"
-        :import-preview-display-rows="importPreviewDisplayRows"
-        :import-duplicate-rows="importDuplicateRows"
-        :import-stats="importStats"
-        :import-error-message="importErrorMessage"
-        :import-success-message="importSuccessMessage"
-        @reset-import="resetImport"
-        @file-change="handleImportFileChange"
-        @submit-import="submitImportExcel"
-      />
-
-      <ProcessStyleCtImportPanel
-        :is-admin="isAdmin"
-        :template-rows="rows"
-        :importing="ctStyleImporting"
-        :import-input-key="ctStyleImportInputKey"
-        :import-file-name="ctStyleImportFileName"
-        :import-preview-rows="ctStyleImportPreviewRows"
-        :import-preview-display-rows="ctStyleImportPreviewDisplayRows"
-        :import-duplicate-rows="ctStyleImportDuplicateRows"
-        :import-stats="ctStyleImportStats"
-        :import-error-message="ctStyleImportErrorMessage"
-        :import-success-message="ctStyleImportSuccessMessage"
-        @reset-import="resetCtStyleImport"
-        @file-change="handleCtStyleImportFileChange"
-        @submit-import="submitCtStyleImportExcel"
-      />
-    </div>
-
-    <ProcessStyleFormCard
+    <ProcessStyleGccSyncPanel
       :is-admin="isAdmin"
-      :saving="saving"
-      :form="form"
-      :is-edit-mode="isEditMode"
-      @update:form="form = $event"
-      @save="saveData"
-      @reset="resetForm"
+      :syncing="syncing"
+      :sync-error-message="syncErrorMessage"
+      :sync-success-message="syncSuccessMessage"
+      :sync-result="syncResult"
+      @sync="handleSyncGcc"
     />
 
     <ProcessStyleTable
-      :is-admin="isAdmin"
-      :loading="loading"
+      :loading="loading || syncing"
       :rows="rows"
-      :paged-rows="pagedRows"
       :keyword="keyword"
+      :source="source"
+      :source-message="sourceMessage"
       :total-rows="totalRows"
       :start-index="startIndex"
       :end-index="endIndex"
@@ -173,8 +117,7 @@ onBeforeUnmount(() => {
       :visible-pages="visiblePages"
       @update:keyword="keyword = $event"
       @search="handleSearch"
-      @edit="editRow"
-      @remove="removeRow"
+      @schedule-search="scheduleSearch"
       @prev="prevPage"
       @next="nextPage"
       @go="goToPage"

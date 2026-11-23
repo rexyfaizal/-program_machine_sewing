@@ -216,3 +216,45 @@ func (h *Handler) MachineOperatorReport(w http.ResponseWriter, r *http.Request) 
 
 	writeJSON(w, data)
 }
+
+// MachineOperatorLastProcess godoc
+// @Summary Proses login terakhir per UUID mesin
+// @Tags Machine Operator
+// @Accept json
+// @Produce json
+// @Param body body object true "uuids: string[]"
+// @Success 200 {object} models.MachineOperatorLastProcessResponse
+// @Failure 400 {string} string
+// @Failure 500 {string} string
+// @Router /machine-operator/last-process [post]
+func (h *Handler) MachineOperatorLastProcess(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method tidak diizinkan", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := contextWithTimeout(r, 30*time.Second)
+	defer cancel()
+
+	var input struct {
+		UUIDs []string `json:"uuids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Body JSON tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	items, err := h.Repo.GetLatestOperatorProcessByUUIDs(ctx, input.UUIDs)
+	if err != nil {
+		http.Error(w, "Gagal ambil proses terakhir: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if items == nil {
+		items = map[string]models.MachineOperatorLastProcess{}
+	}
+
+	writeJSON(w, models.MachineOperatorLastProcessResponse{
+		Status: "ok",
+		Items:  items,
+	})
+}

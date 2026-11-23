@@ -150,6 +150,7 @@ function printQrCodes() {
           <div class="qr-uuid">
             <span>UUID</span>
             <strong>${escapeHtml(item.uuid)}</strong>
+            <a class="qr-link" href="${escapeHtml(item.qrUrl)}">${escapeHtml(item.qrUrl)}</a>
           </div>
         </div>
       `;
@@ -253,6 +254,17 @@ function printQrCodes() {
             font-size: 12px;
             font-weight: 900;
             word-break: break-all;
+          }
+
+          .qr-link {
+            display: block;
+            margin-top: 6px;
+            color: #1d4ed8;
+            font-size: 8.5px;
+            font-weight: 800;
+            line-height: 1.35;
+            word-break: break-all;
+            text-decoration: none;
           }
 
           @media print {
@@ -384,6 +396,14 @@ watch(
             <div class="qr-uuid">
               <span>UUID</span>
               <strong>{{ item.uuid }}</strong>
+              <a
+                class="qr-link"
+                :href="item.qrUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ item.qrUrl }}
+              </a>
             </div>
           </article>
         </div>
@@ -627,6 +647,21 @@ watch(
   font-size: 12px;
   font-weight: 900;
   word-break: break-all;
+}
+
+.qr-link {
+  display: block;
+  margin-top: 6px;
+  color: #1d4ed8;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.qr-link:hover {
+  text-decoration: underline;
 }
 
 .empty {
