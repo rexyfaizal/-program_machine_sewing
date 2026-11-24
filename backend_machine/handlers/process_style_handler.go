@@ -407,14 +407,24 @@ func (h *Handler) ProcessStyleSyncGcc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, models.GccSmvSyncResponse{
-		Status: "ok",
-		Message: fmt.Sprintf(
-			"Sinkron incremental selesai. Baru: %d, update: %d, dihapus: %d.",
+	msg := fmt.Sprintf(
+		"Sinkron incremental selesai. Baru: %d, update: %d, dihapus: %d.",
+		stats.Inserted,
+		stats.Updated,
+		stats.Deleted,
+	)
+	if dateFilter := utils.GccSmvDateValue(); dateFilter != "" {
+		msg = fmt.Sprintf(
+			"Sinkron filter date=%s selesai. Baru: %d, update: %d (orphan tidak dihapus).",
+			dateFilter,
 			stats.Inserted,
 			stats.Updated,
-			stats.Deleted,
-		),
+		)
+	}
+
+	writeJSON(w, models.GccSmvSyncResponse{
+		Status:         "ok",
+		Message:        msg,
 		PagesFetched:   meta.CurrentPage,
 		HeadersFetched: headersFetched,
 		TotalHeaders:   meta.Total,

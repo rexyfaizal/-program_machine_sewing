@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"backend_machine/models"
+	"backend_machine/utils"
 )
 
 const gccSmvInsertBatchSize = 80
@@ -122,16 +123,19 @@ func (r *Repository) UpsertGccSmvProcessFromGcc(
 		stats.Updated += upd
 	}
 
-	delResult, err := tx.ExecContext(
-		ctx,
-		`DELETE FROM dbo.gcc_smv_process WHERE synced_at < @sync_at;`,
-		sql.Named("sync_at", syncAt),
-	)
-	if err != nil {
-		return stats, fmt.Errorf("gagal hapus data GCC yang sudah tidak ada: %w", err)
-	}
-	if n, err := delResult.RowsAffected(); err == nil {
-		stats.Deleted = int(n)
+	// Filter ?date= hanya upsert hari itu — jangan hapus style lain.
+	if !utils.GccSmvDateFilterActive() {
+		delResult, err := tx.ExecContext(
+			ctx,
+			`DELETE FROM dbo.gcc_smv_process WHERE synced_at < @sync_at;`,
+			sql.Named("sync_at", syncAt),
+		)
+		if err != nil {
+			return stats, fmt.Errorf("gagal hapus data GCC yang sudah tidak ada: %w", err)
+		}
+		if n, err := delResult.RowsAffected(); err == nil {
+			stats.Deleted = int(n)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

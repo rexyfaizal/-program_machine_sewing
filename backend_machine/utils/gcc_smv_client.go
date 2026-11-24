@@ -96,6 +96,21 @@ func gccHTTPTimeout() time.Duration {
 	return time.Duration(n) * time.Second
 }
 
+// gccSmvDate filter opsional query ?date=YYYY-MM-DD (sama seperti Postman/curl GCC).
+func gccSmvDate() string {
+	return strings.TrimSpace(os.Getenv("GCC_SMV_DATE"))
+}
+
+// GccSmvDateFilterActive true jika sync/list dibatasi param date.
+func GccSmvDateFilterActive() bool {
+	return gccSmvDate() != ""
+}
+
+// GccSmvDateValue mengembalikan filter tanggal yang dipakai (bisa kosong).
+func GccSmvDateValue() string {
+	return gccSmvDate()
+}
+
 func cleanGccText(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.ReplaceAll(value, "\u00a0", " ")
@@ -128,6 +143,9 @@ func fetchGccSmvPage(ctx context.Context, page, limit int) (GccSmvListResponse, 
 	q := endpoint.Query()
 	q.Set("page", strconv.Itoa(page))
 	q.Set("limit", strconv.Itoa(limit))
+	if date := gccSmvDate(); date != "" {
+		q.Set("date", date)
+	}
 	endpoint.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
@@ -137,7 +155,19 @@ func fetchGccSmvPage(ctx context.Context, page, limit int) (GccSmvListResponse, 
 	req.Header.Set("GCC-API-KEY", key)
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: gccHTTPTimeout()}
+	client := &http.Client{
+		Timeout: gccHTTPTimeout(),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("terlalu banyak redirect")
+			}
+			// Pertahankan API key setelah redirect (host :7186 → tanpa port).
+			if key := gccAPIKey(); key != "" {
+				req.Header.Set("GCC-API-KEY", key)
+			}
+			return nil
+		},
+	}
 	res, err := client.Do(req)
 	if err != nil {
 		return GccSmvListResponse{}, fmt.Errorf("GCC page %d gagal: %w", page, err)
