@@ -69,6 +69,8 @@ const emit = defineEmits([
 
 let lastPickKey = "";
 let lastPickAt = 0;
+let touchStartY = 0;
+let touchMoved = false;
 
 function emitOnce(eventName, payload, key) {
   const now = Date.now();
@@ -84,15 +86,30 @@ function emitOnce(eventName, payload, key) {
   emit(eventName, payload);
 }
 
+function onSuggestTouchStart(event) {
+  touchMoved = false;
+  touchStartY = Number(event?.touches?.[0]?.clientY || 0);
+}
+
+function onSuggestTouchMove(event) {
+  const y = Number(event?.touches?.[0]?.clientY || 0);
+  if (Math.abs(y - touchStartY) > 8) {
+    touchMoved = true;
+  }
+}
+
 function pickEmployee(emp) {
+  if (touchMoved) return;
   emitOnce("select-employee", emp, `${emp?.nik || ""}-${emp?.name || ""}`);
 }
 
 function pickStyle(item) {
+  if (touchMoved) return;
   emitOnce("select-style", item, `${item?.styleName || ""}`);
 }
 
 function pickProcess(item) {
+  if (touchMoved) return;
   emitOnce(
     "select-process",
     item,
@@ -132,8 +149,9 @@ function pickProcess(item) {
             :key="`emp-${emp.nik}-${emp.name}`"
             type="button"
             class="suggest-item"
-            @touchstart.prevent.stop="pickEmployee(emp)"
-            @mousedown.prevent.stop="pickEmployee(emp)"
+            @touchstart="onSuggestTouchStart"
+            @touchmove="onSuggestTouchMove"
+            @mousedown.prevent
             @click.prevent.stop="pickEmployee(emp)"
           >
             <strong>{{ emp.nik }}</strong>
@@ -187,8 +205,9 @@ function pickProcess(item) {
             :key="`style-${item.styleName}`"
             type="button"
             class="suggest-item style-only"
-            @touchstart.prevent.stop="pickStyle(item)"
-            @mousedown.prevent.stop="pickStyle(item)"
+            @touchstart="onSuggestTouchStart"
+            @touchmove="onSuggestTouchMove"
+            @mousedown.prevent
             @click.prevent.stop="pickStyle(item)"
           >
             <strong>{{ item.styleName }}</strong>
@@ -226,8 +245,9 @@ function pickProcess(item) {
             :key="`process-${item.id}-${item.processName}`"
             type="button"
             class="suggest-item"
-            @touchstart.prevent.stop="pickProcess(item)"
-            @mousedown.prevent.stop="pickProcess(item)"
+            @touchstart="onSuggestTouchStart"
+            @touchmove="onSuggestTouchMove"
+            @mousedown.prevent
             @click.prevent.stop="pickProcess(item)"
           >
             <strong>{{ item.styleName }}</strong>

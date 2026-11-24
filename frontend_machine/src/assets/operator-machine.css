@@ -148,6 +148,9 @@
   gap: 6px;
   max-height: 280px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 8px;
   border-radius: 16px;
   background: #ffffff;
@@ -175,6 +178,7 @@
   align-items: center;
   text-align: left;
   cursor: pointer;
+  touch-action: pan-y;
 }
 
 .suggest-item:hover {
