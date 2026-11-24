@@ -17,6 +17,12 @@ services:
       # Origin yang boleh akses WebSocket/CORS. "*" = semua (tool internal).
       # Bisa dibatasi, contoh: "http://10.5.0.107:5175,http://103.24.148.59:5175"
       APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-*}"
+      # Sync Master IE dari GCC (detail-proses). .env di backend_machine/ TIDAK otomatis masuk container.
+      GCC_BASE_URL: "${GCC_BASE_URL:-https://gcc.gistexgarmenindonesia.com}"
+      GCC_API_KEY: "${GCC_API_KEY:-332100185}"
+      GCC_SMV_PAGE_LIMIT: "${GCC_SMV_PAGE_LIMIT:-50}"
+      GCC_SMV_HTTP_TIMEOUT_SEC: "${GCC_SMV_HTTP_TIMEOUT_SEC:-300}"
+      GCC_SMV_DATE: "${GCC_SMV_DATE:-}"
     ports:
       - "5500:5500"
     restart: unless-stopped
