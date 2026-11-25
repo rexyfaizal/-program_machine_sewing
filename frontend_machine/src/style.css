@@ -32,9 +32,9 @@ body {
 
 .shell {
   width: 100%;
-  max-width: 1520px;
+  max-width: 98vw;
   margin: 0 auto;
-  padding: 28px 36px 48px;
+  padding: 28px 16px 48px;
 }
 
 .nav {

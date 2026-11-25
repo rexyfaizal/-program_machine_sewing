@@ -1255,16 +1255,17 @@ export function normalizeRangeItem(
   const lineShift = resolveLineShiftForLocation(location, shiftConfigMap);
 
   const operatorInfo = operatorMap.get(normalizeText(uuid)) || {};
+  // Metrics mesin selalu dari productivity terpilih (ALL di export All Shifts),
+  // sama dashboard — jangan override per SHIFT tag operator.
+  const machineMetrics =
+    resolveDashboardMetricsForOperator(uuid, "-", shiftMetricsMap, metrics) ||
+    metrics;
+
   const operatorRows = (
     Array.isArray(operatorInfo.operatorRows) ? operatorInfo.operatorRows : []
   ).map((operatorRow) => ({
     ...operatorRow,
-    dashboardMetrics: resolveDashboardMetricsForOperator(
-      uuid,
-      operatorRow.shiftTag,
-      shiftMetricsMap,
-      metrics
-    ),
+    dashboardMetrics: machineMetrics,
   }));
 
   const processFromOperatorRows = String(
@@ -1435,7 +1436,6 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
     options.fallbackStyle || baseRow.Style || ""
   ).trim();
   const fallbackPowerOnSec = toNumber(options.fallbackPowerOnSec || 0);
-  const useShiftOutput = Boolean(options.useShift);
 
   const rows = (Array.isArray(operatorRows) ? operatorRows : []).filter(
     isUsefulOperatorRow
@@ -1498,52 +1498,29 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       machineIdentityWritten = true;
     }
 
-    const dashboardMetrics = item?.dashboardMetrics || null;
-    const sessionPowerOnSec = dashboardMetrics
-      ? toNumber(dashboardMetrics.runtime || 0)
-      : fallbackPowerOnSec;
-    const sessionPowerOn = dashboardMetrics
-      ? formatSeconds(dashboardMetrics.runtime)
-      : baseRow["Power On Duration"];
-    const sessionRunning = dashboardMetrics
-      ? formatSeconds(dashboardMetrics.procTime)
-      : baseRow["Running Time"];
-    const sessionLoss = dashboardMetrics
-      ? formatSeconds(dashboardMetrics.lossTime)
-      : baseRow["Loss Time"];
-    const sessionProductivity = dashboardMetrics
-      ? Number(dashboardMetrics.productivity || 0)
-      : baseRow.Produktivitas;
-    const sessionStatus = dashboardMetrics
-      ? String(
-          dashboardMetrics.status ||
-            statusFromProductivity(dashboardMetrics.productivity)
-        ).trim()
-      : baseRow.Status;
+    // Angka mesin = sama dashboard (ALL / productivity terpilih), bukan sessionOutput / SHIFT_x.
+    const sessionRuntimeSec = toNumber(item?.runtimeSec || 0);
+    const lossPowerOnSec =
+      sessionRuntimeSec > 0 ? sessionRuntimeSec : fallbackPowerOnSec;
 
     const lossColumns = isFirstOfSession
-      ? buildExportLossColumns(item?.lossBreakdown, sessionPowerOnSec)
+      ? buildExportLossColumns(item?.lossBreakdown, lossPowerOnSec)
       : emptyExportLossColumns();
-
-    const sessionOutput =
-      useShiftOutput && item?.hasSessionOutput
-        ? toNumber(item.sessionOutput || 0)
-        : showMachineIdentity
-          ? baseRow.Output
-          : "";
 
     return {
       ...baseRow,
       Mesin: showMachineIdentity ? processName || fallbackMesin : "",
       Style: showMachineIdentity ? styleName || fallbackStyle : "",
       UUID: showMachineIdentity ? baseRow.UUID || "" : "",
-      Output: isFirstOfSession ? sessionOutput : "",
+      Output: showMachineIdentity ? baseRow.Output : "",
       "Avg Proses": showMachineIdentity ? baseRow["Avg Proses"] : "",
-      "Power On Duration": isFirstOfSession ? sessionPowerOn : "",
-      "Running Time": isFirstOfSession ? sessionRunning : "",
-      "Loss Time": isFirstOfSession ? sessionLoss : "",
-      Produktivitas: isFirstOfSession ? sessionProductivity : "",
-      Status: isFirstOfSession ? sessionStatus : "",
+      "Power On Duration": showMachineIdentity
+        ? baseRow["Power On Duration"]
+        : "",
+      "Running Time": showMachineIdentity ? baseRow["Running Time"] : "",
+      "Loss Time": showMachineIdentity ? baseRow["Loss Time"] : "",
+      Produktivitas: showMachineIdentity ? baseRow.Produktivitas : "",
+      Status: showMachineIdentity ? baseRow.Status : "",
       "Operator NIK": isFirstOfSession ? operatorNik : "",
       "Operator Name": isFirstOfSession ? operatorName : "",
       "Keterangan Shift": isFirstOfSession ? shiftTag : "",

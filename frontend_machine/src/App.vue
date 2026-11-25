@@ -263,7 +263,7 @@ body {
 
   min-height: 100vh;
   width: 100%;
-  padding: clamp(14px, 1.6vw, 28px);
+  padding: clamp(10px, 0.8vw, 16px);
   padding-top: clamp(42px, 4vw, 52px);
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 34%),
@@ -273,7 +273,7 @@ body {
 
 .shell {
   width: 100%;
-  max-width: 1680px;
+  max-width: 98vw;
   margin: 0 auto;
   min-width: 0;
   zoom: var(--app-scale);
