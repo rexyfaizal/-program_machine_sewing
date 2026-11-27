@@ -58,12 +58,18 @@ function sortValue(machine, key, index) {
     }
     case "processName":
       return String(getDisplayMachineName(machine) || "").trim();
+    case "style":
+      return String(machine?.operatorStyleName || "").trim();
     case "branch":
       return String(branchLabel(machine) || "").trim();
     case "location":
       return String(locationLabel(machine) || "").trim();
+    case "spvId":
+      return String(machine?.spvId || machine?.spvNik || "").trim();
     case "machineId":
       return String(machine?.machineId || "").trim();
+    case "mikaId":
+      return String(machine?.mikaId || "").trim();
     case "nik": {
       const op = firstOperator(machine);
       return String(op?.nik || "").trim();
@@ -188,10 +194,6 @@ export function useMachineTable(props) {
     return sortedMachines.value.slice(startIndex.value, endIndex.value);
   });
 
-  const totalCols = computed(() => {
-    return props.showActions ? 19 : 15;
-  });
-
   const visiblePages = computed(() => {
     const pages = [];
     const total = totalPages.value;
@@ -279,7 +281,6 @@ export function useMachineTable(props) {
     endIndex,
     sortedMachines,
     pagedMachines,
-    totalCols,
     visiblePages,
     setSort,
     nextPage,

@@ -138,19 +138,14 @@ function printQrCodes() {
       return `
         <div class="qr-card">
           <div class="qr-notice">
-            <strong>WAJIB SCAN QR</strong>
-            <span>AWAL MASUK/SETELAH</span>
-            <span>ISTIRAHAT/MESIN RUSAK/SHALAT</span>
+            <strong>Wajib Scan</strong>
           </div>
-
-          <p class="qr-location">${escapeHtml(item.location || "-")}</p>
 
           <img src="${item.qrDataUrl}" alt="QR ${escapeHtml(item.uuid)}" />
 
           <div class="qr-uuid">
             <span>UUID</span>
             <strong>${escapeHtml(item.uuid)}</strong>
-            <a class="qr-link" href="${escapeHtml(item.qrUrl)}">${escapeHtml(item.qrUrl)}</a>
           </div>
         </div>
       `;
@@ -205,22 +200,12 @@ function printQrCodes() {
             border-bottom: 1px solid #0f172a;
           }
 
-          .qr-notice strong,
-          .qr-notice span {
+          .qr-notice strong {
             display: block;
-            font-size: 11px;
+            font-size: 13px;
             line-height: 1.2;
             font-weight: 900;
             letter-spacing: 0.01em;
-            text-transform: uppercase;
-          }
-
-          .qr-location {
-            margin: 0 0 8px;
-            font-size: 12px;
-            font-weight: 800;
-            color: #334155;
-            line-height: 1.25;
           }
 
           img {
@@ -254,17 +239,6 @@ function printQrCodes() {
             font-size: 12px;
             font-weight: 900;
             word-break: break-all;
-          }
-
-          .qr-link {
-            display: block;
-            margin-top: 6px;
-            color: #1d4ed8;
-            font-size: 8.5px;
-            font-weight: 800;
-            line-height: 1.35;
-            word-break: break-all;
-            text-decoration: none;
           }
 
           @media print {
@@ -325,7 +299,7 @@ watch(
           <p class="eyebrow">QR Code Mesin</p>
           <h3>Generate QR PIC & SPV</h3>
           <p>
-            Label cetak: keterangan scan + lokasi + QR + UUID (tanpa nama proses).
+            Label cetak: "Wajib Scan" + QR + UUID (tanpa lokasi &amp; tanpa link).
           </p>
         </div>
 
@@ -384,26 +358,14 @@ watch(
             class="qr-card"
           >
             <div class="qr-notice">
-              <strong>WAJIB SCAN QR</strong>
-              <span>AWAL MASUK/SETELAH</span>
-              <span>ISTIRAHAT/MESIN RUSAK/SHALAT</span>
+              <strong>Wajib Scan</strong>
             </div>
-
-            <p class="qr-location">{{ item.location || "-" }}</p>
 
             <img :src="item.qrDataUrl" :alt="`QR ${item.uuid}`" />
 
             <div class="qr-uuid">
               <span>UUID</span>
               <strong>{{ item.uuid }}</strong>
-              <a
-                class="qr-link"
-                :href="item.qrUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {{ item.qrUrl }}
-              </a>
             </div>
           </article>
         </div>
@@ -596,23 +558,13 @@ watch(
   border-bottom: 1px solid #0f172a;
 }
 
-.qr-notice strong,
-.qr-notice span {
+.qr-notice strong {
   display: block;
   color: #0f172a;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.2;
   font-weight: 1000;
   letter-spacing: 0.01em;
-  text-transform: uppercase;
-}
-
-.qr-location {
-  margin: 0 0 10px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.3;
 }
 
 .qr-card img {
@@ -647,21 +599,6 @@ watch(
   font-size: 12px;
   font-weight: 900;
   word-break: break-all;
-}
-
-.qr-link {
-  display: block;
-  margin-top: 6px;
-  color: #1d4ed8;
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1.35;
-  word-break: break-all;
-  text-decoration: none;
-}
-
-.qr-link:hover {
-  text-decoration: underline;
 }
 
 .empty {

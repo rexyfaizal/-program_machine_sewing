@@ -8,6 +8,7 @@ import {
   todayLocal,
 } from "../../utils/format";
 import { getOrderedRange } from "../../utils/dashboardExportExcel";
+import MachineTableColumnPicker from "./MachineTableColumnPicker.vue";
 
 const props = defineProps({
   loading: {
@@ -67,6 +68,22 @@ const props = defineProps({
       { value: "BAD", label: "BAD" },
     ],
   },
+  columnPickerOpen: {
+    type: Boolean,
+    default: false,
+  },
+  columnPickerColumns: {
+    type: Array,
+    default: () => [],
+  },
+  columnVisibility: {
+    type: Object,
+    default: () => ({}),
+  },
+  columnHiddenCount: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits([
@@ -79,6 +96,10 @@ const emit = defineEmits([
   "update:statusValue",
   "dateChange",
   "download",
+  "toggle-column-picker",
+  "close-column-picker",
+  "toggle-column",
+  "show-all-columns",
 ]);
 
 const now = new Date();
@@ -349,6 +370,17 @@ const rangeLabel = computed(() => {
         @input="updateKeyword"
       />
     </label>
+
+    <MachineTableColumnPicker
+      :open="props.columnPickerOpen"
+      :columns="props.columnPickerColumns"
+      :visibility="props.columnVisibility"
+      :hidden-count="props.columnHiddenCount"
+      @toggle-open="emit('toggle-column-picker')"
+      @close="emit('close-column-picker')"
+      @toggle-column="emit('toggle-column', $event)"
+      @show-all="emit('show-all-columns')"
+    />
 
     <button
       type="button"

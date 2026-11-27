@@ -1,10 +1,12 @@
 <script setup>
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { searchEmployees } from "../../api/machineApi";
 import {
   getMachineStatusText,
   getMachineStatusClass,
 } from "../../utils/machineStatus";
 
-defineProps({
+const props = defineProps({
   line: {
     type: String,
     required: true,
@@ -25,6 +27,14 @@ defineProps({
     type: String,
     default: "",
   },
+  spvAssignment: {
+    type: Object,
+    default: null,
+  },
+  spvSaving: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -39,7 +49,105 @@ const emit = defineEmits([
   "dropLine",
   "dragEnd",
   "openDetailMachine",
+  "saveSpv",
+  "clearSpv",
 ]);
+
+const spvQuery = ref("");
+const spvOptions = ref([]);
+const spvSearching = ref(false);
+const showSpvOptions = ref(false);
+let spvSearchTimer = null;
+let spvSearchSeq = 0;
+let hideSpvTimer = null;
+
+const spvLabel = computed(() => {
+  const nik = String(props.spvAssignment?.spvNik || "").trim();
+  const name = String(props.spvAssignment?.spvName || "").trim();
+  if (nik && name) return `${nik} - ${name}`;
+  if (nik) return nik;
+  if (name) return name;
+  return "";
+});
+
+watch(
+  () => props.spvAssignment,
+  () => {
+    if (!spvQuery.value) return;
+  }
+);
+
+function employeeLabel(emp) {
+  const nik = String(emp?.nik || "").trim();
+  const name = String(emp?.name || "").trim();
+  if (nik && name) return `${nik} - ${name}`;
+  return nik || name || "-";
+}
+
+function scheduleSpvSearch(value) {
+  spvQuery.value = value;
+  showSpvOptions.value = false;
+  spvOptions.value = [];
+
+  if (spvSearchTimer) clearTimeout(spvSearchTimer);
+  spvSearchTimer = setTimeout(() => {
+    runSpvSearch(value);
+  }, 280);
+}
+
+async function runSpvSearch(value) {
+  const q = String(value || "").trim();
+  const seq = ++spvSearchSeq;
+
+  if (q.length < 2) {
+    spvSearching.value = false;
+    spvOptions.value = [];
+    showSpvOptions.value = false;
+    return;
+  }
+
+  spvSearching.value = true;
+  try {
+    const rows = await searchEmployees(q);
+    if (seq !== spvSearchSeq) return;
+    spvOptions.value = Array.isArray(rows) ? rows : [];
+    showSpvOptions.value = spvOptions.value.length > 0;
+  } catch {
+    if (seq !== spvSearchSeq) return;
+    spvOptions.value = [];
+    showSpvOptions.value = false;
+  } finally {
+    if (seq === spvSearchSeq) spvSearching.value = false;
+  }
+}
+
+function selectSpvEmployee(emp) {
+  const nik = String(emp?.nik || "").trim();
+  if (!nik) return;
+  spvQuery.value = "";
+  spvOptions.value = [];
+  showSpvOptions.value = false;
+  emit("saveSpv", { line: props.line, spvNik: nik });
+}
+
+function clearSpv() {
+  spvQuery.value = "";
+  spvOptions.value = [];
+  showSpvOptions.value = false;
+  emit("clearSpv", props.line);
+}
+
+function onSpvBlur() {
+  if (hideSpvTimer) clearTimeout(hideSpvTimer);
+  hideSpvTimer = setTimeout(() => {
+    showSpvOptions.value = false;
+  }, 180);
+}
+
+onBeforeUnmount(() => {
+  if (spvSearchTimer) clearTimeout(spvSearchTimer);
+  if (hideSpvTimer) clearTimeout(hideSpvTimer);
+});
 
 function toNumber(value) {
   const n = Number(value);
@@ -115,6 +223,51 @@ function operatorLoginTitle(machine) {
         >
           Hapus
         </button>
+      </div>
+
+      <div class="spv-box" @mousedown.stop @click.stop>
+        <div class="spv-label">NIK SPV</div>
+
+        <div v-if="spvLabel" class="spv-current">
+          <strong>{{ spvLabel }}</strong>
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="spv-clear"
+            :disabled="spvSaving"
+            @click="clearSpv"
+          >
+            Hapus
+          </button>
+        </div>
+
+        <div v-else-if="!isAdmin" class="spv-empty">Belum di-set</div>
+
+        <div v-if="isAdmin" class="spv-search">
+          <input
+            type="text"
+            :value="spvQuery"
+            :disabled="spvSaving"
+            placeholder="Cari NIK / nama SPV..."
+            autocomplete="off"
+            @input="scheduleSpvSearch($event.target.value)"
+            @focus="showSpvOptions = spvOptions.length > 0"
+            @blur="onSpvBlur"
+          />
+
+          <small v-if="spvSearching" class="spv-hint">Mencari...</small>
+
+          <div v-if="showSpvOptions && spvOptions.length" class="spv-options">
+            <button
+              v-for="emp in spvOptions"
+              :key="emp.nik"
+              type="button"
+              @mousedown.prevent="selectSpvEmployee(emp)"
+            >
+              {{ employeeLabel(emp) }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <button
@@ -343,6 +496,125 @@ function operatorLoginTitle(machine) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 5px;
+}
+
+.spv-box {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(239, 246, 255, 0.95);
+  border: 1px solid #bfdbfe;
+  position: relative;
+  z-index: 5;
+}
+
+.spv-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #1e40af;
+  text-transform: uppercase;
+}
+
+.spv-current {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.spv-current strong {
+  font-size: 10px;
+  line-height: 1.25;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.spv-empty {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.spv-clear {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: #b91c1c;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.spv-search {
+  position: relative;
+}
+
+.spv-search input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 6px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.spv-hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  color: #64748b;
+}
+
+.spv-options {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 3px);
+  max-height: 140px;
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+  z-index: 20;
+}
+
+.spv-options button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 7px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.spv-options button:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.line-card:hover .spv-box {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.line-card:hover .spv-label,
+.line-card:hover .spv-empty,
+.line-card:hover .spv-current strong {
+  color: #ffffff;
+}
+
+.line-card:hover .spv-clear {
+  color: #fecaca;
 }
 
 .line-action-btn,

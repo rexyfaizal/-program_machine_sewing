@@ -31,6 +31,7 @@ const {
   saturdayShiftDefaults,
   draggingLine,
   dragOverLine,
+  spvSavingLine,
   form,
   factoryOptions,
   lineLayout,
@@ -39,6 +40,9 @@ const {
   makeLocation,
   loadData,
   machinesByLine,
+  spvByLine,
+  saveLineSpv,
+  clearLineSpv,
   selectFactory,
   openAddLineModal,
   openRenameLineModal,
@@ -104,6 +108,8 @@ function openDetailMachine(machine) {
       :dragging-line="draggingLine"
       :drag-over-line="dragOverLine"
       :machines-by-line="machinesByLine"
+      :spv-by-line="spvByLine"
+      :spv-saving-line="spvSavingLine"
       @add-line="openAddLineModal"
       @rename-line="openRenameLineModal"
       @delete-line="deleteLine"
@@ -116,6 +122,8 @@ function openDetailMachine(machine) {
       @drop-line="onLineDrop"
       @drag-end="onLineDragEnd"
       @open-detail-machine="openDetailMachine"
+      @save-spv="saveLineSpv"
+      @clear-spv="clearLineSpv"
     />
 
     <LineModal

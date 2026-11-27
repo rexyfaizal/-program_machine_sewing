@@ -23,6 +23,14 @@ defineProps({
     type: Function,
     required: true,
   },
+  spvByLine: {
+    type: Function,
+    default: () => null,
+  },
+  spvSavingLine: {
+    type: String,
+    default: "",
+  },
 });
 
 const emit = defineEmits([
@@ -38,6 +46,8 @@ const emit = defineEmits([
   "dropLine",
   "dragEnd",
   "openDetailMachine",
+  "saveSpv",
+  "clearSpv",
 ]);
 </script>
 
@@ -51,6 +61,8 @@ const emit = defineEmits([
     :is-admin="isAdmin"
     :dragging-line="draggingLine"
     :drag-over-line="dragOverLine"
+    :spv-assignment="spvByLine(line)"
+    :spv-saving="spvSavingLine === line"
     @rename-line="emit('renameLine', $event)"
     @delete-line="emit('deleteLine', $event)"
     @add-machine="emit('addMachine', $event)"
@@ -62,6 +74,8 @@ const emit = defineEmits([
     @drop-line="emit('dropLine', $event)"
     @drag-end="emit('dragEnd')"
     @open-detail-machine="emit('openDetailMachine', $event)"
+    @save-spv="emit('saveSpv', $event)"
+    @clear-spv="emit('clearSpv', $event)"
     />
 
     <AddLineCard

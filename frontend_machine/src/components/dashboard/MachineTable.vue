@@ -3,6 +3,7 @@ import MachineTablePagination from "./MachineTablePagination.vue";
 import MachineTableRows from "./MachineTableRows.vue";
 import MachineTableToolbar from "./MachineTableToolbar.vue";
 import { useMachineTable } from "../../composables/useMachineTable";
+import { useMachineTableColumnVisibility } from "../../composables/useMachineTableColumnVisibility";
 import "../../assets/machine-table.css";
 
 const props = defineProps({
@@ -99,13 +100,24 @@ const {
   startIndex,
   endIndex,
   pagedMachines,
-  totalCols,
   visiblePages,
   setSort,
   nextPage,
   prevPage,
   goToPage,
 } = useMachineTable(props);
+
+const {
+  columnVisibility,
+  pickerOpen,
+  pickerColumns,
+  hiddenCount,
+  totalCols,
+  toggleColumn,
+  showAllColumns,
+  togglePicker,
+  closePicker,
+} = useMachineTableColumnVisibility(props);
 </script>
 
 <template>
@@ -132,6 +144,10 @@ const {
       :show-shift-filter="props.showShiftFilter"
       :status-value="props.statusValue"
       :status-options="props.statusOptions"
+      :column-picker-open="pickerOpen"
+      :column-picker-columns="pickerColumns"
+      :column-visibility="columnVisibility"
+      :column-hidden-count="hiddenCount"
       @update:selected-date="emit('update:selectedDate', $event)"
       @update:start-date="emit('update:startDate', $event)"
       @update:end-date="emit('update:endDate', $event)"
@@ -141,6 +157,10 @@ const {
       @update:status-value="emit('update:statusValue', $event)"
       @date-change="emit('dateChange')"
       @download="emit('download')"
+      @toggle-column-picker="togglePicker"
+      @close-column-picker="closePicker"
+      @toggle-column="toggleColumn"
+      @show-all-columns="showAllColumns"
     />
 
     <MachineTableRows
@@ -151,6 +171,7 @@ const {
       :total-cols="totalCols"
       :sort-key="sortKey"
       :sort-dir="sortDir"
+      :column-visibility="columnVisibility"
       @set-sort="setSort"
       @edit="emit('edit', $event)"
       @chart="emit('chart', $event)"

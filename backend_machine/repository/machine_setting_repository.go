@@ -182,6 +182,134 @@ func nextJukiMachineID(used map[string]bool) string {
 	return fmt.Sprintf("JUKI-%d", len(used)+1)
 }
 
+// ImportMachineIDs upsert machine_id dari Excel (UUID + Machine ID).
+// Satu Machine ID tidak boleh dipakai lebih dari satu UUID.
+func (r *Repository) ImportMachineIDs(ctx context.Context, input models.MachineIDImportRequest) (models.MachineIDImportResponse, error) {
+	if err := r.EnsureMachineSettingSchema(ctx); err != nil {
+		return models.MachineIDImportResponse{}, err
+	}
+
+	settings, err := r.GetMachineSettings(ctx)
+	if err != nil {
+		return models.MachineIDImportResponse{}, err
+	}
+
+	ownerByMachineID := make(map[string]string)
+	for _, item := range settings {
+		id := strings.ToUpper(strings.TrimSpace(item.MachineID))
+		uuid := strings.TrimSpace(item.UUID)
+		if id == "" || uuid == "" {
+			continue
+		}
+		ownerByMachineID[id] = uuid
+	}
+
+	resp := models.MachineIDImportResponse{
+		Status: "ok",
+		Errors: make([]models.MachineIDImportError, 0),
+	}
+
+	seenUUID := make(map[string]int)
+	pendingOwner := make(map[string]string) // machineID upper -> uuid
+
+	type pendingRow struct {
+		uuid      string
+		machineID string
+		excelRow  int
+	}
+	pending := make([]pendingRow, 0)
+
+	for _, row := range input.Rows {
+		resp.Total++
+		uuid := strings.TrimSpace(row.UUID)
+		machineID := strings.TrimSpace(row.MachineID)
+		excelRow := row.ExcelRow
+
+		if uuid == "" && machineID == "" {
+			resp.Skipped++
+			continue
+		}
+
+		if uuid == "" || machineID == "" {
+			resp.Skipped++
+			resp.Errors = append(resp.Errors, models.MachineIDImportError{
+				ExcelRow:  excelRow,
+				UUID:      uuid,
+				MachineID: machineID,
+				Message:   "UUID dan Machine ID wajib diisi",
+			})
+			continue
+		}
+
+		uuidKey := normalizeMachineUUIDKey(uuid)
+		idKey := strings.ToUpper(machineID)
+
+		if prevRow, ok := seenUUID[uuidKey]; ok {
+			resp.Skipped++
+			resp.Errors = append(resp.Errors, models.MachineIDImportError{
+				ExcelRow:  excelRow,
+				UUID:      uuid,
+				MachineID: machineID,
+				Message:   fmt.Sprintf("UUID duplikat di file (baris %d)", prevRow),
+			})
+			continue
+		}
+		seenUUID[uuidKey] = excelRow
+
+		if otherUUID, ok := pendingOwner[idKey]; ok && !strings.EqualFold(otherUUID, uuid) {
+			resp.Skipped++
+			resp.Errors = append(resp.Errors, models.MachineIDImportError{
+				ExcelRow:  excelRow,
+				UUID:      uuid,
+				MachineID: machineID,
+				Message:   fmt.Sprintf("Machine ID sudah dipakai UUID lain di file (%s)", otherUUID),
+			})
+			continue
+		}
+
+		if owner, ok := ownerByMachineID[idKey]; ok && !strings.EqualFold(owner, uuid) {
+			resp.Skipped++
+			resp.Errors = append(resp.Errors, models.MachineIDImportError{
+				ExcelRow:  excelRow,
+				UUID:      uuid,
+				MachineID: machineID,
+				Message:   fmt.Sprintf("Machine ID sudah dipakai UUID lain di DB (%s)", owner),
+			})
+			continue
+		}
+
+		pendingOwner[idKey] = uuid
+		pending = append(pending, pendingRow{
+			uuid:      uuid,
+			machineID: machineID,
+			excelRow:  excelRow,
+		})
+	}
+
+	for _, row := range pending {
+		if err := r.upsertMachineIDOnly(ctx, row.uuid, row.machineID); err != nil {
+			resp.Skipped++
+			resp.Errors = append(resp.Errors, models.MachineIDImportError{
+				ExcelRow:  row.excelRow,
+				UUID:      row.uuid,
+				MachineID: row.machineID,
+				Message:   err.Error(),
+			})
+			continue
+		}
+		resp.Upserted++
+		ownerByMachineID[strings.ToUpper(row.machineID)] = row.uuid
+	}
+
+	resp.Message = fmt.Sprintf(
+		"Import Machine ID selesai. %d diupdate, %d dilewati dari %d baris.",
+		resp.Upserted,
+		resp.Skipped,
+		resp.Total,
+	)
+	return resp, nil
+}
+
 // EnsureMachineIDs mengisi machine_id kosong: seed mapping IE dulu, sisanya JUKI-xxxx baru.
 func (r *Repository) EnsureMachineIDs(ctx context.Context) error {
 	if err := r.EnsureMachineSettingSchema(ctx); err != nil {

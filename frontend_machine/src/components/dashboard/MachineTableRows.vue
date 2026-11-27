@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
   downTimeSec,
   formatHour,
+  formatMachineIdLines,
   formatMinute,
   getDisplayMachineName,
   getOperatorDisplayRows,
@@ -57,7 +58,16 @@ const props = defineProps({
     type: String,
     default: "desc",
   },
+  columnVisibility: {
+    type: Object,
+    default: () => ({}),
+  },
 });
+
+function showCol(key) {
+  if (key === "no") return true;
+  return props.columnVisibility?.[key] !== false;
+}
 
 const emit = defineEmits(["edit", "chart", "ask-ai", "why-bad", "set-sort"]);
 
@@ -119,7 +129,7 @@ onBeforeUnmount(() => {
     <table :class="{ 'user-table': !props.showActions }">
       <thead>
         <tr v-if="props.showActions">
-          <th>
+          <th v-if="showCol('no')">
             <button type="button" class="th-sort" @click="onSort('no')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -136,7 +146,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">No</span>
             </button>
           </th>
-          <th class="col-proses-id">
+          <th v-if="showCol('prosesId')" class="col-proses-id">
             <button type="button" class="th-sort" @click="onSort('prosesId')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -153,7 +163,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Proses ID</span>
             </button>
           </th>
-          <th class="left">
+          <th v-if="showCol('processName')" class="left">
             <button type="button" class="th-sort" @click="onSort('processName')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -170,7 +180,24 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Process Name</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('style')" class="col-style">
+            <button type="button" class="th-sort" @click="onSort('style')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'style' && sortDir === 'asc' }"
+                  @click.stop="onSort('style', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'style' && sortDir === 'desc' }"
+                  @click.stop="onSort('style', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">Style</span>
+            </button>
+          </th>
+          <th v-if="showCol('branch')">
             <button type="button" class="th-sort" @click="onSort('branch')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -187,7 +214,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Branch</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('location')">
             <button type="button" class="th-sort" @click="onSort('location')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -201,10 +228,27 @@ onBeforeUnmount(() => {
                   @click.stop="onSort('location', 'desc')"
                 >▼</span>
               </span>
-              <span class="th-sort__label">Location</span>
+              <span class="th-sort__label">Line</span>
             </button>
           </th>
-          <th class="col-machine-id">
+          <th v-if="showCol('spvId')" class="col-spv-id">
+            <button type="button" class="th-sort" @click="onSort('spvId')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'spvId' && sortDir === 'asc' }"
+                  @click.stop="onSort('spvId', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'spvId' && sortDir === 'desc' }"
+                  @click.stop="onSort('spvId', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">SPV_ID</span>
+            </button>
+          </th>
+          <th v-if="showCol('machineId')" class="col-machine-id">
             <button type="button" class="th-sort" @click="onSort('machineId')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -221,7 +265,24 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Machine ID</span>
             </button>
           </th>
-          <th class="col-nik">
+          <th v-if="showCol('mikaId')" class="col-mika-id">
+            <button type="button" class="th-sort" @click="onSort('mikaId')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'mikaId' && sortDir === 'asc' }"
+                  @click.stop="onSort('mikaId', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'mikaId' && sortDir === 'desc' }"
+                  @click.stop="onSort('mikaId', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">Mika ID</span>
+            </button>
+          </th>
+          <th v-if="showCol('nik')" class="col-nik">
             <button type="button" class="th-sort" @click="onSort('nik')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -235,10 +296,10 @@ onBeforeUnmount(() => {
                   @click.stop="onSort('nik', 'desc')"
                 >▼</span>
               </span>
-              <span class="th-sort__label">NIK</span>
+              <span class="th-sort__label">Operator_ID</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('namaOperator')">
             <button type="button" class="th-sort" @click="onSort('namaOperator')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -255,7 +316,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Nama Operator</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('operatorNote')">
             <button type="button" class="th-sort" @click="onSort('operatorNote')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -272,7 +333,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Operator Note</span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('productivity')" class="center">
             <button type="button" class="th-sort" @click="onSort('productivity')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -289,7 +350,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Utilisasi Mesin</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('status')">
             <button type="button" class="th-sort" @click="onSort('status')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -306,7 +367,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Status</span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('runtime')" class="center">
             <button type="button" class="th-sort" @click="onSort('runtime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -326,7 +387,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('procTime')" class="center">
             <button type="button" class="th-sort" @click="onSort('procTime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -346,7 +407,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('lossTime')" class="center">
             <button type="button" class="th-sort" @click="onSort('lossTime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -366,7 +427,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('output')">
             <button type="button" class="th-sort" @click="onSort('output')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -383,7 +444,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Output</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('uuid')">
             <button type="button" class="th-sort" @click="onSort('uuid')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -400,13 +461,13 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">UUID / Table</span>
             </button>
           </th>
-          <th class="center">Action</th>
-          <th class="center">AI</th>
-          <th class="center">Grafik</th>
+          <th v-if="showCol('action')" class="center">Action</th>
+          <th v-if="showCol('ai')" class="center">AI</th>
+          <th v-if="showCol('grafik')" class="center">Grafik</th>
         </tr>
 
         <tr v-else>
-          <th>
+          <th v-if="showCol('no')">
             <button type="button" class="th-sort" @click="onSort('no')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -423,7 +484,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">No</span>
             </button>
           </th>
-          <th class="col-proses-id">
+          <th v-if="showCol('prosesId')" class="col-proses-id">
             <button type="button" class="th-sort" @click="onSort('prosesId')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -440,7 +501,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Proses ID</span>
             </button>
           </th>
-          <th class="left">
+          <th v-if="showCol('processName')" class="left">
             <button type="button" class="th-sort" @click="onSort('processName')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -457,7 +518,24 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Process Name</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('style')" class="col-style">
+            <button type="button" class="th-sort" @click="onSort('style')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'style' && sortDir === 'asc' }"
+                  @click.stop="onSort('style', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'style' && sortDir === 'desc' }"
+                  @click.stop="onSort('style', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">Style</span>
+            </button>
+          </th>
+          <th v-if="showCol('branch')">
             <button type="button" class="th-sort" @click="onSort('branch')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -474,7 +552,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Branch</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('location')">
             <button type="button" class="th-sort" @click="onSort('location')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -488,10 +566,27 @@ onBeforeUnmount(() => {
                   @click.stop="onSort('location', 'desc')"
                 >▼</span>
               </span>
-              <span class="th-sort__label">Location</span>
+              <span class="th-sort__label">Line</span>
             </button>
           </th>
-          <th class="col-machine-id">
+          <th v-if="showCol('spvId')" class="col-spv-id">
+            <button type="button" class="th-sort" @click="onSort('spvId')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'spvId' && sortDir === 'asc' }"
+                  @click.stop="onSort('spvId', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'spvId' && sortDir === 'desc' }"
+                  @click.stop="onSort('spvId', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">SPV_ID</span>
+            </button>
+          </th>
+          <th v-if="showCol('machineId')" class="col-machine-id">
             <button type="button" class="th-sort" @click="onSort('machineId')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -508,7 +603,24 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Machine ID</span>
             </button>
           </th>
-          <th class="col-nik">
+          <th v-if="showCol('mikaId')" class="col-mika-id">
+            <button type="button" class="th-sort" @click="onSort('mikaId')">
+              <span class="th-sort__icons" aria-hidden="true">
+                <span
+                  class="th-sort__asc"
+                  :class="{ active: sortKey === 'mikaId' && sortDir === 'asc' }"
+                  @click.stop="onSort('mikaId', 'asc')"
+                >▲</span>
+                <span
+                  class="th-sort__desc"
+                  :class="{ active: sortKey === 'mikaId' && sortDir === 'desc' }"
+                  @click.stop="onSort('mikaId', 'desc')"
+                >▼</span>
+              </span>
+              <span class="th-sort__label">Mika ID</span>
+            </button>
+          </th>
+          <th v-if="showCol('nik')" class="col-nik">
             <button type="button" class="th-sort" @click="onSort('nik')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -522,10 +634,10 @@ onBeforeUnmount(() => {
                   @click.stop="onSort('nik', 'desc')"
                 >▼</span>
               </span>
-              <span class="th-sort__label">NIK</span>
+              <span class="th-sort__label">Operator_ID</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('namaOperator')">
             <button type="button" class="th-sort" @click="onSort('namaOperator')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -542,7 +654,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Nama Operator</span>
             </button>
           </th>
-          <th>
+          <th v-if="showCol('operatorNote')">
             <button type="button" class="th-sort" @click="onSort('operatorNote')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -559,7 +671,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Operator Note</span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('runtime')" class="center">
             <button type="button" class="th-sort" @click="onSort('runtime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -579,7 +691,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('procTime')" class="center">
             <button type="button" class="th-sort" @click="onSort('procTime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -599,7 +711,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('lossTime')" class="center">
             <button type="button" class="th-sort" @click="onSort('lossTime')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -619,7 +731,7 @@ onBeforeUnmount(() => {
               </span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('productivity')" class="center">
             <button type="button" class="th-sort" @click="onSort('productivity')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -636,7 +748,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Utilisasi Mesin</span>
             </button>
           </th>
-          <th class="center">
+          <th v-if="showCol('status')" class="center">
             <button type="button" class="th-sort" @click="onSort('status')">
               <span class="th-sort__icons" aria-hidden="true">
                 <span
@@ -653,7 +765,7 @@ onBeforeUnmount(() => {
               <span class="th-sort__label">Status</span>
             </button>
           </th>
-          <th class="center">Grafik</th>
+          <th v-if="showCol('grafik')" class="center">Grafik</th>
         </tr>
       </thead>
 
@@ -664,11 +776,11 @@ onBeforeUnmount(() => {
           @contextmenu="onRowContextMenu($event, m)"
         >
           <template v-if="props.showActions">
-            <td class="right">
+            <td v-if="showCol('no')" class="right">
               {{ m.__rowNo || props.startIndex + index + 1 }}
             </td>
 
-            <td class="col-proses-id">
+            <td v-if="showCol('prosesId')" class="col-proses-id">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -681,34 +793,44 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-name">{{ m.operatorProsesId || "-" }}</strong>
             </td>
 
-            <td>
+            <td v-if="showCol('processName')">
               <strong>{{ getDisplayMachineName(m) }}</strong>
 
               <small v-if="!isUsingProcessName(m) && m.customName">
                 Original: {{ m.originalMachineName || "-" }}
               </small>
-
-              <small
-                v-if="m.operatorStyleName && isUsingProcessName(m)"
-                class="style-line"
-              >
-                Style: {{ m.operatorStyleName }}
-              </small>
             </td>
 
-            <td>
+            <td v-if="showCol('style')" class="col-style">
+              {{ m.operatorStyleName || "-" }}
+            </td>
+
+            <td v-if="showCol('branch')">
               <strong>{{ getBranchLabel(m) }}</strong>
             </td>
 
-            <td>
+            <td v-if="showCol('location')">
               <strong>{{ getLocationLineLabel(m) }}</strong>
             </td>
 
-            <td class="col-machine-id">
-              <strong>{{ m.machineId || "-" }}</strong>
+            <td v-if="showCol('spvId')" class="col-spv-id" :title="m.spvName || ''">
+              <strong>{{ m.spvId || "-" }}</strong>
             </td>
 
-            <td class="col-nik">
+            <td v-if="showCol('machineId')" class="col-machine-id" :title="m.machineId || ''">
+              <div class="machine-id-stack">
+                <span
+                  v-for="(line, lineIndex) in formatMachineIdLines(m.machineId)"
+                  :key="`${m.uuid || index}-mid-${lineIndex}`"
+                >
+                  {{ line }}
+                </span>
+              </div>
+            </td>
+
+            <td v-if="showCol('mikaId')" class="col-mika-id">-</td>
+
+            <td v-if="showCol('nik')" class="col-nik">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -721,7 +843,7 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-empty">-</strong>
             </td>
 
-            <td class="operator-cell">
+            <td v-if="showCol('namaOperator')" class="operator-cell">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -747,7 +869,7 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-name">Not logged in</strong>
             </td>
 
-            <td class="note-cell">
+            <td v-if="showCol('operatorNote')" class="note-cell">
               <template v-if="getOperatorNoteItems(m).length">
                 <div
                   v-for="(note, noteIndex) in getOperatorNoteItems(m)"
@@ -768,48 +890,48 @@ onBeforeUnmount(() => {
               <span v-else>-</span>
             </td>
 
-            <td class="center productivity-cell">
+            <td v-if="showCol('productivity')" class="center productivity-cell">
               {{ Number(m.productivity || 0).toFixed(2) }}%
             </td>
 
-            <td>
+            <td v-if="showCol('status')">
               <span class="badge" :class="statusClass(m.status)">
                 {{ m.status || "BAD" }}
               </span>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('runtime')" class="center time-cell">
               {{ formatHour(m.runtime) }}
               <small>{{ formatMinute(m.runtime) }}</small>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('procTime')" class="center time-cell">
               {{ formatHour(m.procTime) }}
               <small>{{ formatMinute(m.procTime) }}</small>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('lossTime')" class="center time-cell">
               {{ formatHour(downTimeSec(m)) }}
               <small>{{ formatMinute(downTimeSec(m)) }}</small>
             </td>
 
-            <td class="right">
+            <td v-if="showCol('output')" class="right">
               <strong>{{ m.output || 0 }}</strong>
               <small>{{ m.complete || 0 }} complete</small>
             </td>
 
-            <td class="mono">
+            <td v-if="showCol('uuid')" class="mono">
               {{ m.uuid || "-" }}
               <small>{{ m.tableName || "-" }}</small>
             </td>
 
-            <td class="center">
+            <td v-if="showCol('action')" class="center">
               <button class="btn-edit" type="button" @click="editMachine(m)">
                 Edit
               </button>
             </td>
 
-            <td class="center ai-actions">
+            <td v-if="showCol('ai')" class="center ai-actions">
               <button
                 class="btn-ai"
                 type="button"
@@ -828,7 +950,7 @@ onBeforeUnmount(() => {
               </button>
             </td>
 
-            <td class="center">
+            <td v-if="showCol('grafik')" class="center">
               <button class="btn-chart" type="button" @click="chartMachine(m)">
                 Grafik
               </button>
@@ -836,11 +958,11 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else>
-            <td class="right">
+            <td v-if="showCol('no')" class="right">
               {{ m.__rowNo || props.startIndex + index + 1 }}
             </td>
 
-            <td class="col-proses-id">
+            <td v-if="showCol('prosesId')" class="col-proses-id">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -853,30 +975,40 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-name">{{ m.operatorProsesId || "-" }}</strong>
             </td>
 
-            <td>
+            <td v-if="showCol('processName')">
               <strong>{{ getDisplayMachineName(m) }}</strong>
-
-              <small
-                v-if="m.operatorStyleName && isUsingProcessName(m)"
-                class="style-line"
-              >
-                Style: {{ m.operatorStyleName }}
-              </small>
             </td>
 
-            <td>
+            <td v-if="showCol('style')" class="col-style">
+              {{ m.operatorStyleName || "-" }}
+            </td>
+
+            <td v-if="showCol('branch')">
               {{ getBranchLabel(m) }}
             </td>
 
-            <td>
+            <td v-if="showCol('location')">
               {{ getLocationLineLabel(m) }}
             </td>
 
-            <td class="col-machine-id">
-              {{ m.machineId || "-" }}
+            <td v-if="showCol('spvId')" class="col-spv-id" :title="m.spvName || ''">
+              {{ m.spvId || "-" }}
             </td>
 
-            <td class="col-nik">
+            <td v-if="showCol('machineId')" class="col-machine-id" :title="m.machineId || ''">
+              <div class="machine-id-stack">
+                <span
+                  v-for="(line, lineIndex) in formatMachineIdLines(m.machineId)"
+                  :key="`${m.uuid || index}-user-mid-${lineIndex}`"
+                >
+                  {{ line }}
+                </span>
+              </div>
+            </td>
+
+            <td v-if="showCol('mikaId')" class="col-mika-id">-</td>
+
+            <td v-if="showCol('nik')" class="col-nik">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -889,7 +1021,7 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-empty">-</strong>
             </td>
 
-            <td class="operator-cell">
+            <td v-if="showCol('namaOperator')" class="operator-cell">
               <template v-if="getOperatorDisplayRows(m).length">
                 <div
                   v-for="(op, opIndex) in getOperatorDisplayRows(m)"
@@ -915,7 +1047,7 @@ onBeforeUnmount(() => {
               <strong v-else class="operator-name">Not logged in</strong>
             </td>
 
-            <td class="note-cell">
+            <td v-if="showCol('operatorNote')" class="note-cell">
               <template v-if="getOperatorNoteItems(m).length">
                 <div
                   v-for="(note, noteIndex) in getOperatorNoteItems(m)"
@@ -936,32 +1068,32 @@ onBeforeUnmount(() => {
               <span v-else>-</span>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('runtime')" class="center time-cell">
               {{ formatHour(m.runtime) }}
               <small>{{ formatMinute(m.runtime) }}</small>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('procTime')" class="center time-cell">
               {{ formatHour(m.procTime) }}
               <small>{{ formatMinute(m.procTime) }}</small>
             </td>
 
-            <td class="center time-cell">
+            <td v-if="showCol('lossTime')" class="center time-cell">
               {{ formatHour(downTimeSec(m)) }}
               <small>{{ formatMinute(downTimeSec(m)) }}</small>
             </td>
 
-            <td class="center productivity-cell">
+            <td v-if="showCol('productivity')" class="center productivity-cell">
               {{ Number(m.productivity || 0).toFixed(2) }}%
             </td>
 
-            <td class="center">
+            <td v-if="showCol('status')" class="center">
               <span class="badge" :class="statusClass(m.status)">
                 {{ m.status || "BAD" }}
               </span>
             </td>
 
-            <td class="center">
+            <td v-if="showCol('grafik')" class="center">
               <button class="btn-chart" type="button" @click="chartMachine(m)">
                 Grafik
               </button>

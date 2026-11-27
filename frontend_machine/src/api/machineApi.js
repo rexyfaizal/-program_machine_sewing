@@ -93,6 +93,30 @@ export async function getMachineSettings() {
   return normalizeList(data);
 }
 
+export async function importMachineIds(rows) {
+  const payloadRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      uuid: String(row?.uuid || "").trim(),
+      machineId: String(row?.machineId || "").trim(),
+      excelRow: Number(row?.excelRowNumber || row?.excelRow || 0) || 0,
+    }))
+    .filter((row) => row.uuid && row.machineId);
+
+  if (!payloadRows.length) {
+    throw new Error("Tidak ada baris Machine ID yang valid untuk diimport.");
+  }
+
+  const res = await fetch("/api/machine-settings/import-ids", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rows: payloadRows }),
+  });
+
+  return await readResponse(res);
+}
+
 export async function saveMachineSetting(payload) {
   if (!payload?.uuid) {
     throw new Error("UUID mesin wajib diisi.");
@@ -224,6 +248,53 @@ export async function saveShiftSettings(payload) {
             shifts: Array.isArray(line.shifts) ? line.shifts : [],
           }))
         : [],
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function getSpvLineAssignments(factory = "") {
+  const params = new URLSearchParams();
+  const factoryText = String(factory || "").trim();
+  if (factoryText) {
+    params.set("factory", factoryText);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/spv-line-assignments${query}`);
+  return await readResponse(res);
+}
+
+export async function saveSpvLineAssignment(payload) {
+  const location = String(payload?.location || "").trim();
+  if (!location) {
+    throw new Error("Location wajib diisi.");
+  }
+
+  const res = await fetch("/api/spv-line-assignments", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      location,
+      spvNik: String(payload?.spvNik || "").trim(),
+    }),
+  });
+
+  return await readResponse(res);
+}
+
+export async function renameSpvLineAssignment(oldLocation, newLocation) {
+  const res = await fetch("/api/spv-line-assignments/rename", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      oldLocation: String(oldLocation || "").trim(),
+      newLocation: String(newLocation || "").trim(),
     }),
   });
 

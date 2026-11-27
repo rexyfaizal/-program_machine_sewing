@@ -5,6 +5,10 @@ import {
   isDateInShiftWindow,
   resolveLineShiftForLocation,
 } from "./gm3Shift";
+import {
+  formatSpvId,
+  resolveSpvAssignment,
+} from "./spvLineAssignment";
 
 export function toNumber(value) {
   const n = Number(value);
@@ -1225,7 +1229,8 @@ export function normalizeRangeItem(
   getManualSettingByUuid = () => null,
   shiftCode = "",
   shiftConfigMap = new Map(),
-  shiftMetricsMap = new Map()
+  shiftMetricsMap = new Map(),
+  spvAssignmentMap = new Map()
 ) {
   const uuid = String(getVal(row, "uuid", "UUID") || "");
   const setting = getManualSettingByUuid(uuid);
@@ -1306,6 +1311,8 @@ export function normalizeRangeItem(
       explicitDisabled: !lineShift.useShift,
     });
 
+  const spv = resolveSpvAssignment(location, spvAssignmentMap);
+
   return {
     dateText,
     tanggal: formatExcelDate(dateText),
@@ -1316,6 +1323,7 @@ export function normalizeRangeItem(
     styleName: operatorStyleName,
     location,
     locationGroup,
+    spvId: formatSpvId(spv),
     shiftCode: resolvedShiftCode,
     shiftName: resolvedShiftName,
     useShift: Boolean(lineShift.useShift),
@@ -1447,7 +1455,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
         ...baseRow,
         Mesin: fallbackMesin,
         Style: fallbackStyle,
-        "Operator NIK": "",
+        Operator_ID: "",
         "Operator Name": "",
         "Keterangan Shift": "",
         "Waktu Pemakaian": "",
@@ -1512,6 +1520,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       Mesin: showMachineIdentity ? processName || fallbackMesin : "",
       Style: showMachineIdentity ? styleName || fallbackStyle : "",
       UUID: showMachineIdentity ? baseRow.UUID || "" : "",
+      SPV_ID: showMachineIdentity ? baseRow.SPV_ID || "" : "",
       Output: showMachineIdentity ? baseRow.Output : "",
       "Avg Proses": showMachineIdentity ? baseRow["Avg Proses"] : "",
       "Power On Duration": showMachineIdentity
@@ -1521,7 +1530,7 @@ export function expandOperatorRows(baseRow, operatorRows, options = {}) {
       "Loss Time": showMachineIdentity ? baseRow["Loss Time"] : "",
       Produktivitas: showMachineIdentity ? baseRow.Produktivitas : "",
       Status: showMachineIdentity ? baseRow.Status : "",
-      "Operator NIK": isFirstOfSession ? operatorNik : "",
+      Operator_ID: isFirstOfSession ? operatorNik : "",
       "Operator Name": isFirstOfSession ? operatorName : "",
       "Keterangan Shift": isFirstOfSession ? shiftTag : "",
       "Waktu Pemakaian": isFirstOfSession ? usageText : "",
@@ -1562,7 +1571,8 @@ export function buildRangeDetailRows(items, shiftCode = "") {
         Hari: item.hari,
         Shift: shift,
         Area: area,
-        Location: item.location,
+        Line: item.location,
+        SPV_ID: item.spvId || "",
         Mesin: item.mesin,
         Style: item.styleName || "",
         UUID: item.uuid || "",
@@ -1604,6 +1614,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         shift,
         area,
         location: item.location,
+        spvId: item.spvId || "",
         mesin: item.mesin,
         styleName: item.styleName || "",
         originalMesin: item.originalMesin || item.mesin,
@@ -1654,6 +1665,9 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
     }
     if (item.location) {
       current.location = item.location;
+    }
+    if (item.spvId) {
+      current.spvId = item.spvId;
     }
     if (item.useShift) {
       current.useShift = true;
@@ -1726,6 +1740,7 @@ export function buildRangeSummaryBaseRows(items, rangeStart, rangeEnd, shiftCode
         shift: item.shift,
         area: item.area,
         location: item.location,
+        spvId: item.spvId || "",
         mesin: item.mesin,
         styleName: item.styleName,
         originalMesin: item.originalMesin,
@@ -1763,7 +1778,8 @@ export function buildRangeSummaryRows(summaryBaseRows) {
       Periode: item.periode,
       Shift: item.shift,
       Area: item.area,
-      Location: item.location,
+      Line: item.location,
+      SPV_ID: item.spvId || "",
       Mesin: item.mesin,
       Style: item.styleName || "",
       UUID: item.uuid || "",
@@ -1788,22 +1804,22 @@ export function buildRangeSummaryRows(summaryBaseRows) {
 export function createRangeWorkbook(summaryRows, detailRows) {
   const workbook = XLSX.utils.book_new();
 
-  // Base 19/20 + 11 kolom loss breakdown (waktu + % + remarks other)
-  const summaryCols = 30;
-  const detailCols = 31;
+  // Base + SPV_ID + 11 kolom loss breakdown (waktu + % + remarks other)
+  const summaryCols = 31;
+  const detailCols = 32;
 
   const lossColWidths = [14, 12, 14, 12, 12, 10, 12, 10, 12, 10, 28];
 
   const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
   setWorksheetWidth(summarySheet, [
-    24, 28, 10, 18, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    24, 28, 10, 18, 14, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
     ...lossColWidths,
   ]);
   setAutoFilter(summarySheet, summaryRows.length, summaryCols);
 
   const detailSheet = XLSX.utils.json_to_sheet(detailRows);
   setWorksheetWidth(detailSheet, [
-    12, 12, 28, 10, 18, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
+    12, 12, 28, 10, 18, 14, 42, 24, 22, 12, 12, 18, 16, 14, 14, 12, 14, 28, 16, 36, 50,
     ...lossColWidths,
   ]);
   setAutoFilter(detailSheet, detailRows.length, detailCols);

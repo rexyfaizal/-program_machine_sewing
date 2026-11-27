@@ -108,6 +108,108 @@
   min-width: 130px;
 }
 
+.machine-table-panel .column-picker {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.machine-table-panel .column-picker__btn {
+  height: 100%;
+  min-height: 42px;
+  min-width: 96px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.machine-table-panel .column-picker__btn.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.machine-table-panel .column-picker__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.machine-table-panel .column-picker__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(280px, 78vw);
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.machine-table-panel .column-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.machine-table-panel .column-picker__head strong {
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.machine-table-panel .column-picker__reset {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.machine-table-panel .column-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 12px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.machine-table-panel .column-picker__item input {
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+}
+
 .machine-table-panel .range-line {
   margin: 0 0 12px;
   padding: 0 4px;
@@ -346,12 +448,55 @@
   font-size: 12px;
 }
 
-.machine-table-panel .col-machine-id {
-  width: 110px;
+.machine-table-panel .col-style {
+  width: 120px;
   min-width: 96px;
-  max-width: 130px;
+  max-width: 160px;
   white-space: nowrap;
   font-size: 12px;
+}
+
+.machine-table-panel .col-spv-id {
+  width: 100px;
+  min-width: 88px;
+  max-width: 120px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.machine-table-panel .col-machine-id {
+  width: 120px;
+  min-width: 100px;
+  max-width: 150px;
+  white-space: normal;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.machine-table-panel .col-mika-id {
+  width: 100px;
+  min-width: 88px;
+  max-width: 120px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.machine-table-panel .machine-id-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+  font-size: 12px;
+  font-weight: 400;
+  color: inherit;
+}
+
+.machine-table-panel .machine-id-stack strong,
+.machine-table-panel .machine-id-stack span {
+  font-size: inherit;
+  font-weight: 400;
+  color: inherit;
+  line-height: inherit;
 }
 
 .machine-table-panel .operator-cell {

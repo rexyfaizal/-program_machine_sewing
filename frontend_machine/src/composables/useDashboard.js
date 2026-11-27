@@ -5,6 +5,7 @@ import {
   getMachineSettings,
   getLineShiftConfig,
   getProductivity,
+  getSpvLineAssignments,
 } from "../api/machineApi";
 import { isAutoLogoutText } from "../utils/dashboardExportExcel";
 import {
@@ -22,6 +23,11 @@ import {
   getGM3ShiftWindow,
   resolveLineShiftForLocation,
 } from "../utils/gm3Shift";
+import {
+  buildSpvAssignmentMap,
+  formatSpvId,
+  resolveSpvAssignment,
+} from "../utils/spvLineAssignment";
 
 const WORK_SECONDS_PER_DAY = 28800;
 
@@ -33,6 +39,7 @@ export function useDashboard() {
   const machineSettings = ref(new Map());
   const activeOperatorMap = ref(new Map());
   const shiftConfigMap = ref(new Map());
+  const spvAssignmentMap = ref(new Map());
   const loadedDashboardDate = ref("");
   const loadedDashboardShift = ref("");
 
@@ -976,6 +983,14 @@ export function useDashboard() {
       const adjusted = applyProcRuntimeTolerance(runtime, procTime);
       const effectiveProcTime = adjusted.procTime;
 
+      const spvAssignment = resolveSpvAssignment(
+        location,
+        spvAssignmentMap.value
+      );
+      const spvNik = String(spvAssignment?.spvNik || "").trim();
+      const spvName = String(spvAssignment?.spvName || "").trim();
+      const spvId = formatSpvId(spvAssignment);
+
       const okProcTime = toNumber(
         getVal(
           row,
@@ -1081,6 +1096,9 @@ export function useDashboard() {
 
         pic: operator?.operatorLabel || "",
         spv: setting?.spv || "",
+        spvId,
+        spvNik,
+        spvName,
 
         operatorNik: operator?.operatorNik || "",
         operatorName: operator?.operatorName || "",
@@ -1229,6 +1247,17 @@ export function useDashboard() {
         customName: setting?.customName || "",
         machineId: setting?.machineId || "",
         location: item.location || "-",
+        ...(() => {
+          const spv = resolveSpvAssignment(
+            item.location || "-",
+            spvAssignmentMap.value
+          );
+          return {
+            spvId: formatSpvId(spv),
+            spvNik: String(spv?.spvNik || "").trim(),
+            spvName: String(spv?.spvName || "").trim(),
+          };
+        })(),
         manualPic: setting?.pic || "",
         manualSpv: setting?.spv || "",
         ip: "",
@@ -1313,10 +1342,12 @@ export function useDashboard() {
     loadedDashboardShift.value = requestShift;
 
     const request = (async () => {
-      const [settingsResult, shiftConfigResult] = await Promise.allSettled([
-        getMachineSettings(),
-        getLineShiftConfig(""),
-      ]);
+      const [settingsResult, shiftConfigResult, spvResult] =
+        await Promise.allSettled([
+          getMachineSettings(),
+          getLineShiftConfig(""),
+          getSpvLineAssignments(""),
+        ]);
 
       if (requestSeq !== dashboardRequestSeq) return;
 
@@ -1324,6 +1355,15 @@ export function useDashboard() {
         machineSettings.value = buildMachineSettingsMap(settingsResult.value);
       } else {
         console.warn("Gagal load machine settings:", settingsResult.reason);
+      }
+
+      if (spvResult.status === "fulfilled") {
+        spvAssignmentMap.value = buildSpvAssignmentMap(
+          spvResult.value?.assignments
+        );
+      } else {
+        console.warn("Gagal load SPV line assignments:", spvResult.reason);
+        spvAssignmentMap.value = new Map();
       }
 
       if (shiftConfigResult.status === "fulfilled") {
@@ -1458,13 +1498,19 @@ export function useDashboard() {
     loadedDashboardShift.value = requestShift;
 
     const request = (async () => {
-      const [settingsResult, operatorResult, productivityResult, shiftConfigResult] =
-        await Promise.allSettled([
-          getMachineSettings(),
-          getMachineOperatorReport(requestDate),
-          getProductivity(requestDate, { shift: requestShift }),
-          getLineShiftConfig(""),
-        ]);
+      const [
+        settingsResult,
+        operatorResult,
+        productivityResult,
+        shiftConfigResult,
+        spvResult,
+      ] = await Promise.allSettled([
+        getMachineSettings(),
+        getMachineOperatorReport(requestDate),
+        getProductivity(requestDate, { shift: requestShift }),
+        getLineShiftConfig(""),
+        getSpvLineAssignments(""),
+      ]);
 
       if (requestSeq !== dashboardRequestSeq) return;
 
@@ -1481,6 +1527,15 @@ export function useDashboard() {
         shiftConfigMap.value = buildLineShiftConfigMap(lines);
       } else {
         console.warn("Gagal load line shift config:", shiftConfigResult.reason);
+      }
+
+      if (spvResult.status === "fulfilled") {
+        spvAssignmentMap.value = buildSpvAssignmentMap(
+          spvResult.value?.assignments
+        );
+      } else {
+        console.warn("Gagal load SPV line assignments:", spvResult.reason);
+        spvAssignmentMap.value = new Map();
       }
 
       if (operatorResult.status === "fulfilled") {

@@ -38,6 +38,28 @@ export function getDisplayMachineName(machine) {
   return machine?.displayMachineName || machine?.machineName || "-";
 }
 
+/**
+ * Tampilkan Machine ID 2 baris jika ada model + nomor:
+ * "JUKI PS-800 8045-0051" → ["JUKI PS-800", "8045-0051"]
+ * "JUKI-0049" → ["JUKI-0049"]
+ */
+export function formatMachineIdLines(machineId) {
+  const text = String(machineId || "").trim();
+  if (!text) return ["-"];
+
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return [text];
+
+  const last = parts[parts.length - 1];
+  // Nomor/serial biasanya diawali angka (contoh: 8045-0051).
+  if (!/^\d/.test(last)) return [text];
+
+  const model = parts.slice(0, -1).join(" ");
+  if (!model) return [text];
+
+  return [model, last];
+}
+
 export function isUsingProcessName(machine) {
   const display = String(machine?.displayMachineName || "").trim();
   const original = String(machine?.machineName || "").trim();

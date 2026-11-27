@@ -3,6 +3,7 @@ import {
   getLineShiftConfig,
   getMachineOperatorReport,
   getProductivity,
+  getSpvLineAssignments,
 } from "../api/machineApi";
 import {
   buildOperatorExportMap,
@@ -26,6 +27,7 @@ import {
   buildLineShiftConfigMap,
   factoryHasEnabledShift,
 } from "../utils/gm3Shift";
+import { buildSpvAssignmentMap } from "../utils/spvLineAssignment";
 
 export function useDashboardExcelExport({
   selectedDate,
@@ -129,6 +131,14 @@ export function useDashboardExcelExport({
 
       const shiftParam = resolveExportShiftParam(configMap);
 
+      let spvAssignmentMap = new Map();
+      try {
+        const spvData = await getSpvLineAssignments("");
+        spvAssignmentMap = buildSpvAssignmentMap(spvData?.assignments);
+      } catch (err) {
+        console.warn("Gagal load SPV assignments untuk export:", err);
+      }
+
       const results = await Promise.all(
         dates.map(async (dateText) => {
           const selectedShift = String(shiftParam || "").trim().toUpperCase();
@@ -189,7 +199,8 @@ export function useDashboardExcelExport({
               getManualSettingByUuid,
               shiftParam,
               configMap,
-              shiftMetricsMap
+              shiftMetricsMap,
+              spvAssignmentMap
             )
           );
         })

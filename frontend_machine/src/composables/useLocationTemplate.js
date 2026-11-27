@@ -5,6 +5,9 @@ import {
   getProductivity,
   getLineShiftConfig,
   getShiftSettings,
+  getSpvLineAssignments,
+  renameSpvLineAssignment,
+  saveSpvLineAssignment,
   saveShiftSettings,
   saveMachineSetting,
 } from "../api/machineApi";
@@ -45,6 +48,10 @@ export function useLocationTemplate() {
 
   const draggingLine = ref("");
   const dragOverLine = ref("");
+
+  /** @type {import('vue').Ref<Map<string, { location: string, spvNik: string, spvName: string }>>} */
+  const spvAssignmentMap = ref(new Map());
+  const spvSavingLine = ref("");
 
   const form = ref({
     uuid: "",
@@ -522,15 +529,107 @@ export function useLocationTemplate() {
     }
   }
 
+  function normalizeLocationKey(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+  }
+
+  function spvByLine(line) {
+    const key = normalizeLocationKey(
+      makeLocation(selectedFactory.value, line)
+    );
+    return spvAssignmentMap.value.get(key) || null;
+  }
+
+  async function loadSpvAssignments(factory = selectedFactory.value) {
+    const factoryKey = String(factory || "").trim().toUpperCase();
+    if (!factoryKey) {
+      spvAssignmentMap.value = new Map();
+      return;
+    }
+
+    try {
+      const data = await getSpvLineAssignments(factoryKey);
+      const rows = Array.isArray(data?.assignments) ? data.assignments : [];
+      const map = new Map();
+
+      rows.forEach((row) => {
+        const location = String(row?.location || "").trim();
+        const spvNik = String(row?.spvNik || "").trim();
+        if (!location || !spvNik) return;
+
+        map.set(normalizeLocationKey(location), {
+          location,
+          spvNik,
+          spvName: String(row?.spvName || "").trim(),
+          branchdetail: String(row?.branchdetail || "").trim(),
+        });
+      });
+
+      spvAssignmentMap.value = map;
+    } catch (err) {
+      console.warn("Gagal load SPV line assignments:", err);
+      spvAssignmentMap.value = new Map();
+    }
+  }
+
+  async function saveLineSpv({ line, spvNik }) {
+    if (!isAdmin.value) return;
+
+    const lineName = String(line || "").trim();
+    if (!lineName) return;
+
+    spvSavingLine.value = lineName;
+    try {
+      const location = makeLocation(selectedFactory.value, lineName);
+      const saved = await saveSpvLineAssignment({
+        location,
+        spvNik: String(spvNik || "").trim(),
+      });
+
+      const key = normalizeLocationKey(location);
+      const next = new Map(spvAssignmentMap.value);
+
+      if (saved?.isActive === false || !String(saved?.spvNik || "").trim()) {
+        next.delete(key);
+      } else {
+        next.set(key, {
+          location,
+          spvNik: String(saved.spvNik || "").trim(),
+          spvName: String(saved.spvName || "").trim(),
+          branchdetail: String(saved.branchdetail || "").trim(),
+        });
+      }
+
+      spvAssignmentMap.value = next;
+      showNotice(
+        String(spvNik || "").trim()
+          ? `SPV ${lineName} tersimpan.`
+          : `SPV ${lineName} dihapus.`
+      );
+    } catch (err) {
+      showNotice(`Gagal simpan SPV: ${err.message}`);
+    } finally {
+      spvSavingLine.value = "";
+    }
+  }
+
+  async function clearLineSpv(line) {
+    await saveLineSpv({ line, spvNik: "" });
+  }
+
   async function loadData() {
     loading.value = true;
     errorMessage.value = "";
 
     try {
       // Settings wajib; shift config opsional (jangan blokir jika endpoint belum siap).
-      const [settingsResult, shiftResult] = await Promise.allSettled([
+      const [settingsResult, shiftResult, spvResult] = await Promise.allSettled([
         loadMachineSettings(),
         loadShiftConfigs(selectedFactory.value),
+        loadSpvAssignments(selectedFactory.value),
       ]);
 
       if (settingsResult.status === "rejected") {
@@ -539,6 +638,10 @@ export function useLocationTemplate() {
 
       if (shiftResult.status === "rejected") {
         console.warn("Gagal load shift settings saat loadData:", shiftResult.reason);
+      }
+
+      if (spvResult.status === "rejected") {
+        console.warn("Gagal load SPV assignments saat loadData:", spvResult.reason);
       }
 
       const useShift =
@@ -650,8 +753,9 @@ export function useLocationTemplate() {
     );
   }
 
-  function selectFactory(factory) {
+  async function selectFactory(factory) {
     selectedFactory.value = factory;
+    await loadSpvAssignments(factory);
   }
 
   function nextLineName(factory) {
@@ -752,6 +856,15 @@ export function useLocationTemplate() {
           });
         }
 
+        try {
+          await renameSpvLineAssignment(
+            makeLocation(factory, oldName),
+            makeLocation(factory, name)
+          );
+        } catch (err) {
+          console.warn("Gagal rename SPV assignment:", err);
+        }
+
         showNotice("Nama line berhasil diubah.");
       }
 
@@ -793,6 +906,16 @@ export function useLocationTemplate() {
       );
 
       await saveLineLayout(factory);
+
+      try {
+        await saveSpvLineAssignment({
+          location: makeLocation(factory, line),
+          spvNik: "",
+        });
+      } catch (err) {
+        console.warn("Gagal clear SPV assignment:", err);
+      }
+
       showNotice("Line berhasil dihapus.");
       await loadData();
     } catch (err) {
@@ -1044,6 +1167,7 @@ export function useLocationTemplate() {
 
     draggingLine,
     dragOverLine,
+    spvSavingLine,
 
     form,
     factoryOptions,
@@ -1054,6 +1178,9 @@ export function useLocationTemplate() {
     makeLocation,
     loadData,
     machinesByLine,
+    spvByLine,
+    saveLineSpv,
+    clearLineSpv,
     selectFactory,
 
     openAddLineModal,

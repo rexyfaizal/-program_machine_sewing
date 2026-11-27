@@ -187,6 +187,9 @@ func main() {
 		if err := repo.EnsureAiInsightSchema(ctx); err != nil {
 			log.Println("Peringatan ensure schema ai_insight_log:", err)
 		}
+		if err := repo.EnsureSpvLineAssignmentSchema(ctx); err != nil {
+			log.Println("Peringatan ensure schema spv_line_assignments:", err)
+		}
 		cancel()
 	}
 
@@ -218,9 +221,12 @@ func main() {
 	mux.HandleFunc("/api/productivity/range", api.ProductivityRange)
 	mux.HandleFunc("/api/process/detail", api.ProcessDetail)
 	mux.HandleFunc("/api/machine-settings", api.MachineSettings)
+	mux.HandleFunc("/api/machine-settings/import-ids", api.MachineIDImport)
 	mux.HandleFunc("/api/line-shift-config", api.LineShiftConfig)
 	mux.HandleFunc("/api/shift-settings", api.ShiftSettings)
 	mux.HandleFunc("/api/employees/search", api.EmployeeSearch)
+	mux.HandleFunc("/api/spv-line-assignments", api.SpvLineAssignments)
+	mux.HandleFunc("/api/spv-line-assignments/rename", api.SpvLineAssignmentRename)
 
 	mux.HandleFunc("/api/machine-operator/login", api.MachineOperatorLogin)
 	mux.HandleFunc("/api/machine-operator/note", api.MachineOperatorNote)
